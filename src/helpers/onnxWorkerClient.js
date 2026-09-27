@@ -131,11 +131,7 @@ class OnnxWorkerClient {
   }
 
   _onExit(child, code) {
-    // A worker released by releaseIfIdle() was already detached; its exit is expected.
-    if (child !== this.child) {
-      debugLogger.info("onnx worker released", { code, pid: child.pid });
-      return;
-    }
+    if (child !== this.child) return;
     this.generation += 1;
     debugLogger.warn("onnx worker exited", {
       code,
@@ -180,34 +176,8 @@ class OnnxWorkerClient {
     }
   }
 
-  // Exits the worker once no session is loaded, so an idle text unload also frees
-  // the onnxruntime arena. Detaches before the kill so a racing request spawns fresh.
-  async releaseIfIdle() {
-    if (!this.child || this.shuttingDown || this.pending.size) return false;
-    let sessions;
-    try {
-      ({ sessions } = await this.request("ping", {}));
-    } catch (err) {
-      debugLogger.debug("onnx worker release probe failed", { error: err?.message });
-      return false;
-    }
-    if (!this.child || sessions.speaker || sessions.text || this.pending.size) return false;
-    const child = this.child;
-    this.child = null;
-    this._closePort();
-    this.generation += 1;
-    try {
-      child.kill();
-    } catch {
-      // already dead
-    }
-    return true;
-  }
 
   async request(method, payload, transferList) {
-    // Releasing text must never start a worker just to free an absent session; a
-    // worker that is shutting down takes its session with it.
-    if (method === "text.unload" && (!this.child || this.shuttingDown)) return { ok: true };
     if (this.shuttingDown) {
       throw new WorkerCrashedError("worker shutting down");
     }
@@ -237,7 +207,7 @@ class OnnxWorkerClient {
       const timeout = setTimeout(() => {
         if (!this.pending.delete(id)) return;
         reject(new Error(`onnx worker request timeout: ${method}`));
-        // The worker serializes text work, so one hung request wedges every later one.
+        // One hung request wedges every later one.
         debugLogger.warn("onnx worker request timeout; killing worker", { method });
         this.killedForTimeout = true;
         try {

@@ -214,8 +214,6 @@ test("deleting one account removes only its personal rows and dependent private 
       (2, 'Personal A', '', 2, 1, 'account-a'),
       (3, 'Personal B', '', 3, 1, 'account-b'),
       (4, 'Workspace A', '', 4, 2, 'account-a');
-    INSERT INTO agent_conversations (id, note_id, folder_id) VALUES (1, 2, 2);
-    INSERT INTO agent_messages (id, conversation_id) VALUES (1, 1);
     INSERT INTO speaker_mappings (note_id) VALUES (2);
     INSERT INTO note_speaker_embeddings (note_id) VALUES (2);
     INSERT INTO optimistic_folder_delete_rows (folder_id, entity_type, entity_id)
@@ -241,8 +239,6 @@ test("deleting one account removes only its personal rows and dependent private 
       .map((row) => row.name),
     ["Legacy", "Personal B", "Workspace A"]
   );
-  assert.equal(sqlite.prepare("SELECT COUNT(*) AS count FROM agent_conversations").get().count, 0);
-  assert.equal(sqlite.prepare("SELECT COUNT(*) AS count FROM agent_messages").get().count, 0);
   assert.equal(sqlite.prepare("SELECT COUNT(*) AS count FROM speaker_mappings").get().count, 0);
   assert.equal(
     sqlite.prepare("SELECT COUNT(*) AS count FROM note_speaker_embeddings").get().count,
@@ -356,8 +352,6 @@ test("deleting a folder releases other accounts' notes to the space root instead
       (1, 'A note', '', 10, 1, 'account-a'),
       (2, 'Legacy note', '', 10, 1, NULL),
       (3, 'B note', '', 10, 1, 'account-b');
-    INSERT INTO agent_conversations (id, note_id) VALUES (1, 1), (2, 3);
-    INSERT INTO agent_messages (id, conversation_id) VALUES (1, 1), (2, 2);
     INSERT INTO speaker_mappings (note_id) VALUES (1), (3);
     INSERT INTO note_speaker_embeddings (note_id) VALUES (1), (3);
   `);
@@ -379,20 +373,6 @@ test("deleting a folder releases other accounts' notes to the space root instead
     [{ id: 3, folder_id: null, space_id: 1, deleted_at: null, sync_status: "pending" }]
   );
   assert.equal(sqlite.prepare("SELECT COUNT(*) AS count FROM folders").get().count, 0);
-  assert.deepEqual(
-    sqlite
-      .prepare("SELECT id, note_id FROM agent_conversations")
-      .all()
-      .map((row) => ({ ...row })),
-    [{ id: 2, note_id: 3 }]
-  );
-  assert.deepEqual(
-    sqlite
-      .prepare("SELECT id FROM agent_messages")
-      .all()
-      .map((row) => ({ ...row })),
-    [{ id: 2 }]
-  );
   assert.deepEqual(
     sqlite
       .prepare("SELECT note_id FROM speaker_mappings")

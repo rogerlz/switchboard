@@ -169,7 +169,7 @@ test("a truncated cleanup inside the translation chain still reports the failure
     isReasoningAvailable: async () => true,
     notifyTranslationFallback: () => {},
     // The cleanup step is the only call in the chain that requires complete output.
-    processWithReasoningModel: async (_text, _model, _agentName, config) => {
+    processWithReasoningModel: async (_text, _model, config) => {
       if (config?.requireCompleteOutput) throw truncated;
       return "dictado traducido";
     },
@@ -233,7 +233,6 @@ test("translation cleanup failures survive successful and skipped translation fo
     const result = await manager.runTranslationChain({
       text: rawText,
       settings: { translationSourceLanguage: "en", translationTargetLanguage: targetLanguage },
-      agentName: null,
       route: {
         model: "translation-model",
         cleanupReachable: true,

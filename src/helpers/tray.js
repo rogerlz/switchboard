@@ -292,10 +292,6 @@ class TrayManager {
             : this.windowManager?.sendStartDictation(),
       },
       {
-        label: i18nMain.t("app.commandMenu.askAssistant"),
-        click: () => this.windowManager?.sendOpenAssistantPanel(),
-      },
-      {
         // Starts in the main process, like the meeting hotkey: the recording it
         // opens is policy-gated where it actually begins, in the control panel.
         label: i18nMain.t("app.commandMenu.startMeetingRecording"),

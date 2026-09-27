@@ -3,11 +3,8 @@ import type {
   FolderItem,
   SpaceItem,
   TranscriptionItem,
-  ConversationPreview,
-  ConversationCreateSnapshot,
 } from "../types/electron";
 import { NotesService, type CloudNote } from "./NotesService.js";
-import { ConversationsService } from "./ConversationsService.js";
 import { FoldersService } from "./FoldersService.js";
 import { SpacesService, type MySpace } from "./SpacesService.js";
 import { TranscriptionsService } from "./TranscriptionsService.js";
@@ -163,24 +160,6 @@ const PURGED_SPACE_GUARD_LOCK = "openwhispr-purged-spaces";
 // written only inside the SYNC_ALL_LOCK pass, so it needs no lock of its own.
 const NOTE_UPDATE_404_KEY = "noteUpdate404Counts";
 const FOLDER_UPDATE_404_KEY = "folderUpdate404Counts";
-
-interface ConversationCreateSource {
-  client_conversation_id?: string | null;
-  title: string;
-  updated_at: string;
-  messages: readonly unknown[];
-}
-
-function conversationCreateSnapshot(
-  conversation: ConversationCreateSource
-): ConversationCreateSnapshot {
-  return {
-    client_conversation_id: conversation.client_conversation_id ?? null,
-    title: conversation.title,
-    updated_at: conversation.updated_at,
-    message_count: conversation.messages.length,
-  };
-}
 
 function readPurgedSpaceIds(): Record<string, PurgedSpaceEntry> {
   try {
@@ -505,8 +484,6 @@ export class SyncService {
           if (!hasValidatedAuthContext()) return;
           await this.syncNotes();
           if (!hasValidatedAuthContext()) return;
-          await this.syncConversations();
-          if (!hasValidatedAuthContext()) return;
           await this.syncTranscriptions();
           if (!hasValidatedAuthContext()) return;
           // Edits during the awaits above set dictionaryDirty (syncing is already
@@ -703,8 +680,6 @@ export class SyncService {
         return this.pushFolder(entityId);
       case "note":
         return this.pushNote(entityId);
-      case "conversation":
-        return this.pushConversation(entityId);
       case "transcription":
         return this.pushTranscription(entityId);
     }
@@ -920,54 +895,6 @@ export class SyncService {
     await this.pushNote(localId);
     const synced = await window.electronAPI.getNote?.(localId);
     return synced?.cloud_id ?? null;
-  }
-
-  private async acknowledgeConversationCreate(
-    localId: number,
-    snapshot: ConversationCreateSnapshot,
-    cloudId: string
-  ): Promise<void> {
-    const result = await window.electronAPI.acknowledgeConversationCreate?.(
-      localId,
-      snapshot,
-      cloudId
-    );
-    if (!result?.success) return;
-
-    const shouldDeleteCreate =
-      result.outcome === "changed" ||
-      result.outcome === "orphaned" ||
-      (result.outcome === "already-linked" && result.cloud_id !== cloudId);
-    if (shouldDeleteCreate) {
-      await ConversationsService.delete(cloudId);
-    }
-  }
-
-  private async pushConversation(id: number): Promise<void> {
-    const full = await window.electronAPI.getAgentConversation?.(id);
-    if (!full) return;
-
-    if (full.cloud_id) {
-      await ConversationsService.update(full.cloud_id, { title: full.title });
-    } else {
-      const snapshot = conversationCreateSnapshot(full);
-      const cloud = await ConversationsService.create({
-        client_conversation_id: full.client_conversation_id ?? String(full.id),
-        title: full.title,
-        created_at: full.created_at,
-        updated_at: full.updated_at,
-        messages: full.messages.map((m) => ({
-          role: m.role,
-          content: m.content,
-          metadata: m.metadata
-            ? typeof m.metadata === "string"
-              ? JSON.parse(m.metadata)
-              : m.metadata
-            : null,
-        })),
-      });
-      await this.acknowledgeConversationCreate(full.id, snapshot, cloud.id);
-    }
   }
 
   private async pushTranscription(id: number): Promise<void> {
@@ -1313,7 +1240,6 @@ export class SyncService {
     const teamOnly = !this.canSync();
     if (kind === "folder") await this.pullFolders(teamOnly, true);
     await this.pullNotes(teamOnly, true);
-    if (kind === "folder" && this.canSync()) await this.pullConversations(true);
   }
 
   // Sync passes run in whichever window holds the web lock (often the always-
@@ -2088,125 +2014,6 @@ export class SyncService {
     }
   }
 
-  private async syncConversations(): Promise<void> {
-    await this.pushPendingConversations();
-    await this.pushConversationDeletes();
-    await this.pullConversations();
-  }
-
-  private async pushPendingConversations(): Promise<void> {
-    const pending = (await window.electronAPI.getPendingConversations?.()) ?? [];
-    if (pending.length === 0) return;
-
-    const migration = pending.filter((c) => c.cloud_id);
-    const fresh = pending.filter((c) => !c.cloud_id);
-
-    for (const conv of migration) {
-      try {
-        await ConversationsService.update(conv.cloud_id!, { title: conv.title });
-        await window.electronAPI.markConversationSynced?.(conv.id, conv.cloud_id!);
-      } catch (err) {
-        console.error("Conversation migration sync failed:", err);
-      }
-    }
-
-    for (const conv of fresh) {
-      try {
-        const full = await window.electronAPI.getAgentConversation?.(conv.id);
-        if (!full) continue;
-        const snapshot = conversationCreateSnapshot(full);
-        const cloudConv = await ConversationsService.create({
-          client_conversation_id: full.client_conversation_id ?? String(full.id),
-          title: full.title,
-          created_at: full.created_at,
-          updated_at: full.updated_at,
-          messages: full.messages.map((m) => ({
-            role: m.role,
-            content: m.content,
-            metadata: m.metadata
-              ? typeof m.metadata === "string"
-                ? JSON.parse(m.metadata)
-                : m.metadata
-              : null,
-          })),
-        });
-        await this.acknowledgeConversationCreate(full.id, snapshot, cloudConv.id);
-      } catch (err) {
-        console.error("Conversation sync failed:", err);
-      }
-    }
-  }
-
-  private async pushConversationDeletes(): Promise<void> {
-    const deletes = (await window.electronAPI.getPendingConversationDeletes?.()) ?? [];
-    for (const conv of deletes) {
-      if (!conv.cloud_id) continue;
-      try {
-        await ConversationsService.delete(conv.cloud_id);
-        await window.electronAPI.hardDeleteConversation?.(conv.id);
-      } catch (err) {
-        console.error("Conversation delete sync failed:", err);
-      }
-    }
-  }
-
-  private async pullConversations(snapshot = false): Promise<void> {
-    try {
-      const since = snapshot
-        ? undefined
-        : (localStorage.getItem("lastSyncedAt.conversations") ?? undefined);
-      const syncStartedAt = new Date().toISOString();
-
-      let cursor: string | undefined = since;
-      while (true) {
-        const { conversations: cloudConvs } = since
-          ? await ConversationsService.list(BATCH_SIZE, undefined, false, "messages", cursor)
-          : await ConversationsService.list(BATCH_SIZE, cursor, false, "messages");
-        if (cloudConvs.length === 0) break;
-
-        for (const cloudConv of cloudConvs) {
-          const local = await window.electronAPI.getConversationByClientId?.(
-            cloudConv.client_conversation_id ?? ""
-          );
-
-          // As with held notes, the parent folder operation owns this row.
-          // A denial revives it first and immediately runs this same pull in
-          // snapshot mode, so authoritative remote changes are not lost.
-          if (local?.folder_delete_pending) continue;
-
-          if (cloudConv.deleted_at) {
-            if (local) await window.electronAPI.hardDeleteConversation?.(local.id);
-            continue;
-          }
-
-          // A live cloud row cannot override a local pending delete. The
-          // tombstone stays queued for push; only the cloud tombstone branch
-          // above is authoritative enough to hard-delete it locally.
-          if (local?.deleted_at) continue;
-
-          if (!local || isCloudEntryNewer(cloudConv.updated_at, local.updated_at)) {
-            await window.electronAPI.upsertConversationFromCloud?.(
-              cloudConv as unknown as Record<string, unknown>,
-              (cloudConv.messages ?? []) as unknown as Array<Record<string, unknown>>
-            );
-          }
-        }
-
-        if (cloudConvs.length < BATCH_SIZE) break;
-        const last = cloudConvs[cloudConvs.length - 1];
-        const next = since ? last.updated_at : last.created_at;
-        if (next === cursor) break;
-        cursor = next;
-      }
-
-      if (!snapshot) localStorage.setItem("lastSyncedAt.conversations", syncStartedAt);
-    } catch (err) {
-      console.error("Conversation pull failed:", err);
-    }
-  }
-
-  // The Insights view uses this same guarded path before reading the account
-  // summary, so queued uploads and foreground refreshes use one consent gate.
   async syncAnalyticsNow(): Promise<boolean> {
     return this.syncAnalytics();
   }

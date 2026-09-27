@@ -6,7 +6,6 @@ import { Textarea } from "./textarea";
 import { Eye, Edit3, Play, Save, RotateCcw, Copy, TestTube, AlertTriangle, Check } from "../icons";
 import { AlertDialog } from "./dialog";
 import { useDialogs } from "../../hooks/useDialogs";
-import { useAgentName } from "../../utils/agentName";
 import ReasoningService from "../../services/ReasoningService";
 import { getModelProvider } from "../../models/ModelRegistry";
 import logger from "../../utils/logger";
@@ -15,13 +14,11 @@ import {
   useSettingsStore,
   selectPolicyEffectiveSettings,
   selectIsCloudCleanupMode,
-  selectIsCloudDictationAgentMode,
   selectIsCloudTranslationMode,
 } from "../../stores/settingsStore";
 import { usePolicySnapshot } from "../../hooks/usePolicy";
 import { getLanguageLabel } from "../../utils/languageSupport";
 import { getDictionaryHintWords } from "../../utils/snippets";
-import { resolveDictationAgentInference } from "../../helpers/dictationAgentInference";
 import { resolveDictationTranslationInference } from "../../helpers/dictationTranslationInference";
 
 interface PromptStudioProps {
@@ -66,7 +63,6 @@ export default function PromptStudio({ className = "", kind = "cleanup" }: Promp
   const [copiedPrompt, setCopiedPrompt] = useState(false);
 
   const { alertDialog, showAlertDialog, hideAlertDialog } = useDialogs();
-  const { agentName } = useAgentName();
   const policyState = usePolicySnapshot();
   const effectiveSettings = useSettingsStore(
     useShallow((settings) => selectPolicyEffectiveSettings(settings, policyState))
@@ -77,12 +73,6 @@ export default function PromptStudio({ className = "", kind = "cleanup" }: Promp
   const useCleanupModel = effectiveSettings.useCleanupModel;
   const cleanupModel = effectiveSettings.cleanupModel;
 
-  const isCloudDictationAgent = selectIsCloudDictationAgentMode(effectiveSettings);
-  const useDictationAgent = effectiveSettings.useDictationAgent;
-  const dictationAgentMode = effectiveSettings.dictationAgentMode;
-  const dictationAgentProvider = effectiveSettings.dictationAgentProvider;
-  const dictationAgentModel = effectiveSettings.dictationAgentModel;
-
   const isCloudTranslation = selectIsCloudTranslationMode(effectiveSettings);
   const useDictationTranslation = effectiveSettings.useDictationTranslation;
   const translationMode = effectiveSettings.translationMode;
@@ -92,7 +82,6 @@ export default function PromptStudio({ className = "", kind = "cleanup" }: Promp
   const translationTargetLanguage = effectiveSettings.translationTargetLanguage;
 
   const isTranslate = kind === "translate";
-  const isAgent = kind === "dictationAgent";
 
   const customPrompt = useSettingsStore((s) => s.customPrompts[kind]);
   const setCustomPrompt = useSettingsStore((s) => s.setCustomPrompt);
@@ -159,11 +148,10 @@ export default function PromptStudio({ className = "", kind = "cleanup" }: Promp
           const result = await ReasoningService.processText(
             testText,
             translation.model,
-            agentName,
+            null,
             {
               ...translation.config,
               systemPrompt: resolvePrompt("translate", {
-                agentName,
                 targetLanguageLabel: getLanguageLabel(translationTargetLanguage),
                 customDictionary: getDictionaryHintWords(effectiveSettings),
                 uiLanguage,
@@ -177,44 +165,6 @@ export default function PromptStudio({ className = "", kind = "cleanup" }: Promp
         return;
       }
 
-      // The agent runs on its own inference scope; falling through to the cleanup
-      // branch would test the cleanup provider with the cleanup prompt.
-      if (isAgent) {
-        if (!useDictationAgent) {
-          setTestResult(t("promptStudio.test.agentDisabled"));
-          return;
-        }
-
-        const settings = effectiveSettings;
-        const agent = resolveDictationAgentInference(settings, {
-          isCloudAgent: isCloudDictationAgent,
-        });
-
-        if (!agent.reachable) {
-          setTestResult(t("promptStudio.test.noModelSelected"));
-          return;
-        }
-
-        const previous = customPrompt;
-        setCustomPrompt(kind, editedPrompt);
-        try {
-          const result = await ReasoningService.processText(testText, agent.model, agentName, {
-            ...agent.config,
-            inferenceScope: "dictationAgent",
-            requiresAgent: true,
-            systemPrompt: resolvePrompt("dictationAgent", {
-              agentName,
-              language: settings.preferredLanguage,
-              customDictionary: getDictionaryHintWords(settings),
-              uiLanguage,
-            }),
-          });
-          setTestResult(result);
-        } finally {
-          setCustomPrompt(kind, previous);
-        }
-        return;
-      }
 
       const cleanupProvider = isCloudMode
         ? "openwhispr"
@@ -228,7 +178,6 @@ export default function PromptStudio({ className = "", kind = "cleanup" }: Promp
           cleanupModel,
           cleanupProvider,
           testTextLength: testText.length,
-          agentName,
         },
         "prompt-studio"
       );
@@ -269,7 +218,7 @@ export default function PromptStudio({ className = "", kind = "cleanup" }: Promp
       const previous = customPrompt;
       setCustomPrompt(kind, editedPrompt);
       try {
-        const result = await ReasoningService.processText(testText, modelToUse, agentName, {
+        const result = await ReasoningService.processText(testText, modelToUse, null, {
           inferenceScope: "dictationCleanup",
           disableThinking: effectiveSettings.cleanupDisableThinking,
         });
@@ -291,7 +240,6 @@ export default function PromptStudio({ className = "", kind = "cleanup" }: Promp
     }
   };
 
-  const isAgentAddressed = testText.toLowerCase().includes(agentName.toLowerCase());
   const isCustomPrompt = customPrompt.length > 0;
   const currentPrompt = customPrompt || defaultPrompt;
 
@@ -374,7 +322,7 @@ export default function PromptStudio({ className = "", kind = "cleanup" }: Promp
                   dir="auto"
                   className="text-xs font-mono text-muted-foreground whitespace-pre-wrap leading-relaxed"
                 >
-                  {currentPrompt.replace(/\{\{agentName\}\}/g, agentName)}
+                  {currentPrompt}
                 </pre>
               </div>
             </div>
@@ -389,11 +337,7 @@ export default function PromptStudio({ className = "", kind = "cleanup" }: Promp
                 <span className="font-medium text-warning">
                   {t("promptStudio.edit.cautionLabel")}
                 </span>{" "}
-                {t("promptStudio.edit.cautionTextPrefix")}{" "}
-                <code dir="ltr" className="text-xs bg-muted/50 px-1 py-0.5 rounded font-mono">
-                  {"{{agentName}}"}
-                </code>{" "}
-                {t("promptStudio.edit.cautionTextSuffix")}
+                {t("promptStudio.edit.cautionTextPrefix")}
               </p>
             </div>
 
@@ -406,12 +350,6 @@ export default function PromptStudio({ className = "", kind = "cleanup" }: Promp
                 className="font-mono text-xs leading-relaxed"
                 placeholder={t("promptStudio.edit.placeholder")}
               />
-              <p className="text-xs text-muted-foreground/70 mt-2">
-                {t("promptStudio.edit.agentNameLabel")}{" "}
-                <span dir="auto" className="font-medium text-foreground">
-                  {agentName}
-                </span>
-              </p>
             </div>
 
             <div className="px-5 py-4">
@@ -433,27 +371,8 @@ export default function PromptStudio({ className = "", kind = "cleanup" }: Promp
         {activeTab === "test" &&
           (() => {
             // Each kind reports the scope that actually runs it.
-            const testIsCloud = isTranslate
-              ? isCloudTranslation
-              : isAgent
-                ? isCloudDictationAgent
-                : isCloudMode;
-            const testModel = isTranslate
-              ? translationModel
-              : isAgent
-                ? dictationAgentModel
-                : cleanupModel;
-            const agentDisplayProvider = isAgent
-              ? resolveDictationAgentInference(
-                  {
-                    useDictationAgent,
-                    dictationAgentMode,
-                    dictationAgentProvider,
-                    dictationAgentModel,
-                  },
-                  { isCloudAgent: isCloudDictationAgent }
-                ).displayProvider
-              : "";
+            const testIsCloud = isTranslate ? isCloudTranslation : isCloudMode;
+            const testModel = isTranslate ? translationModel : cleanupModel;
             const translationDisplayProvider = isTranslate
               ? resolveDictationTranslationInference(
                   {
@@ -463,14 +382,9 @@ export default function PromptStudio({ className = "", kind = "cleanup" }: Promp
                   { isCloudTranslation }
                 ).displayProvider
               : "";
-            const scopeProvider = isTranslate
-              ? translationDisplayProvider
-              : isAgent
-                ? agentDisplayProvider
-                : "";
-            const testProvider =
-              isAgent || isTranslate
-                ? scopeProvider
+            const scopeProvider = isTranslate ? translationDisplayProvider : "";
+            const testProvider = isTranslate
+              ? scopeProvider
                 : testIsCloud
                   ? "openwhispr"
                   : scopeProvider || (testModel && getModelProvider(testModel)) || "openai";
@@ -488,7 +402,7 @@ export default function PromptStudio({ className = "", kind = "cleanup" }: Promp
 
             return (
               <div className="divide-y divide-border/60 dark:divide-border-subtle">
-                {!isTranslate && !isAgent && !useCleanupModel && (
+                {!isTranslate && !useCleanupModel && (
                   <div className="px-5 py-4">
                     <div className="rounded-lg border border-warning/20 bg-warning/5 dark:bg-warning/10 px-4 py-3">
                       <div className="flex items-start gap-2.5">
@@ -535,16 +449,14 @@ export default function PromptStudio({ className = "", kind = "cleanup" }: Promp
                     {testText && (
                       <span
                         className={`text-xs font-medium uppercase tracking-wider px-1.5 py-px rounded ${
-                          isTranslate || isAgent || isAgentAddressed
+                          isTranslate
                             ? "bg-primary/10 text-primary dark:bg-primary/15"
                             : "bg-muted text-muted-foreground"
                         }`}
                       >
                         {isTranslate
                           ? t("promptStudio.test.translation")
-                          : isAgent || isAgentAddressed
-                            ? t("promptStudio.test.instruction")
-                            : t("promptStudio.test.cleanup")}
+                          : t("promptStudio.test.cleanup")}
                       </span>
                     )}
                   </div>
@@ -556,14 +468,11 @@ export default function PromptStudio({ className = "", kind = "cleanup" }: Promp
                     className="text-xs"
                     placeholder={t("promptStudio.test.inputPlaceholder")}
                   />
-                  {/* The agent tab always runs the agent prompt, addressed or not. */}
-                  {!isAgent && (
+                  {isTranslate && (
                     <p className="text-xs text-muted-foreground/70 mt-1.5">
-                      {isTranslate
-                        ? t("promptStudio.test.translateHint", {
-                            language: getLanguageLabel(translationTargetLanguage),
-                          })
-                        : t("promptStudio.test.addressHint", { agentName })}
+                      {t("promptStudio.test.translateHint", {
+                        language: getLanguageLabel(translationTargetLanguage),
+                      })}
                     </p>
                   )}
                 </div>
@@ -574,7 +483,7 @@ export default function PromptStudio({ className = "", kind = "cleanup" }: Promp
                     disabled={
                       !testText.trim() ||
                       isLoading ||
-                      (!isTranslate && !isAgent && !useCleanupModel)
+                      (!isTranslate && !useCleanupModel)
                     }
                     size="sm"
                     className="w-full"

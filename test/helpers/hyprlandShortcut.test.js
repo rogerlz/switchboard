@@ -94,7 +94,6 @@ test("exports every Hyprland D-Bus toggle", async () => {
 
     assert.equal(await manager.initDBusService(() => calls.push("dictation")), true);
     manager.callbacks.meeting = () => calls.push("meeting");
-    manager.callbacks.voiceAgent = () => calls.push("voiceAgent");
     manager.callbacks.translation = () => calls.push("translation");
 
     assert.deepEqual(Object.keys(exported.iface.methods).sort(), [
@@ -103,13 +102,11 @@ test("exports every Hyprland D-Bus toggle", async () => {
       "Toggle",
       "ToggleMeeting",
       "ToggleTranslation",
-      "ToggleVoiceAgent",
     ]);
     exported.methods.Toggle();
     exported.methods.ToggleMeeting();
-    exported.methods.ToggleVoiceAgent();
     exported.methods.ToggleTranslation();
-    assert.deepEqual(calls, ["dictation", "meeting", "voiceAgent", "translation"]);
+    assert.deepEqual(calls, ["dictation", "meeting", "translation"]);
   });
 });
 
@@ -720,39 +717,33 @@ test(
     const manager = new HyprlandShortcutManager();
     const cb = {
       meeting: () => undefined,
-      voiceAgent: () => undefined,
       translation: () => undefined,
     };
 
     await manager.registerKeybinding("Control+Shift+Enter");
     await manager.registerSlotKeybinding("Alt+F9", "meeting", cb.meeting);
-    await manager.registerSlotKeybinding("Alt+F10", "voiceAgent", cb.voiceAgent);
     await manager.registerSlotKeybinding("Alt+F11", "translation", cb.translation);
 
     const binds = readBinds(configDir);
     assert.match(binds, /\.Toggle\b/);
     assert.match(binds, /\.ToggleMeeting/);
-    assert.match(binds, /\.ToggleVoiceAgent/);
     assert.match(binds, /\.ToggleTranslation/);
 
     assert.equal(await manager.updateKeybinding("Alt+F12"), true);
     const afterDictationUpdate = readBinds(configDir);
     assert.match(afterDictationUpdate, /\.ToggleMeeting/);
-    assert.match(afterDictationUpdate, /\.ToggleVoiceAgent/);
     assert.match(afterDictationUpdate, /\.ToggleTranslation/);
 
     assert.equal(await manager.unregisterKeybinding("meeting"), true);
     const after = readBinds(configDir);
     assert.doesNotMatch(after, /ToggleMeeting/);
-    assert.match(after, /ToggleVoiceAgent/);
     assert.match(after, /ToggleTranslation/);
     assert.equal(manager.callbacks.meeting, undefined);
-    assert.equal(manager.callbacks.voiceAgent, cb.voiceAgent);
+    assert.equal(manager.callbacks.translation, cb.translation);
 
     const teardown = manager.unregisterKeybinding();
     assert.deepEqual(manager.bindings, {});
     assert.equal(await teardown, true);
-    assert.equal(manager.bindings.voiceAgent, undefined);
     assert.equal(manager.bindings.translation, undefined);
   })
 );

@@ -34,8 +34,8 @@ function createUserDataDir(t) {
   return dir;
 }
 
-// The script filename must contain "qdrant" so processCommand() matches the
-// expected binary fragment for the qdrant sidecar.
+// The script filename must contain "whisper-server" so processCommand() matches
+// the expected binary fragment for the whisper sidecar.
 function spawnFakeSidecar(t, { scriptName, ignoreSigterm }) {
   const handler = ignoreSigterm ? 'process.on("SIGTERM", () => {});' : "";
   const scriptPath = path.join(userDataDir, scriptName);
@@ -72,8 +72,8 @@ async function waitUntilDead(pid, timeoutMs = 2000) {
 
 test("kills a responsive stale sidecar and clears its entry", posixOnly, async (t) => {
   createUserDataDir(t);
-  const child = await spawnFakeSidecar(t, { scriptName: "qdrant-fake.js", ignoreSigterm: false });
-  sidecarPidFile.write("qdrant", child.pid);
+  const child = await spawnFakeSidecar(t, { scriptName: "whisper-server-fake.js", ignoreSigterm: false });
+  sidecarPidFile.write("whisper", child.pid);
 
   await reapStaleSidecars(GRACES);
 
@@ -83,8 +83,8 @@ test("kills a responsive stale sidecar and clears its entry", posixOnly, async (
 
 test("escalates to SIGKILL when a stale sidecar ignores SIGTERM", posixOnly, async (t) => {
   createUserDataDir(t);
-  const child = await spawnFakeSidecar(t, { scriptName: "qdrant-stuck.js", ignoreSigterm: true });
-  sidecarPidFile.write("qdrant", child.pid);
+  const child = await spawnFakeSidecar(t, { scriptName: "whisper-server-stuck.js", ignoreSigterm: true });
+  sidecarPidFile.write("whisper", child.pid);
 
   await reapStaleSidecars(GRACES);
 
@@ -95,7 +95,7 @@ test("escalates to SIGKILL when a stale sidecar ignores SIGTERM", posixOnly, asy
 test("does not kill a reused PID that is no longer the sidecar binary", posixOnly, async (t) => {
   createUserDataDir(t);
   const child = await spawnFakeSidecar(t, { scriptName: "other-app.js", ignoreSigterm: false });
-  sidecarPidFile.write("qdrant", child.pid);
+  sidecarPidFile.write("whisper", child.pid);
 
   await reapStaleSidecars(GRACES);
 
@@ -103,11 +103,11 @@ test("does not kill a reused PID that is no longer the sidecar binary", posixOnl
   assert.deepEqual(sidecarPidFile.readAll(), []);
 });
 
-// qdrantManager's unhealthy-restart path uses waitForExit to verify the old
+// A manager's unhealthy-restart path uses waitForExit to verify the old
 // process is gone before spawning a replacement.
 test("waitForExit distinguishes a live process from a dead one", async (t) => {
   createUserDataDir(t);
-  const child = await spawnFakeSidecar(t, { scriptName: "qdrant-wait.js", ignoreSigterm: false });
+  const child = await spawnFakeSidecar(t, { scriptName: "whisper-server-wait.js", ignoreSigterm: false });
 
   assert.equal(await waitForExit(child.pid, 400), false);
 
@@ -117,8 +117,8 @@ test("waitForExit distinguishes a live process from a dead one", async (t) => {
 
 test("clears entries for processes that already exited", async (t) => {
   createUserDataDir(t);
-  const child = await spawnFakeSidecar(t, { scriptName: "qdrant-gone.js", ignoreSigterm: false });
-  sidecarPidFile.write("qdrant", child.pid);
+  const child = await spawnFakeSidecar(t, { scriptName: "whisper-server-gone.js", ignoreSigterm: false });
+  sidecarPidFile.write("whisper", child.pid);
   process.kill(child.pid, "SIGKILL");
   assert.equal(await waitUntilDead(child.pid), true);
 

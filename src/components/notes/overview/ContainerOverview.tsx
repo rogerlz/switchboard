@@ -11,12 +11,10 @@ import {
   useFolderCounts,
   useSpaceRootCounts,
 } from "../../../stores/noteStore";
-import { useContainerChat } from "../../../hooks/useContainerChat";
 import { cn } from "../../lib/utils";
 import { PAGE_CONTENT_WIDTH_CLASS } from "../../ui/pageWidth";
 import { ContainerIcon } from "./ContainerIcon";
 import { OverviewExplainerBanner } from "./OverviewExplainerBanner";
-import { OverviewAskSection } from "./OverviewAskSection";
 import { OverviewNoteList } from "./OverviewNoteList";
 import { defaultFolderDisplayName } from "../shared";
 import type { NoteItem, SpaceItem, FolderItem } from "../../../types/electron";
@@ -68,8 +66,6 @@ export function ContainerOverview({
   }, [folder, space.id, notesByContainer]);
 
   const notes = folder ? containerNotes : (spaceNotes ?? []);
-
-  const chat = useContainerChat({ space, folder, notes });
 
   const workspace = space.workspace_id
     ? workspaces.find((w) => w.id === space.workspace_id)
@@ -142,17 +138,6 @@ export function ContainerOverview({
 
         <OverviewExplainerBanner kind={space.kind === "team" ? "team" : "private"} />
 
-        <OverviewAskSection
-          messages={chat.messages}
-          agentState={chat.agentState}
-          onTextSubmit={chat.sendMessage}
-          onCancel={chat.cancelStream}
-          conversations={chat.conversations}
-          activeConversationId={chat.activeConversationId}
-          onSwitchConversation={chat.switchConversation}
-          onNewChat={chat.startNewChat}
-          onOpenNote={onOpenNote}
-        />
 
         <div className="border-t border-border/70 dark:border-white/10">
           <OverviewNoteList

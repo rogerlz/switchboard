@@ -51,8 +51,8 @@ function loadEnvironmentManager(t, userDataDirectory) {
   }
 }
 
-test("fresh Chinese browser locale survives settings hydration", async (t) => {
-  installNavigatorLanguage(t, "zh-Hans-CN");
+test("fresh Portuguese browser locale survives settings hydration", async (t) => {
+  installNavigatorLanguage(t, "pt-BR");
   installBrowserGlobals(t, {
     initialStorage: {
       customDictionary: JSON.stringify(["OpenWhispr"]),
@@ -87,10 +87,10 @@ test("fresh Chinese browser locale survives settings hydration", async (t) => {
       persistedLanguage: localStorage.getItem("uiLanguage"),
     },
     {
-      initialLanguage: "zh-CN",
-      initialStoreLanguage: "zh-CN",
-      hydratedLanguage: "zh-CN",
-      hydratedStoreLanguage: "zh-CN",
+      initialLanguage: "pt",
+      initialStoreLanguage: "pt",
+      hydratedLanguage: "pt",
+      hydratedStoreLanguage: "pt",
       persistedLanguage: null,
     }
   );
@@ -111,19 +111,19 @@ test("main locale fallback remains implicit and yields to an explicit preference
   const EnvironmentManager = loadEnvironmentManager(t, userDataDirectory);
   const environmentManager = new EnvironmentManager();
   const unsetLanguage = environmentManager.getUiLanguage();
-  const detectedLanguage = environmentManager.getUiLanguage("zh-Hant-TW");
+  const detectedLanguage = environmentManager.getUiLanguage("pt-BR");
   const environmentAfterDetection = process.env.UI_LANGUAGE;
 
-  process.env.UI_LANGUAGE = "de-DE";
-  const explicitLanguage = environmentManager.getUiLanguage("zh-Hant-TW");
+  process.env.UI_LANGUAGE = "en-GB";
+  const explicitLanguage = environmentManager.getUiLanguage("pt-BR");
 
   assert.deepEqual(
     { unsetLanguage, detectedLanguage, environmentAfterDetection, explicitLanguage },
     {
       unsetLanguage: "",
-      detectedLanguage: "zh-TW",
+      detectedLanguage: "pt",
       environmentAfterDetection: undefined,
-      explicitLanguage: "de",
+      explicitLanguage: "en",
     }
   );
 });

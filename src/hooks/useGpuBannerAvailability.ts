@@ -2,11 +2,8 @@ import { useEffect, useState } from "react";
 import { eligibleGpuOffers, type GpuOfferInputs, type GpuOffers } from "../utils/gpuBannerPolicy";
 import type { Platform } from "../utils/platform";
 
-type GpuBannerSettings = Omit<GpuOfferInputs, "agentAllowedByPolicy">;
-
 interface UseGpuBannerAvailabilityOptions {
-  settings: GpuBannerSettings;
-  agentAllowedByPolicy: boolean;
+  settings: GpuOfferInputs;
   dismissed: boolean;
   settingsOpen: boolean;
   platform: Platform;
@@ -19,7 +16,6 @@ const EMPTY_GPU_OFFERS: GpuOffers = {
 
 export function useGpuBannerAvailability({
   settings,
-  agentAllowedByPolicy,
   dismissed,
   settingsOpen,
   platform,
@@ -29,7 +25,7 @@ export function useGpuBannerAvailability({
   useEffect(() => {
     if (platform === "darwin" || dismissed || settingsOpen) return;
 
-    const offers = eligibleGpuOffers({ ...settings, agentAllowedByPolicy });
+    const offers = eligibleGpuOffers(settings);
     // A run that loses its settings mid-probe must not publish: switching to a
     // cloud mode resolves with no IPC at all, so an older local-mode run would
     // otherwise land last and re-raise the banner for the rest of the session.
@@ -62,7 +58,7 @@ export function useGpuBannerAvailability({
     return () => {
       cancelled = true;
     };
-  }, [settings, agentAllowedByPolicy, dismissed, settingsOpen, platform]);
+  }, [settings, dismissed, settingsOpen, platform]);
 
   return availability;
 }

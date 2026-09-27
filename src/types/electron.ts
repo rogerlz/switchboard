@@ -678,18 +678,6 @@ export interface NewWorkspaceApiKey extends WorkspaceApiKey {
   key: string;
 }
 
-export interface ActionItem {
-  id: number;
-  name: string;
-  description: string;
-  prompt: string;
-  icon: string;
-  is_builtin: number;
-  sort_order: number;
-  translation_key: string | null;
-  created_at: string;
-  updated_at: string;
-}
 
 export interface GpuDevice {
   index: number;
@@ -1048,35 +1036,6 @@ export type LocalLLMDownloadProgressEvent =
       sequence?: number;
     };
 
-export interface ConversationPreview {
-  id: number;
-  title: string;
-  created_at: string;
-  updated_at: string;
-  archived_at?: string | null;
-  cloud_id?: string | null;
-  client_conversation_id?: string;
-  sync_status?: "synced" | "pending" | "error";
-  deleted_at?: string | null;
-  // Computed for sync lookups while the parent folder delete is unresolved.
-  folder_delete_pending?: number;
-  message_count: number;
-  last_message?: string | null;
-  last_message_role?: "user" | "assistant" | "system" | null;
-}
-
-export interface ConversationCreateSnapshot {
-  client_conversation_id?: string | null;
-  title: string;
-  updated_at: string;
-  message_count: number;
-}
-
-export interface ConversationCreateAckResult {
-  success: boolean;
-  outcome: "synced" | "changed" | "already-linked" | "delete-pending" | "orphaned" | "unresolved";
-  cloud_id?: string | null;
-}
 
 export type OnboardingDemoKind = "dictation" | "assistant";
 /**
@@ -1145,63 +1104,11 @@ declare global {
             clipboardCopied: true;
           }
       >;
-      captureSelectedText?: (options?: { probeEditable?: boolean }) => Promise<
-        | {
-            status: "selected";
-            sessionId: string;
-            text: string;
-            characterCount: number;
-          }
-        | {
-            status: "editable";
-            sessionId: string;
-            /** True when the captured app keeps markdown (spec Appendix A); false means plain text. */
-            acceptsMarkdown: boolean;
-          }
-        | {
-            status: "none" | "unavailable" | "target_changed" | "too_large";
-            code?: string;
-            characterCount?: number;
-            maxCharacters?: number;
-          }
-      >;
-      replaceSelectedText?: (
-        sessionId: string,
-        text: string,
-        options?: { restoreClipboard?: boolean; allowClipboardFallback?: boolean }
-      ) => Promise<{
-        success: boolean;
-        code?:
-          | "invalid_replacement"
-          | "session_expired"
-          | "target_changed"
-          | "selection_unavailable"
-          | "selection_changed"
-          | "paste_failed"
-          | "selection_manager_unavailable";
-        error?: string;
-      }>;
-      pasteAtCapturedTarget?: (
-        sessionId: string,
-        text: string,
-        options?: { restoreClipboard?: boolean; allowClipboardFallback?: boolean }
-      ) => Promise<{
-        success: boolean;
-        code?:
-          | "invalid_replacement"
-          | "session_expired"
-          | "target_changed"
-          | "paste_failed"
-          | "selection_manager_unavailable";
-        error?: string;
-      }>;
       hideWindow: () => Promise<void>;
       showDictationPanel: () => Promise<void>;
       captureDictationTarget?: () => Promise<{ success: boolean; pid: number | null }>;
       onToggleDictation: (callback: () => void) => () => void;
-      onToggleVoiceAgent?: (callback: () => void) => () => void;
       onToggleTranslation?: (callback: () => void) => () => void;
-      onOpenAssistantPanel?: (callback: () => void) => () => void;
       onStartDictation?: (callback: () => void) => () => void;
       onStopDictation?: (callback: () => void) => () => void;
       onPrepareDictation?: (
@@ -1217,31 +1124,6 @@ declare global {
         state: "idle" | "preparing" | "recording" | "processing",
         inputKind?: "dictation" | "assistant" | "translation"
       ) => void;
-      dictationAudioLevelChanged?: (level: number) => void;
-      toggleAgentPanelDictation?: () => Promise<{ success: boolean }>;
-      cancelAgentPanelDictation?: () => Promise<{ success: boolean }>;
-      getAgentDictationPillState?: () => Promise<{
-        lifecycle: "idle" | "preparing" | "recording" | "processing";
-        interactive: boolean;
-        horizontalDirection: "left" | "right";
-      }>;
-      resizeAgentDictationPillToContent?: (surfaceHeight: number | null) => Promise<{
-        success: boolean;
-        changed?: boolean;
-        bounds?: { x: number; y: number; width: number; height: number };
-        message?: string;
-      }>;
-      setAgentDictationPillInteractivity?: (interactive: boolean) => Promise<{ success: boolean }>;
-      onAgentDictationPillStateChanged?: (
-        callback: (state: {
-          lifecycle: "idle" | "preparing" | "recording" | "processing";
-          interactive: boolean;
-          horizontalDirection: "left" | "right";
-        }) => void
-      ) => () => void;
-      onAgentDictationPillAudioLevelChanged?: (callback: (level: number) => void) => () => void;
-      showAgentDictationFinalTranscript?: (text: string) => void;
-      onAgentDictationPillFinalTranscript?: (callback: (text: string) => void) => () => void;
 
       // STT config
       getSttConfig?: () => Promise<
@@ -1493,12 +1375,6 @@ declare global {
         spaceId?: number | null,
         folderId?: number | null
       ) => Promise<NoteItem[]>;
-      semanticSearchNotes: (
-        query: string,
-        limit?: number,
-        spaceId?: number | null,
-        folderId?: number | null
-      ) => Promise<NoteItem[]>;
       updateNoteCloudId: (id: number, cloudId: string) => Promise<NoteItem>;
       updateNoteShareState: (
         id: number,
@@ -1605,29 +1481,6 @@ declare global {
       showNoteFile?: (noteId: number) => Promise<{ success: boolean }>;
       showFolderInExplorer?: (folderName: string) => Promise<{ success: boolean }>;
 
-      // Action operations
-      getActions: () => Promise<ActionItem[]>;
-      getAction: (id: number) => Promise<ActionItem | null>;
-      createAction: (
-        name: string,
-        description: string,
-        prompt: string,
-        icon?: string
-      ) => Promise<{ success: boolean; action?: ActionItem; error?: string }>;
-      updateAction: (
-        id: number,
-        updates: {
-          name?: string;
-          description?: string;
-          prompt?: string;
-          icon?: string;
-          sort_order?: number;
-        }
-      ) => Promise<{ success: boolean; action?: ActionItem; error?: string }>;
-      deleteAction: (id: number) => Promise<{ success: boolean; id?: number; error?: string }>;
-      onActionCreated?: (callback: (action: ActionItem) => void) => () => void;
-      onActionUpdated?: (callback: (action: ActionItem) => void) => () => void;
-      onActionDeleted?: (callback: (payload: { id: number }) => void) => () => void;
 
       // Audio file operations
       saveTempAudio: (buffer: ArrayBuffer) => Promise<{ success: boolean; path: string }>;
@@ -2010,8 +1863,6 @@ declare global {
       resizeDictationErrorWindowToContent: (
         surfaceHeight: number
       ) => Promise<{ success: boolean; bounds?: Electron.Rectangle; message?: string }>;
-      setAssistantPanelOpen: (open: boolean) => Promise<{ success: boolean }>;
-      setAssistantPanelBusy: (busy: boolean) => Promise<{ success: boolean }>;
 
       // App management
       cleanupApp: () => Promise<{ success: boolean; message: string; errors?: string[] }>;
@@ -2166,12 +2017,6 @@ declare global {
       saveNoteFormattingCustomKey?: (key: string) => Promise<void>;
       getTranslationCustomKey?: () => Promise<string | null>;
       saveTranslationCustomKey?: (key: string) => Promise<void>;
-      getDictationAgentCustomKey?: () => Promise<string | null>;
-      saveDictationAgentCustomKey?: (key: string) => Promise<void>;
-      getDictationAgentVisionCustomKey?: () => Promise<string | null>;
-      saveDictationAgentVisionCustomKey?: (key: string) => Promise<void>;
-      getChatAgentCustomKey?: () => Promise<string | null>;
-      saveChatAgentCustomKey?: (key: string) => Promise<void>;
 
       // Enterprise provider key persistence
       getBedrockRegion?: () => Promise<string | null>;
@@ -2305,12 +2150,7 @@ declare global {
       openSoundInputSettings?: () => Promise<{ success: boolean; error?: string }>;
       openAccessibilitySettings?: () => Promise<{ success: boolean; error?: string }>;
       openSystemAudioSettings?: () => Promise<{ success: boolean; error?: string }>;
-      openScreenRecordingSettings?: () => Promise<{ success: boolean; error?: string }>;
       openLoginItemsSettings?: () => Promise<{ success: boolean; error?: string }>;
-      checkScreenRecordingAccess?: () => Promise<ScreenRecordingAccessResult>;
-      requestScreenRecordingAccess?: () => Promise<ScreenRecordingAccessResult>;
-      captureScreenContext?: () => Promise<ScreenContextImage | null>;
-      setScreenContextEnabled?: (enabled: boolean) => Promise<{ success: boolean }>;
       toggleMediaPlayback?: () => Promise<boolean>;
       pauseMediaPlayback?: () => Promise<boolean>;
       resumeMediaPlayback?: () => Promise<boolean>;
@@ -2633,119 +2473,8 @@ declare global {
         }>;
       }>;
 
-      // Agent Mode
-      updateVoiceAgentHotkey?: (hotkey: string) => Promise<{ success: boolean; message: string }>;
-      getVoiceAgentKey?: () => Promise<string>;
       updateTranslationHotkey?: (hotkey: string) => Promise<{ success: boolean; message: string }>;
       getTranslationKey?: () => Promise<string>;
-      createAgentConversation?: (
-        title: string,
-        noteId?: number | null,
-        spaceId?: number | null,
-        folderId?: number | null
-      ) => Promise<{
-        id: number;
-        title: string;
-        note_id?: number | null;
-        space_id?: number | null;
-        folder_id?: number | null;
-        created_at: string;
-        updated_at: string;
-      } | null>;
-      getConversationsForNote?: (
-        noteId: number,
-        limit?: number
-      ) => Promise<
-        Array<{
-          id: number;
-          title: string;
-          created_at: string;
-          updated_at: string;
-          message_count: number;
-        }>
-      >;
-      getConversationsForContainer?: (
-        spaceId: number,
-        folderId?: number | null,
-        limit?: number
-      ) => Promise<
-        Array<{
-          id: number;
-          title: string;
-          created_at: string;
-          updated_at: string;
-          message_count: number;
-        }>
-      >;
-      getAgentConversations?: (limit?: number) => Promise<
-        Array<{
-          id: number;
-          title: string;
-          archived_at?: string;
-          cloud_id?: string;
-          client_conversation_id?: string;
-          created_at: string;
-          updated_at: string;
-        }>
-      >;
-      getAgentConversation?: (id: number) => Promise<{
-        id: number;
-        title: string;
-        archived_at?: string;
-        cloud_id?: string | null;
-        client_conversation_id?: string | null;
-        created_at: string;
-        updated_at: string;
-        messages: Array<{
-          id: number;
-          conversation_id: number;
-          role: "user" | "assistant" | "system";
-          content: string;
-          metadata?: string;
-          created_at: string;
-        }>;
-      } | null>;
-      deleteAgentConversation?: (id: number) => Promise<{ success: boolean }>;
-      updateAgentConversationTitle?: (id: number, title: string) => Promise<{ success: boolean }>;
-      addAgentMessage?: (
-        conversationId: number,
-        role: "user" | "assistant" | "system",
-        content: string,
-        metadata?: Record<string, unknown>
-      ) => Promise<{
-        id: number;
-        conversation_id: number;
-        role: string;
-        content: string;
-        metadata?: string;
-        created_at: string;
-      } | null>;
-      getAgentMessages?: (conversationId: number) => Promise<
-        Array<{
-          id: number;
-          conversation_id: number;
-          role: "user" | "assistant" | "system";
-          content: string;
-          metadata?: string;
-          created_at: string;
-        }>
-      >;
-      getAgentConversationsWithPreview?: (
-        limit?: number,
-        offset?: number,
-        includeArchived?: boolean
-      ) => Promise<ConversationPreview[]>;
-      searchAgentConversations?: (query: string, limit?: number) => Promise<ConversationPreview[]>;
-      archiveAgentConversation?: (id: number) => Promise<{ success: boolean }>;
-      unarchiveAgentConversation?: (id: number) => Promise<{ success: boolean }>;
-      updateAgentConversationCloudId?: (
-        id: number,
-        cloudId: string
-      ) => Promise<{ success: boolean }>;
-      semanticSearchConversations?: (
-        query: string,
-        limit?: number
-      ) => Promise<ConversationPreview[]>;
 
       // Deepgram Streaming
       deepgramStreamingWarmup?: (options?: { sampleRate?: number; language?: string }) => Promise<{
@@ -2836,51 +2565,7 @@ declare global {
       onCortiError?: (callback: (error: string) => void) => () => void;
       onCortiSessionEnd?: (callback: (data: { text?: string }) => void) => () => void;
 
-      // Agent cloud streaming (event-based)
-      startAgentStream?: (
-        requestId: string,
-        messages: Array<{ role: string; content: string | Array<unknown> }>,
-        opts?: {
-          systemPrompt?: string;
-          tools?: Array<{ name: string; description: string; parameters: Record<string, unknown> }>;
-          screenContext?: { data: string; mediaType: string };
-        }
-      ) => void;
-      cancelAgentStream?: (requestId: string) => void;
-      onAgentStreamChunk?: (
-        callback: (payload: {
-          requestId: string;
-          chunk: {
-            type: "content" | "tool_call" | "done";
-            text?: string;
-            id?: string;
-            name?: string;
-            arguments?: string;
-            finishReason?: string;
-          };
-        }) => void
-      ) => () => void;
-      onAgentStreamError?: (
-        callback: (payload: PolicyFailureMetadata & { requestId: string; error: string }) => void
-      ) => () => void;
-      onAgentStreamEnd?: (callback: (payload: { requestId: string }) => void) => () => void;
 
-      // Agent cloud tools
-      agentOpenNote?: (noteId: number) => Promise<{ success: boolean; error?: string }>;
-      agentWebSearch?: (
-        query: string,
-        numResults?: number
-      ) => Promise<
-        {
-          success: boolean;
-          results?: Array<{
-            title: string;
-            url: string;
-            text: string;
-            publishedDate?: string;
-          }>;
-        } & PolicyFailureMetadata
-      >;
 
       // Google Calendar
       gcalStartOAuth?: () => Promise<{ success: boolean; email?: string; error?: string }>;
@@ -2900,12 +2585,6 @@ declare global {
       gcalGetUpcomingEvents?: (
         windowMinutes?: number
       ) => Promise<{ success: boolean; events: any[] }>;
-      calendarGetAvailability?: (
-        request: CalendarAvailabilityRequest
-      ) => Promise<
-        | { success: true; availability: CalendarAvailabilityResult }
-        | { success: false; error: string }
-      >;
       gcalGetEvent?: (eventId: string) => Promise<{
         success: boolean;
         event: {
@@ -3294,7 +2973,6 @@ declare global {
         id: number;
         folder?: FolderItem;
         notes?: NoteItem[];
-        conversationIds?: number[];
         reason?: "name-taken";
         error?: string;
       }>;
@@ -3312,23 +2990,6 @@ declare global {
         error?: string;
       }>;
 
-      getPendingConversations?: () => Promise<ConversationPreview[]>;
-      getPendingConversationDeletes?: () => Promise<ConversationPreview[]>;
-      getConversationByClientId?: (clientId: string) => Promise<ConversationPreview | null>;
-      upsertConversationFromCloud?: (
-        cloudConv: Record<string, unknown>,
-        messages: Array<Record<string, unknown>>
-      ) => Promise<void>;
-      acknowledgeConversationCreate?: (
-        id: number,
-        snapshot: ConversationCreateSnapshot,
-        cloudId: string
-      ) => Promise<ConversationCreateAckResult | undefined>;
-      markConversationSynced?: (
-        id: number,
-        cloudId: string
-      ) => Promise<{ success: boolean } | undefined>;
-      hardDeleteConversation?: (id: number) => Promise<void>;
 
       getPendingTranscriptions?: () => Promise<TranscriptionItem[]>;
       getTranscriptionByClientId?: (clientId: string) => Promise<TranscriptionItem | null>;

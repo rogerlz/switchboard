@@ -1,7 +1,6 @@
 import { create } from "zustand";
 import { API_ENDPOINTS } from "../config/constants";
 import i18n, { normalizeUiLanguage } from "../i18n";
-import { ensureAgentNameInDictionary } from "../utils/agentName";
 import { chooseDictionaryStartupAction } from "../helpers/dictionaryStartup";
 import logger from "../utils/logger";
 import whisperVadConstants from "../constants/whisperVad.json";
@@ -1175,7 +1174,6 @@ export interface SettingsState
 
   setDictationKey: (key: string) => void;
   setMeetingKey: (key: string) => void;
-  setVoiceAgentKey: (key: string) => Promise<boolean>;
   translationKey: string;
   setTranslationKey: (key: string) => Promise<boolean>;
   setMeetingHotkeyLayoutMode: (mode: "side-panel" | "full-width") => void;
@@ -1298,7 +1296,7 @@ function createNumberSetter(key: string) {
 // being persisted. Rolls back to the previous key if registration fails.
 // Resolves to false on failure so optimistic UIs (HotkeyListInput) can revert.
 function createRegisteredHotkeySetter(
-  key: "voiceAgentKey" | "translationKey",
+  key: "translationKey",
   label: string,
   getRegisterFn: () =>
     ((hotkey: string) => Promise<{ success: boolean; message: string }>) | undefined,
@@ -1585,7 +1583,6 @@ export const useSettingsStore = create<SettingsState>()((set, get) => ({
   dictationKey: readString("dictationKey", ""),
   activeDictationKey: null,
   meetingKey: readString("meetingKey", ""),
-  voiceAgentKey: readString("voiceAgentKey", ""),
   translationKey: readString("translationKey", ""),
   onboardingUseCases: readStringArray("onboardingUseCases", []),
   onboardingUseCaseNote: readString("onboardingUseCaseNote", ""),
@@ -2300,11 +2297,6 @@ export const useSettingsStore = create<SettingsState>()((set, get) => ({
     if (isBrowser) localStorage.setItem("meetingKey", key);
     set({ meetingKey: key });
   },
-  setVoiceAgentKey: createRegisteredHotkeySetter(
-    "voiceAgentKey",
-    "voice agent hotkey",
-    () => window.electronAPI?.updateVoiceAgentHotkey
-  ),
   setTranslationKey: createRegisteredHotkeySetter(
     "translationKey",
     "translation hotkey",
@@ -3308,9 +3300,6 @@ export async function initializeSettings(): Promise<void> {
         customRx,
         noteFormattingCustom,
         translationCustom,
-        dictationAgentCustom,
-        dictationAgentVisionCustom,
-        chatAgentCustom,
         bedrockAccessKeyId,
         bedrockSecretAccessKey,
         bedrockSessionToken,
@@ -3334,9 +3323,6 @@ export async function initializeSettings(): Promise<void> {
         window.electronAPI.getCleanupCustomKey?.(),
         window.electronAPI.getNoteFormattingCustomKey?.(),
         window.electronAPI.getTranslationCustomKey?.(),
-        window.electronAPI.getDictationAgentCustomKey?.(),
-        window.electronAPI.getDictationAgentVisionCustomKey?.(),
-        window.electronAPI.getChatAgentCustomKey?.(),
         window.electronAPI.getBedrockAccessKeyId?.(),
         window.electronAPI.getBedrockSecretAccessKey?.(),
         window.electronAPI.getBedrockSessionToken?.(),
@@ -3364,13 +3350,6 @@ export async function initializeSettings(): Promise<void> {
         ...(await migrateScopeCustomKeys([
           ["noteFormattingCustomApiKey", noteFormattingCustom, "saveNoteFormattingCustomKey"],
           ["translationCustomApiKey", translationCustom, "saveTranslationCustomKey"],
-          ["dictationAgentCustomApiKey", dictationAgentCustom, "saveDictationAgentCustomKey"],
-          [
-            "dictationAgentVisionCustomApiKey",
-            dictationAgentVisionCustom,
-            "saveDictationAgentVisionCustomKey",
-          ],
-          ["chatAgentCustomApiKey", chatAgentCustom, "saveChatAgentCustomKey"],
         ])),
         bedrockSecretAccessKey: bedrockSecretAccessKey || "",
         bedrockSessionToken: bedrockSessionToken || "",
@@ -3379,13 +3358,6 @@ export async function initializeSettings(): Promise<void> {
         deepgramApiKey: deepgram || "",
         assemblyaiApiKey: assemblyai || "",
       });
-
-      if (localStorage.getItem("_dictationAgentSeeded") === "key-pending") {
-        const { chatAgentCustomApiKey, setDictationAgentCustomApiKey } =
-          useSettingsStore.getState();
-        if (chatAgentCustomApiKey) setDictationAgentCustomApiKey(chatAgentCustomApiKey);
-        localStorage.setItem("_dictationAgentSeeded", "1");
-      }
 
       if (!localStorage.getItem("enterpriseSetupMode")) {
         // One-time migration. "Managed by default" is meant to equip employees who never chose a
@@ -3468,19 +3440,6 @@ export async function initializeSettings(): Promise<void> {
       );
     }
 
-    // Sync voice agent hotkey from main process
-    try {
-      const envKey = await window.electronAPI.getVoiceAgentKey?.();
-      if (envKey && envKey !== state.voiceAgentKey) {
-        createStringSetter("voiceAgentKey")(envKey);
-      }
-    } catch (err) {
-      logger.warn(
-        "Failed to sync voice agent hotkey on startup",
-        { error: (err as Error).message },
-        "settings"
-      );
-    }
 
     // Sync translation hotkey from main process
     try {
@@ -3678,9 +3637,6 @@ export async function initializeSettings(): Promise<void> {
 
     // Only after a successful DB↔cache reconcile. If the read failed, the cache
     // may still be stale — writing it via setCustomDictionary would wipe SQLite.
-    if (dictionarySyncSucceeded) {
-      ensureAgentNameInDictionary();
-    }
   }
 
   // Sync Zustand store when another window writes to localStorage

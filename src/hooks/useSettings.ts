@@ -68,7 +68,6 @@ export interface HotkeySettings {
    * dictationKey, e.g. primary-only on GNOME/KDE/Hyprland). Display-only. */
   activeDictationKey: string | null;
   meetingKey: string;
-  voiceAgentKey: string;
   meetingHotkeyLayoutMode: "side-panel" | "full-width";
   activationMode: "tap" | "push";
 }
@@ -333,7 +332,6 @@ function useSettingsInternal() {
     assemblyaiApiKey: store.assemblyaiApiKey,
     dictationKey: store.dictationKey,
     meetingKey: store.meetingKey,
-    voiceAgentKey: store.voiceAgentKey,
     meetingHotkeyLayoutMode: store.meetingHotkeyLayoutMode,
     setMeetingHotkeyLayoutMode: store.setMeetingHotkeyLayoutMode,
     theme: store.theme,
@@ -377,7 +375,6 @@ function useSettingsInternal() {
     setCleanupCustomApiKey: store.setCleanupCustomApiKey,
     setDictationKey: store.setDictationKey,
     setMeetingKey: store.setMeetingKey,
-    setVoiceAgentKey: store.setVoiceAgentKey,
     onboardingUseCases: store.onboardingUseCases,
     setOnboardingUseCases: store.setOnboardingUseCases,
     onboardingUseCaseNote: store.onboardingUseCaseNote,

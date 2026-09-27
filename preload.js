@@ -22,17 +22,6 @@ const BYOK_KEY_BRIDGES = [
     save: "saveNoteFormattingCustomKey",
   },
   { base: "translation-custom", get: "getTranslationCustomKey", save: "saveTranslationCustomKey" },
-  {
-    base: "dictation-agent-custom",
-    get: "getDictationAgentCustomKey",
-    save: "saveDictationAgentCustomKey",
-  },
-  {
-    base: "dictation-agent-vision-custom",
-    get: "getDictationAgentVisionCustomKey",
-    save: "saveDictationAgentVisionCustomKey",
-  },
-  { base: "chat-agent-custom", get: "getChatAgentCustomKey", save: "saveChatAgentCustomKey" },
 ];
 const secretKeyApi = {};
 for (const k of BYOK_KEY_BRIDGES) {
@@ -79,18 +68,11 @@ contextBridge.exposeInMainWorld("electronAPI", {
   ),
   testProviderConnection: (config) => ipcRenderer.invoke("test-provider-connection", config),
   pasteText: (text, options) => ipcRenderer.invoke("paste-text", text, options),
-  captureSelectedText: (options) => ipcRenderer.invoke("capture-selected-text", options),
-  replaceSelectedText: (sessionId, text, options) =>
-    ipcRenderer.invoke("replace-selected-text", sessionId, text, options),
-  pasteAtCapturedTarget: (sessionId, text, options) =>
-    ipcRenderer.invoke("paste-at-captured-target", sessionId, text, options),
   hideWindow: () => ipcRenderer.invoke("hide-window"),
   showDictationPanel: () => ipcRenderer.invoke("show-dictation-panel"),
   captureDictationTarget: () => ipcRenderer.invoke("capture-dictation-target"),
   onToggleDictation: registerListener("toggle-dictation", (callback) => () => callback()),
-  onToggleVoiceAgent: registerListener("toggle-voice-agent", (callback) => () => callback()),
   onToggleTranslation: registerListener("toggle-translation", (callback) => () => callback()),
-  onOpenAssistantPanel: registerListener("open-assistant-panel", (callback) => () => callback()),
   onStartDictation: registerListener("start-dictation", (callback) => () => callback()),
   onStopDictation: registerListener("stop-dictation", (callback) => () => callback()),
   onPrepareDictation: registerListener(
@@ -107,30 +89,8 @@ contextBridge.exposeInMainWorld("electronAPI", {
     (callback) => (_event, payload) => callback(payload)
   ),
   micWarmHoldChanged: (active) => ipcRenderer.send("mic-warm-hold-changed", active),
-  dictationLifecycleStateChanged: (state, inputKind) =>
-    ipcRenderer.send("dictation-lifecycle-state-changed", state, inputKind),
-  dictationAudioLevelChanged: (level) => ipcRenderer.send("dictation-audio-level-changed", level),
-  toggleAgentPanelDictation: () => ipcRenderer.invoke("toggle-agent-panel-dictation"),
-  cancelAgentPanelDictation: () => ipcRenderer.invoke("cancel-agent-panel-dictation"),
-  getAgentDictationPillState: () => ipcRenderer.invoke("get-agent-dictation-pill-state"),
-  resizeAgentDictationPillToContent: (surfaceHeight) =>
-    ipcRenderer.invoke("resize-agent-dictation-pill-to-content", surfaceHeight),
-  setAgentDictationPillInteractivity: (interactive) =>
-    ipcRenderer.invoke("set-agent-dictation-pill-interactivity", interactive),
-  onAgentDictationPillStateChanged: registerListener(
-    "agent-dictation-pill-state-changed",
-    (callback) => (_event, state) => callback(state)
-  ),
-  onAgentDictationPillAudioLevelChanged: registerListener(
-    "agent-dictation-pill-audio-level-changed",
-    (callback) => (_event, level) => callback(level)
-  ),
-  showAgentDictationFinalTranscript: (text) =>
-    ipcRenderer.send("show-agent-dictation-final-transcript", text),
-  onAgentDictationPillFinalTranscript: registerListener(
-    "agent-dictation-pill-final-transcript",
-    (callback) => (_event, text) => callback(text)
-  ),
+  dictationLifecycleStateChanged: (state) =>
+    ipcRenderer.send("dictation-lifecycle-state-changed", state),
 
   // Database functions
   saveTranscription: (text, rawText, options) =>
@@ -222,8 +182,6 @@ contextBridge.exposeInMainWorld("electronAPI", {
   exportDictionary: (words) => ipcRenderer.invoke("export-dictionary", words),
   searchNotes: (query, limit, spaceId, folderId) =>
     ipcRenderer.invoke("db-search-notes", query, limit, spaceId, folderId),
-  semanticSearchNotes: (query, limit, spaceId, folderId) =>
-    ipcRenderer.invoke("db-semantic-search-notes", query, limit, spaceId, folderId),
   updateNoteCloudId: (id, cloudId) => ipcRenderer.invoke("db-update-note-cloud-id", id, cloudId),
   updateNoteShareState: (id, state) => ipcRenderer.invoke("db-update-note-share-state", id, state),
 
@@ -273,13 +231,6 @@ contextBridge.exposeInMainWorld("electronAPI", {
   showNoteFile: (noteId) => ipcRenderer.invoke("show-note-file", noteId),
   showFolderInExplorer: (folderName) => ipcRenderer.invoke("show-folder-in-explorer", folderName),
 
-  // Action functions
-  getActions: () => ipcRenderer.invoke("db-get-actions"),
-  getAction: (id) => ipcRenderer.invoke("db-get-action", id),
-  createAction: (name, description, prompt, icon) =>
-    ipcRenderer.invoke("db-create-action", name, description, prompt, icon),
-  updateAction: (id, updates) => ipcRenderer.invoke("db-update-action", id, updates),
-  deleteAction: (id) => ipcRenderer.invoke("db-delete-action", id),
 
   // Audio file operations
   selectAudioFile: (options) => ipcRenderer.invoke("select-audio-file", options),
@@ -339,21 +290,6 @@ contextBridge.exposeInMainWorld("electronAPI", {
     return () => ipcRenderer.removeListener("sync-event", listener);
   },
 
-  onActionCreated: (callback) => {
-    const listener = (_event, action) => callback?.(action);
-    ipcRenderer.on("action-created", listener);
-    return () => ipcRenderer.removeListener("action-created", listener);
-  },
-  onActionUpdated: (callback) => {
-    const listener = (_event, action) => callback?.(action);
-    ipcRenderer.on("action-updated", listener);
-    return () => ipcRenderer.removeListener("action-updated", listener);
-  },
-  onActionDeleted: (callback) => {
-    const listener = (_event, data) => callback?.(data);
-    ipcRenderer.on("action-deleted", listener);
-    return () => ipcRenderer.removeListener("action-deleted", listener);
-  },
 
   onTranscriptionAdded: (callback) => {
     const listener = (_event, transcription) => callback?.(transcription);
@@ -549,8 +485,6 @@ contextBridge.exposeInMainWorld("electronAPI", {
     ipcRenderer.invoke("resize-assistant-window-to-content", surfaceHeight),
   resizeDictationErrorWindowToContent: (surfaceHeight) =>
     ipcRenderer.invoke("resize-dictation-error-window-to-content", surfaceHeight),
-  setAssistantPanelOpen: (open) => ipcRenderer.invoke("set-assistant-panel-open", open),
-  setAssistantPanelBusy: (busy) => ipcRenderer.invoke("set-assistant-panel-busy", busy),
 
   // Update functions
   checkForUpdates: () => ipcRenderer.invoke("check-for-updates"),
@@ -738,12 +672,7 @@ contextBridge.exposeInMainWorld("electronAPI", {
   openSoundInputSettings: () => ipcRenderer.invoke("open-sound-input-settings"),
   openAccessibilitySettings: () => ipcRenderer.invoke("open-accessibility-settings"),
   openSystemAudioSettings: () => ipcRenderer.invoke("open-system-audio-settings"),
-  openScreenRecordingSettings: () => ipcRenderer.invoke("open-screen-recording-settings"),
   openLoginItemsSettings: () => ipcRenderer.invoke("open-login-items-settings"),
-  checkScreenRecordingAccess: () => ipcRenderer.invoke("check-screen-recording-access"),
-  requestScreenRecordingAccess: () => ipcRenderer.invoke("request-screen-recording-access"),
-  captureScreenContext: () => ipcRenderer.invoke("capture-screen-context"),
-  setScreenContextEnabled: (enabled) => ipcRenderer.invoke("screen-context-set-enabled", enabled),
   toggleMediaPlayback: () => ipcRenderer.invoke("toggle-media-playback"),
   pauseMediaPlayback: () => ipcRenderer.invoke("pause-media-playback"),
   resumeMediaPlayback: () => ipcRenderer.invoke("resume-media-playback"),
@@ -1056,9 +985,6 @@ contextBridge.exposeInMainWorld("electronAPI", {
   getAutoStartEnabled: () => ipcRenderer.invoke("get-auto-start-enabled"),
   setAutoStartEnabled: (enabled) => ipcRenderer.invoke("set-auto-start-enabled", enabled),
 
-  // Agent mode
-  updateVoiceAgentHotkey: (hotkey) => ipcRenderer.invoke("update-voice-agent-hotkey", hotkey),
-  getVoiceAgentKey: () => ipcRenderer.invoke("get-voice-agent-key"),
   updateTranslationHotkey: (hotkey) => ipcRenderer.invoke("update-translation-hotkey", hotkey),
   getTranslationKey: () => ipcRenderer.invoke("get-translation-key"),
   onPreviewText: registerListener("preview-text", (callback) => (_event, text) => callback(text)),
@@ -1085,52 +1011,8 @@ contextBridge.exposeInMainWorld("electronAPI", {
   acquireRecordingLock: (pipeline) => ipcRenderer.invoke("acquire-recording-lock", pipeline),
   releaseRecordingLock: (pipeline) => ipcRenderer.invoke("release-recording-lock", pipeline),
 
-  // Agent cloud streaming (event-based for real-time chunks)
-  startAgentStream: (requestId, messages, opts) =>
-    ipcRenderer.send("cloud-agent-stream-start", requestId, messages, opts),
-  cancelAgentStream: (requestId) => ipcRenderer.send("cloud-agent-stream-cancel", requestId),
-  onAgentStreamChunk: registerListener(
-    "cloud-agent-stream-chunk",
-    (callback) => (_event, payload) => callback(payload)
-  ),
-  onAgentStreamError: registerListener(
-    "cloud-agent-stream-error",
-    (callback) => (_event, payload) => callback(payload)
-  ),
-  onAgentStreamEnd: registerListener(
-    "cloud-agent-stream-end",
-    (callback) => (_event, payload) => callback(payload)
-  ),
 
-  // Agent cloud tools
-  agentWebSearch: (query, numResults) => ipcRenderer.invoke("agent-web-search", query, numResults),
-  agentOpenNote: (noteId) => ipcRenderer.invoke("agent-open-note", noteId),
 
-  // Agent conversation persistence
-  createAgentConversation: (title, noteId, spaceId, folderId) =>
-    ipcRenderer.invoke("db-create-agent-conversation", title, noteId, spaceId, folderId),
-  getAgentConversations: (limit) => ipcRenderer.invoke("db-get-agent-conversations", limit),
-  getAgentConversation: (id) => ipcRenderer.invoke("db-get-agent-conversation", id),
-  deleteAgentConversation: (id) => ipcRenderer.invoke("db-delete-agent-conversation", id),
-  updateAgentConversationTitle: (id, title) =>
-    ipcRenderer.invoke("db-update-agent-conversation-title", id, title),
-  addAgentMessage: (conversationId, role, content, metadata) =>
-    ipcRenderer.invoke("db-add-agent-message", conversationId, role, content, metadata),
-  getAgentMessages: (conversationId) => ipcRenderer.invoke("db-get-agent-messages", conversationId),
-  getAgentConversationsWithPreview: (limit, offset, includeArchived) =>
-    ipcRenderer.invoke("db-get-agent-conversations-with-preview", limit, offset, includeArchived),
-  searchAgentConversations: (query, limit) =>
-    ipcRenderer.invoke("db-search-agent-conversations", query, limit),
-  getConversationsForNote: (noteId, limit) =>
-    ipcRenderer.invoke("db-get-conversations-for-note", noteId, limit),
-  getConversationsForContainer: (spaceId, folderId, limit) =>
-    ipcRenderer.invoke("db-get-conversations-for-container", spaceId, folderId, limit),
-  archiveAgentConversation: (id) => ipcRenderer.invoke("db-archive-agent-conversation", id),
-  unarchiveAgentConversation: (id) => ipcRenderer.invoke("db-unarchive-agent-conversation", id),
-  updateAgentConversationCloudId: (id, cloudId) =>
-    ipcRenderer.invoke("db-update-agent-conversation-cloud-id", id, cloudId),
-  semanticSearchConversations: (query, limit) =>
-    ipcRenderer.invoke("db-semantic-search-conversations", query, limit),
 
   // Sync operations
   getPendingNotes: (spaceKind) => ipcRenderer.invoke("db-get-pending-notes", spaceKind),
@@ -1199,17 +1081,6 @@ contextBridge.exposeInMainWorld("electronAPI", {
   relocateRevokedFolder: (id, privateSpaceId, preserveFolder) =>
     ipcRenderer.invoke("db-relocate-revoked-folder", id, privateSpaceId, preserveFolder),
 
-  getPendingConversations: () => ipcRenderer.invoke("db-get-pending-conversations"),
-  getPendingConversationDeletes: () => ipcRenderer.invoke("db-get-pending-conversation-deletes"),
-  getConversationByClientId: (clientId) =>
-    ipcRenderer.invoke("db-get-conversation-by-client-id", clientId),
-  upsertConversationFromCloud: (cloudConv, messages) =>
-    ipcRenderer.invoke("db-upsert-conversation-from-cloud", cloudConv, messages),
-  acknowledgeConversationCreate: (id, snapshot, cloudId) =>
-    ipcRenderer.invoke("db-acknowledge-conversation-create", id, snapshot, cloudId),
-  markConversationSynced: (id, cloudId) =>
-    ipcRenderer.invoke("db-mark-conversation-synced", id, cloudId),
-  hardDeleteConversation: (id) => ipcRenderer.invoke("db-hard-delete-conversation", id),
 
   getPendingTranscriptions: () => ipcRenderer.invoke("db-get-pending-transcriptions"),
   getTranscriptionByClientId: (clientId) =>
@@ -1263,7 +1134,6 @@ contextBridge.exposeInMainWorld("electronAPI", {
   gcalSyncEvents: () => ipcRenderer.invoke("gcal-sync-events"),
   gcalGetUpcomingEvents: (windowMinutes) =>
     ipcRenderer.invoke("gcal-get-upcoming-events", windowMinutes),
-  calendarGetAvailability: (request) => ipcRenderer.invoke("calendar-get-availability", request),
   gcalGetEvent: (eventId) => ipcRenderer.invoke("gcal-get-event", eventId),
   trayCalendarGetEvents: () => ipcRenderer.invoke("tray-calendar-get-events"),
 

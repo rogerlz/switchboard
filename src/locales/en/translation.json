@@ -3692,7 +3692,7 @@
       "addPlaceholder": "Add a trigger phrase — \"investor ask\", \"cal link\""
     },
     "emptyTitle": "Your dictionary is empty",
-    "emptyDescription": "Add words for {{agentName}} to always get right: names, tools, acronyms.",
+    "emptyDescription": "Add words for OpenWhispr to always get right: names, tools, acronyms.",
     "addFirstWord": "Add your first word",
     "importList": "Import a list",
     "agentDefault": "Added by default"

@@ -68,7 +68,7 @@ function createHarness({ killExitCode = 0 } = {}) {
   const forks = [];
   const logs = [];
   const timers = createTimers();
-  const sessions = { speaker: false, text: false };
+  const sessions = { speaker: false };
   const hanging = new Set();
   const respond = (method) => {
     if (hanging.has(method)) return new Promise(() => {});
@@ -133,102 +133,11 @@ function createHarness({ killExitCode = 0 } = {}) {
   };
 }
 
-test("unloading unused text does not spawn a worker", async () => {
-  const h = createHarness();
-  await h.client.request("text.unload", {});
-  assert.equal(h.client.child, null);
-  assert.equal(h.forks.length, 0);
-});
-
-test("unloading after worker exit succeeds without restarting it", async () => {
-  const h = createHarness();
-  await h.client.request("ping", {});
-  const generation = h.client.generation;
-  h.forks[0].emit("exit", 0);
-  assert.equal(h.client.generation, generation + 1);
-  await h.client.request("text.unload", {});
-  assert.equal(h.client.child, null);
-  assert.equal(h.forks.length, 1);
-});
-
-test("releasing an idle worker kills it without counting a crash, and the next request respawns it", async () => {
-  const h = createHarness({ killExitCode: 15 });
-  await h.client.request("text.unload", {});
-  await h.client.request("ping", {});
-  const generation = h.client.generation;
-  assert.equal(await h.client.releaseIfIdle(), true);
-  assert.equal(h.forks[0].killed, true);
-  await nextTurn();
-  assert.equal(h.client.child, null);
-  assert.equal(h.client.generation, generation + 1);
-  assert.equal(h.client.crashCount, 0);
-  assert.equal(h.client.respawnTimer, null);
-  assert.equal(h.client.gaveUp, false);
-  assert.equal(h.client.shuttingDown, false);
-  assert.ok(h.logs.some((entry) => entry.level === "info" && /released/.test(entry.message)));
-  assert.equal(
-    h.logs.some((entry) => entry.level === "warn" && /exited/.test(entry.message)),
-    false
-  );
-  await h.client.request("ping", {});
-  assert.equal(h.forks.length, 2);
-});
-
-test("a worker with a loaded speaker session is left alone", async () => {
-  const h = createHarness();
-  h.sessions.speaker = true;
-  await h.client.request("speaker.load", {});
-  assert.equal(await h.client.releaseIfIdle(), false);
-  await nextTurn();
-  assert.equal(h.forks[0].killed, false);
-  assert.ok(h.client.child);
-});
-
-test("a worker with an in-flight request is left alone", async () => {
-  const h = createHarness();
-  h.hang("speaker.extract");
-  await h.client.request("ping", {});
-  const extract = h.client.request("speaker.extract", {});
-  await nextTurn();
-  assert.equal(h.client.pending.size, 1);
-  assert.equal(await h.client.releaseIfIdle(), false);
-  await nextTurn();
-  assert.equal(h.forks[0].killed, false);
-  assert.ok(h.client.child);
-  assert.equal(h.client.pending.size, 1);
-  h.forks[0].emit("exit", 0);
-  await assert.rejects(extract, /crashed/);
-});
-
-test("releasing does nothing without a worker", async () => {
-  const h = createHarness();
-  assert.equal(await h.client.releaseIfIdle(), false);
-  assert.equal(h.forks.length, 0);
-});
-
-test("text unload resolves while the worker is shutting down", async () => {
-  const h = createHarness();
-  await h.client.request("ping", {});
-  const stopping = h.client.stop();
-  assert.equal((await h.client.request("text.unload", {})).ok, true);
-  h.forks[0].emit("exit", 0);
-  await stopping;
-});
-
-test("text unload resolves while a crash respawn is pending", async () => {
-  const h = createHarness();
-  await h.client.request("ping", {});
-  h.forks[0].emit("exit", 1);
-  assert.ok(h.client.respawnTimer);
-  assert.equal((await h.client.request("text.unload", {})).ok, true);
-  assert.equal(h.forks.length, 1);
-});
-
 test("a request timeout kills the worker so the crash path respawns it", async () => {
   const h = createHarness({ killExitCode: 0 });
-  h.hang("text.embed");
+  h.hang("speaker.extract");
   await h.client.request("ping", {});
-  const embed = h.client.request("text.embed", {});
+  const embed = h.client.request("speaker.extract", {});
   await nextTurn();
   await h.timers.fire(REQUEST_TIMEOUT_MS);
   await assert.rejects(embed, /timeout/);

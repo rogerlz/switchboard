@@ -11,7 +11,6 @@ const { parseEventTime } = require("./calendarAvailability");
 // keeps the cloud created_at but lets timestamp default to the local pull, so
 // a naive value must never outrank created_at when dating a historical row.
 const { hasExplicitTimeZone, parseDbTimestamp, toDbTimestamp } = require("./dbTimestamp");
-const { BUILTIN_ACTIONS, GENERATE_NOTES_KEY } = require("./builtinActions");
 const {
   ANALYTICS_COUNTER_VERSION,
   ANALYTICS_HISTORY_BACKFILL_VERSION,
@@ -523,41 +522,6 @@ class DatabaseManager {
         "CREATE INDEX IF NOT EXISTS idx_agent_conversations_container ON agent_conversations(space_id, folder_id)"
       );
 
-      // Pre-2026 installs carry one built-in row under an older key: rename it to
-      // Generate Notes so the loop below recognizes and upgrades it.
-      const builtinKeys = BUILTIN_ACTIONS.map((action) => action.translationKey);
-      this.db
-        .prepare(
-          `UPDATE actions SET translation_key = ? WHERE is_builtin = 1 AND (translation_key IS NULL OR translation_key NOT IN (${builtinKeys.map(() => "?").join(", ")}))`
-        )
-        .run(GENERATE_NOTES_KEY, ...builtinKeys);
-
-      // Built-in actions: insert any that are missing, and roll a new default prompt
-      // out to rows whose prompt is still a previous default (never a user edit).
-      const selectBuiltin = this.db.prepare(
-        "SELECT id, prompt FROM actions WHERE is_builtin = 1 AND translation_key = ?"
-      );
-      const insertBuiltin = this.db.prepare(
-        "INSERT INTO actions (name, description, prompt, icon, is_builtin, sort_order, translation_key) VALUES (?, ?, ?, ?, 1, ?, ?)"
-      );
-      const upgradeBuiltin = this.db.prepare(
-        "UPDATE actions SET name = ?, description = ?, prompt = ? WHERE id = ?"
-      );
-      for (const action of BUILTIN_ACTIONS) {
-        const existing = selectBuiltin.get(action.translationKey);
-        if (!existing) {
-          insertBuiltin.run(
-            action.name,
-            action.description,
-            action.prompt,
-            action.icon,
-            action.sortOrder,
-            action.translationKey
-          );
-        } else if (action.previousPrompts.includes(existing.prompt)) {
-          upgradeBuiltin.run(action.name, action.description, action.prompt, existing.id);
-        }
-      }
 
       this.db.exec(`
         CREATE TABLE IF NOT EXISTS google_calendar_tokens (
@@ -3029,9 +2993,6 @@ class DatabaseManager {
     return this.getNoteIdsInScope(null, folderId);
   }
 
-  // Authoritative scope membership for semantic-search candidates. Qdrant
-  // payload writes are asynchronous/best-effort, so its filters are only an
-  // optimization and must not decide which space or folder a hit belongs to.
   getNoteIdsInScope(spaceId = null, folderId = null, candidateIds = null) {
     try {
       if (!this.db) throw new Error("Database not initialized");
@@ -3248,35 +3209,6 @@ class DatabaseManager {
     const notePlaceholders = deletedNoteIds.map(() => "?").join(", ");
     const folderPlaceholders = deletedFolderIds.map(() => "?").join(", ");
     const deleteRows = () => {
-      const conversationConditions = [];
-      const conversationParams = [];
-      if (deletedNoteIds.length > 0) {
-        conversationConditions.push(`note_id IN (${notePlaceholders})`);
-        conversationParams.push(...deletedNoteIds);
-      }
-      if (deletedFolderIds.length > 0) {
-        conversationConditions.push(`folder_id IN (${folderPlaceholders})`);
-        conversationParams.push(...deletedFolderIds);
-      }
-      if (conversationConditions.length > 0) {
-        const conversationIds = this.db
-          .prepare(
-            `SELECT id FROM agent_conversations WHERE ${conversationConditions.join(" OR ")}`
-          )
-          .all(...conversationParams)
-          .map((row) => row.id);
-        if (conversationIds.length > 0) {
-          const conversationPlaceholders = conversationIds.map(() => "?").join(", ");
-          this.db
-            .prepare(
-              `DELETE FROM agent_messages WHERE conversation_id IN (${conversationPlaceholders})`
-            )
-            .run(...conversationIds);
-          this.db
-            .prepare(`DELETE FROM agent_conversations WHERE id IN (${conversationPlaceholders})`)
-            .run(...conversationIds);
-        }
-      }
 
       if (deletedNoteIds.length > 0) {
         this.db
@@ -3340,14 +3272,8 @@ class DatabaseManager {
         if (!folder.cloud_id) {
           // There is no server operation to deny. Local-only folders can
           // finalize immediately, including their local-only child content.
-          this._retireConversationsWhere(`note_id IN (${allChildNotes})`, [id], {
-            scrubSyncedMessages: true,
-          });
           this._deleteSpeakerRowsForNotes(allChildNotes, id);
           this.db.prepare("DELETE FROM notes WHERE folder_id = ?").run(id);
-          this._retireConversationsWhere("folder_id = ?", [id], {
-            scrubSyncedMessages: true,
-          });
           this.db.prepare("DELETE FROM folders WHERE id = ?").run(id);
           return;
         }
@@ -3381,30 +3307,9 @@ class DatabaseManager {
           );
         }
 
-        // Only live conversations belong to this rollback. A tombstone that
-        // predates the folder action is an independent user-requested delete
-        // and must remain pending on both denial and confirmation.
-        const activeConversations = this.db
-          .prepare(
-            `SELECT id, sync_status, deleted_at, updated_at
-             FROM agent_conversations
-             WHERE deleted_at IS NULL
-               AND (folder_id = ? OR note_id IN (${childNotes}))`
-          )
-          .all(id, id);
-        for (const conversation of activeConversations) {
-          journal.run(
-            id,
-            "conversation",
-            conversation.id,
-            conversation.sync_status ?? "pending",
-            conversation.deleted_at ?? null,
-            conversation.updated_at ?? null
-          );
-        }
 
-        // Keep every child row and message body in place while hiding them
-        // from normal readers and all per-note/per-conversation sync queues.
+        // Keep every child row in place while hiding them from normal readers
+        // and all per-note sync queues.
         this.db
           .prepare(
             `UPDATE notes
@@ -3413,17 +3318,6 @@ class DatabaseManager {
              WHERE id IN (
                SELECT entity_id FROM optimistic_folder_delete_rows
                WHERE folder_id = ? AND entity_type = 'note'
-             )`
-          )
-          .run(id);
-        this.db
-          .prepare(
-            `UPDATE agent_conversations
-             SET deleted_at = datetime('now'), sync_status = 'folder_delete_pending',
-                 updated_at = datetime('now')
-             WHERE id IN (
-               SELECT entity_id FROM optimistic_folder_delete_rows
-               WHERE folder_id = ? AND entity_type = 'conversation'
              )`
           )
           .run(id);
@@ -3764,46 +3658,6 @@ class DatabaseManager {
       .run(param);
   }
 
-  // Conversations whose note or container is being removed must not survive
-  // as global chats. Synced rows tombstone (like deleteAgentConversation) so
-  // the next push retires the cloud copy; a hard local delete would let the
-  // next pull resurrect the conversation. Irreversible purge/revocation
-  // callers also scrub their messages, while an optimistic ordinary delete
-  // retains synced messages until the server accepts it. Never-synced rows
-  // hard-delete: there is no server row to retire, and a bare tombstone would
-  // linger forever (getPendingConversationDeletes requires a cloud_id).
-  _retireConversationsWhere(
-    filter,
-    params,
-    { scrubSyncedMessages = false, syncedTombstoneStatus = "pending" } = {}
-  ) {
-    const messageFilter = scrubSyncedMessages ? filter : `cloud_id IS NULL AND (${filter})`;
-    this.db
-      .prepare(
-        `DELETE FROM agent_messages WHERE conversation_id IN (SELECT id FROM agent_conversations WHERE ${messageFilter})`
-      )
-      .run(...params);
-    this.db
-      .prepare(`DELETE FROM agent_conversations WHERE cloud_id IS NULL AND (${filter})`)
-      .run(...params);
-    this.db
-      .prepare(
-        `UPDATE agent_conversations SET deleted_at = datetime('now'), sync_status = ?, updated_at = datetime('now') WHERE cloud_id IS NOT NULL AND deleted_at IS NULL AND (${filter})`
-      )
-      .run(syncedTombstoneStatus, ...params);
-  }
-
-  // Account transitions are a local privacy boundary, not a cloud mutation:
-  // no old-account conversation row (including a pending cloud tombstone)
-  // may remain for the next account to see or push.
-  _hardDeleteConversationsWhere(filter, params) {
-    this.db
-      .prepare(
-        `DELETE FROM agent_messages WHERE conversation_id IN (SELECT id FROM agent_conversations WHERE ${filter})`
-      )
-      .run(...params);
-    this.db.prepare(`DELETE FROM agent_conversations WHERE ${filter}`).run(...params);
-  }
 
   purgeSpace(localSpaceId, options = {}) {
     try {
@@ -3866,15 +3720,8 @@ class DatabaseManager {
             const relocateNote = this.db.prepare(
               "UPDATE notes SET space_id = ?, folder_id = NULL, client_note_id = ?, cloud_id = NULL, cloud_updated_at = NULL, owner_user_id = NULL, updated_by_user_id = NULL, sync_status = 'pending', left_team = 0, is_shared = 0, share_token = NULL, updated_at = datetime('now') WHERE id = ?"
             );
-            const detachNoteConversation = this.db.prepare(
-              "UPDATE agent_conversations SET space_id = NULL, folder_id = NULL WHERE note_id = ?"
-            );
             for (const noteId of preservedIds) {
               relocateNote.run(privateSpaceId, randomUUID(), noteId);
-              // A note chat follows the dirty note fork into Personal. Clear
-              // any redundant team-container scope so the container cleanup
-              // below cannot retire a conversation whose note survived.
-              detachNoteConversation.run(noteId);
             }
             const getNote = this.db.prepare("SELECT * FROM notes WHERE id = ?");
             relocated = preservedIds.map((id) => getNote.get(id));
@@ -3888,31 +3735,13 @@ class DatabaseManager {
           .prepare("SELECT name FROM folders WHERE space_id = ?")
           .all(localSpaceId)
           .map((row) => row.name);
-        // Note chats normally carry only note_id, so container cleanup alone
-        // cannot see them. Retire them while the doomed note rows still
-        // identify the space; relocated dirty-note chats were moved above.
         if (destructive) {
-          // Account-boundary cleanup must leave neither visible chats nor
-          // cloud-delete tombstones. Match note-only chats and both kinds of
-          // container scope before deleting their parent rows.
-          this._hardDeleteConversationsWhere(
-            `note_id IN (SELECT id FROM notes WHERE space_id = ?)
-             OR space_id = ?
-             OR folder_id IN (SELECT id FROM folders WHERE space_id = ?)`,
-            [localSpaceId, localSpaceId, localSpaceId]
-          );
           this.db
             .prepare(
               `DELETE FROM optimistic_folder_delete_rows
                WHERE folder_id IN (SELECT id FROM folders WHERE space_id = ?)`
             )
             .run(localSpaceId);
-        } else {
-          this._retireConversationsWhere(
-            "note_id IN (SELECT id FROM notes WHERE space_id = ?)",
-            [localSpaceId],
-            { scrubSyncedMessages: true }
-          );
         }
         this._deleteSpeakerRowsForNotes("SELECT id FROM notes WHERE space_id = ?", localSpaceId);
         this.db.prepare("DELETE FROM notes WHERE space_id = ?").run(localSpaceId);
@@ -3924,13 +3753,6 @@ class DatabaseManager {
             "UPDATE notes SET folder_id = NULL WHERE space_id != ? AND folder_id IN (SELECT id FROM folders WHERE space_id = ?)"
           )
           .run(localSpaceId, localSpaceId);
-        if (!destructive) {
-          this._retireConversationsWhere(
-            "space_id = ? OR folder_id IN (SELECT id FROM folders WHERE space_id = ?)",
-            [localSpaceId, localSpaceId],
-            { scrubSyncedMessages: true }
-          );
-        }
         this.db.prepare("DELETE FROM folders WHERE space_id = ?").run(localSpaceId);
         this.db.prepare("DELETE FROM spaces WHERE id = ?").run(localSpaceId);
         return { noteIds: ids, folderNames: names, relocatedNotes: relocated };
@@ -3987,22 +3809,7 @@ class DatabaseManager {
     })();
   }
 
-  getPendingVectorChanges(limit = 50, afterRevision = 0) {
-    if (!this.db) throw new Error("Database not initialized");
-    return this.db
-      .prepare(
-        "SELECT note_id, revision FROM pending_vector_changes WHERE revision > ? ORDER BY revision LIMIT ?"
-      )
-      .all(afterRevision, limit);
-  }
 
-  clearPendingVectorChange(noteId, revision) {
-    if (!this.db) throw new Error("Database not initialized");
-    const result = this.db
-      .prepare("DELETE FROM pending_vector_changes WHERE note_id = ? AND revision = ?")
-      .run(noteId, revision);
-    return { success: true, changes: result.changes };
-  }
 
   enqueueAllVectorChanges() {
     if (!this.db) throw new Error("Database not initialized");
@@ -4013,128 +3820,14 @@ class DatabaseManager {
     return { success: true };
   }
 
-  getNoteForVectorIndex(noteId) {
-    if (!this.db) throw new Error("Database not initialized");
-    // The durable index spans accounts; renderer/search reads still use the
-    // scoped getNote API before exposing any indexed result.
-    return this.db.prepare("SELECT * FROM notes WHERE id = ?").get(noteId) || null;
-  }
 
-  addPendingVectorPurge(spaceId) {
-    try {
-      if (!this.db) throw new Error("Database not initialized");
-      this.db
-        .prepare("INSERT OR IGNORE INTO pending_vector_purges (space_id) VALUES (?)")
-        .run(spaceId);
-      return { success: true };
-    } catch (error) {
-      debugLogger.error("Error adding pending vector purge", { error: error.message }, "spaces");
-      throw error;
-    }
-  }
 
-  getPendingVectorPurges() {
-    try {
-      if (!this.db) throw new Error("Database not initialized");
-      return this.db.prepare("SELECT space_id FROM pending_vector_purges").all();
-    } catch (error) {
-      debugLogger.error("Error getting pending vector purges", { error: error.message }, "spaces");
-      throw error;
-    }
-  }
 
-  clearPendingVectorPurge(spaceId) {
-    try {
-      if (!this.db) throw new Error("Database not initialized");
-      this.db.prepare("DELETE FROM pending_vector_purges WHERE space_id = ?").run(spaceId);
-      return { success: true };
-    } catch (error) {
-      debugLogger.error("Error clearing pending vector purge", { error: error.message }, "spaces");
-      throw error;
-    }
-  }
 
-  getActions() {
-    try {
-      if (!this.db) throw new Error("Database not initialized");
-      return this.db.prepare("SELECT * FROM actions ORDER BY sort_order ASC, created_at ASC").all();
-    } catch (error) {
-      debugLogger.error("Error getting actions", { error: error.message }, "notes");
-      throw error;
-    }
-  }
 
-  getAction(id) {
-    try {
-      if (!this.db) throw new Error("Database not initialized");
-      return this.db.prepare("SELECT * FROM actions WHERE id = ?").get(id) || null;
-    } catch (error) {
-      debugLogger.error("Error getting action", { error: error.message }, "notes");
-      throw error;
-    }
-  }
 
-  createAction(name, description, prompt, icon = "sparkles") {
-    try {
-      if (!this.db) throw new Error("Database not initialized");
-      const trimmedName = (name || "").trim();
-      const trimmedPrompt = (prompt || "").trim();
-      if (!trimmedName) return { success: false, error: "Action name is required" };
-      if (!trimmedPrompt) return { success: false, error: "Action prompt is required" };
-      const maxOrder = this.db.prepare("SELECT MAX(sort_order) as max_order FROM actions").get();
-      const sortOrder = (maxOrder?.max_order ?? 0) + 1;
-      const result = this.db
-        .prepare(
-          "INSERT INTO actions (name, description, prompt, icon, sort_order) VALUES (?, ?, ?, ?, ?)"
-        )
-        .run(trimmedName, (description || "").trim(), trimmedPrompt, icon || "sparkles", sortOrder);
-      const action = this.db
-        .prepare("SELECT * FROM actions WHERE id = ?")
-        .get(result.lastInsertRowid);
-      return { success: true, action };
-    } catch (error) {
-      debugLogger.error("Error creating action", { error: error.message }, "notes");
-      throw error;
-    }
-  }
 
-  updateAction(id, updates) {
-    try {
-      if (!this.db) throw new Error("Database not initialized");
-      const allowedFields = ["name", "description", "prompt", "icon", "sort_order"];
-      const fields = [];
-      const values = [];
-      for (const [key, value] of Object.entries(updates)) {
-        if (allowedFields.includes(key) && value !== undefined) {
-          fields.push(`${key} = ?`);
-          values.push(value);
-        }
-      }
-      if (fields.length === 0) return { success: false };
-      fields.push("updated_at = CURRENT_TIMESTAMP");
-      values.push(id);
-      this.db.prepare(`UPDATE actions SET ${fields.join(", ")} WHERE id = ?`).run(...values);
-      const action = this.db.prepare("SELECT * FROM actions WHERE id = ?").get(id);
-      return { success: true, action };
-    } catch (error) {
-      debugLogger.error("Error updating action", { error: error.message }, "notes");
-      throw error;
-    }
-  }
 
-  deleteAction(id) {
-    try {
-      if (!this.db) throw new Error("Database not initialized");
-      const action = this.db.prepare("SELECT * FROM actions WHERE id = ?").get(id);
-      if (!action) return { success: false, error: "Action not found" };
-      if (action.is_builtin) return { success: false, error: "Cannot delete built-in actions" };
-      this.db.prepare("DELETE FROM actions WHERE id = ?").run(id);
-      return { success: true, id };
-    } catch (error) {
-      debugLogger.error("Error deleting action", { error: error.message }, "notes");
-      throw error;
-    }
-  }
 
   deleteNote(id) {
     try {
@@ -4155,178 +3848,12 @@ class DatabaseManager {
     }
   }
 
-  createAgentConversation(title = "Untitled", noteId = null, spaceId = null, folderId = null) {
-    try {
-      if (!this.db) throw new Error("Database not initialized");
-      return this.db.transaction(() => {
-        let note = null;
-        let space = null;
-        let folder = null;
 
-        if (noteId != null) {
-          note = this.getNote(noteId);
-          if (!note || note.deleted_at) return null;
-          if (note.folder_id != null) {
-            const noteFolder = this._getFolderInAccountScope(note.folder_id);
-            if (!noteFolder || noteFolder.deleted_at || noteFolder.space_id !== note.space_id) {
-              return null;
-            }
-          }
-        }
-        if (spaceId != null) {
-          space = this.getSpace(spaceId);
-          if (!space) return null;
-        }
-        if (folderId != null) {
-          folder = this._getFolderInAccountScope(folderId);
-          if (!folder || folder.deleted_at || !this.getSpace(folder.space_id)) return null;
-        }
-        if (folder && spaceId != null && folder.space_id !== spaceId) return null;
-        if (note && spaceId != null && note.space_id !== spaceId) return null;
-        if (note && folderId != null && note.folder_id !== folderId) return null;
 
-        const clientConversationId = randomUUID();
-        const result = this.db
-          .prepare(
-            "INSERT INTO agent_conversations (title, note_id, space_id, folder_id, client_conversation_id) VALUES (?, ?, ?, ?, ?)"
-          )
-          .run(title, noteId, spaceId, folderId, clientConversationId);
-        return this.db
-          .prepare("SELECT * FROM agent_conversations WHERE id = ?")
-          .get(result.lastInsertRowid);
-      })();
-    } catch (error) {
-      debugLogger.error("Error creating agent conversation", { error: error.message }, "database");
-      throw error;
-    }
-  }
 
-  getConversationsForNote(noteId, limit = 20) {
-    try {
-      if (!this.db) throw new Error("Database not initialized");
-      if (!this.getNote(noteId)) return [];
-      return this.db
-        .prepare(
-          `SELECT c.id, c.title, c.created_at, c.updated_at,
-            COUNT(m.id) AS message_count
-          FROM agent_conversations c
-          LEFT JOIN agent_messages m ON m.conversation_id = c.id
-          WHERE c.note_id = ? AND c.deleted_at IS NULL
-          GROUP BY c.id
-          ORDER BY c.updated_at DESC
-          LIMIT ?`
-        )
-        .all(noteId, limit);
-    } catch (error) {
-      debugLogger.error(
-        "Error getting conversations for note",
-        { error: error.message },
-        "database"
-      );
-      throw error;
-    }
-  }
 
-  // Space-root scope (folderId null) intentionally excludes folder-scoped
-  // conversations — each container surfaces only its own chats.
-  getConversationsForContainer(spaceId, folderId = null, limit = 20) {
-    try {
-      if (!this.db) throw new Error("Database not initialized");
-      if (folderId != null) {
-        const folder = this._getFolderInAccountScope(folderId);
-        if (!folder || folder.deleted_at) return [];
-      } else if (!this.getSpace(spaceId)) {
-        return [];
-      }
-      const scopeFilter =
-        folderId != null ? "c.folder_id = ?" : "c.space_id = ? AND c.folder_id IS NULL";
-      const params = folderId != null ? [folderId, limit] : [spaceId, limit];
-      return this.db
-        .prepare(
-          `SELECT c.id, c.title, c.created_at, c.updated_at,
-            COUNT(m.id) AS message_count
-          FROM agent_conversations c
-          LEFT JOIN agent_messages m ON m.conversation_id = c.id
-          WHERE ${scopeFilter} AND c.deleted_at IS NULL
-          GROUP BY c.id
-          ORDER BY c.updated_at DESC
-          LIMIT ?`
-        )
-        .all(...params);
-    } catch (error) {
-      debugLogger.error(
-        "Error getting conversations for container",
-        { error: error.message },
-        "database"
-      );
-      throw error;
-    }
-  }
 
-  getAgentConversations(limit = 50) {
-    try {
-      if (!this.db) throw new Error("Database not initialized");
-      return this.db
-        .prepare(
-          "SELECT * FROM agent_conversations WHERE deleted_at IS NULL AND space_id IS NULL AND folder_id IS NULL ORDER BY updated_at DESC LIMIT ?"
-        )
-        .all(limit);
-    } catch (error) {
-      debugLogger.error("Error getting agent conversations", { error: error.message }, "database");
-      throw error;
-    }
-  }
 
-  getAgentConversation(id) {
-    try {
-      if (!this.db) throw new Error("Database not initialized");
-      const conversation = this.db
-        .prepare("SELECT * FROM agent_conversations WHERE id = ? AND deleted_at IS NULL")
-        .get(id);
-      if (!conversation) return null;
-      const messages = this.db
-        .prepare("SELECT * FROM agent_messages WHERE conversation_id = ? ORDER BY created_at ASC")
-        .all(id);
-      return { ...conversation, messages };
-    } catch (error) {
-      debugLogger.error("Error getting agent conversation", { error: error.message }, "database");
-      throw error;
-    }
-  }
-
-  deleteAgentConversation(id) {
-    try {
-      if (!this.db) throw new Error("Database not initialized");
-      const result = this.db
-        .prepare(
-          "UPDATE agent_conversations SET deleted_at = datetime('now'), sync_status = 'pending', updated_at = datetime('now') WHERE id = ?"
-        )
-        .run(id);
-      return { success: result.changes > 0 };
-    } catch (error) {
-      debugLogger.error("Error deleting agent conversation", { error: error.message }, "database");
-      throw error;
-    }
-  }
-
-  updateAgentConversationTitle(id, title) {
-    try {
-      if (!this.db) throw new Error("Database not initialized");
-      const result = this.db
-        .prepare(
-          "UPDATE agent_conversations SET title = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND deleted_at IS NULL"
-        )
-        .run(title, id);
-      return { success: result.changes > 0 };
-    } catch (error) {
-      debugLogger.error(
-        "Error updating agent conversation title",
-        { error: error.message },
-        "database"
-      );
-      throw error;
-    }
-  }
 
   saveGoogleTokens(tokens) {
     try {
@@ -4378,35 +3905,6 @@ class DatabaseManager {
     }
   }
 
-  addAgentMessage(conversationId, role, content, metadata) {
-    try {
-      if (!this.db) throw new Error("Database not initialized");
-      return this.db.transaction(() => {
-        const conversation = this.db
-          .prepare("SELECT id FROM agent_conversations WHERE id = ? AND deleted_at IS NULL")
-          .get(conversationId);
-        if (!conversation) return null;
-
-        const metadataStr = metadata ? JSON.stringify(metadata) : null;
-        const result = this.db
-          .prepare(
-            "INSERT INTO agent_messages (conversation_id, role, content, metadata) VALUES (?, ?, ?, ?)"
-          )
-          .run(conversationId, role, content, metadataStr);
-        this.db
-          .prepare(
-            "UPDATE agent_conversations SET updated_at = CURRENT_TIMESTAMP WHERE id = ? AND deleted_at IS NULL"
-          )
-          .run(conversationId);
-        return this.db
-          .prepare("SELECT * FROM agent_messages WHERE id = ?")
-          .get(result.lastInsertRowid);
-      })();
-    } catch (error) {
-      debugLogger.error("Error adding agent message", { error: error.message }, "database");
-      throw error;
-    }
-  }
 
   getAllGoogleTokens() {
     try {
@@ -4541,17 +4039,6 @@ class DatabaseManager {
     }
   }
 
-  getAgentMessages(conversationId) {
-    try {
-      if (!this.db) throw new Error("Database not initialized");
-      return this.db
-        .prepare("SELECT * FROM agent_messages WHERE conversation_id = ? ORDER BY created_at ASC")
-        .all(conversationId);
-    } catch (error) {
-      debugLogger.error("Error getting agent messages", { error: error.message }, "database");
-      throw error;
-    }
-  }
 
   getSelectedCalendars(accountEmail = null) {
     try {
@@ -5219,117 +4706,10 @@ class DatabaseManager {
       debugLogger.error("Error deleting database file", { error: error.message }, "database");
     }
   }
-  getAgentConversationsWithPreview(limit = 50, offset = 0, includeArchived = false) {
-    try {
-      if (!this.db) throw new Error("Database not initialized");
-      const archiveFilter = includeArchived
-        ? "WHERE c.archived_at IS NOT NULL AND c.deleted_at IS NULL AND c.space_id IS NULL AND c.folder_id IS NULL"
-        : "WHERE c.archived_at IS NULL AND c.deleted_at IS NULL AND c.space_id IS NULL AND c.folder_id IS NULL";
-      return this.db
-        .prepare(
-          `SELECT c.id, c.title, c.created_at, c.updated_at, c.archived_at, c.cloud_id,
-            COUNT(m.id) AS message_count,
-            (SELECT content FROM agent_messages WHERE conversation_id = c.id ORDER BY created_at DESC LIMIT 1) AS last_message,
-            (SELECT role FROM agent_messages WHERE conversation_id = c.id ORDER BY created_at DESC LIMIT 1) AS last_message_role
-          FROM agent_conversations c
-          LEFT JOIN agent_messages m ON m.conversation_id = c.id
-          ${archiveFilter}
-          GROUP BY c.id
-          ORDER BY c.updated_at DESC
-          LIMIT ? OFFSET ?`
-        )
-        .all(limit, offset);
-    } catch (error) {
-      debugLogger.error(
-        "Error getting agent conversations with preview",
-        { error: error.message },
-        "database"
-      );
-      throw error;
-    }
-  }
 
-  searchAgentConversations(query, limit = 20) {
-    try {
-      if (!this.db) throw new Error("Database not initialized");
-      const pattern = `%${query}%`;
-      return this.db
-        .prepare(
-          `SELECT DISTINCT c.id, c.title, c.created_at, c.updated_at, c.archived_at, c.cloud_id,
-            COUNT(m.id) AS message_count,
-            (SELECT content FROM agent_messages WHERE conversation_id = c.id ORDER BY created_at DESC LIMIT 1) AS last_message,
-            (SELECT role FROM agent_messages WHERE conversation_id = c.id ORDER BY created_at DESC LIMIT 1) AS last_message_role
-          FROM agent_conversations c
-          LEFT JOIN agent_messages m ON m.conversation_id = c.id
-          LEFT JOIN agent_messages ms ON ms.conversation_id = c.id
-          WHERE c.archived_at IS NULL AND c.deleted_at IS NULL
-            AND c.space_id IS NULL AND c.folder_id IS NULL
-            AND (c.title LIKE ? OR ms.content LIKE ?)
-          GROUP BY c.id
-          ORDER BY c.updated_at DESC
-          LIMIT ?`
-        )
-        .all(pattern, pattern, limit);
-    } catch (error) {
-      debugLogger.error(
-        "Error searching agent conversations",
-        { error: error.message },
-        "database"
-      );
-      throw error;
-    }
-  }
 
-  archiveAgentConversation(id) {
-    try {
-      if (!this.db) throw new Error("Database not initialized");
-      const result = this.db
-        .prepare(
-          "UPDATE agent_conversations SET archived_at = CURRENT_TIMESTAMP WHERE id = ? AND deleted_at IS NULL"
-        )
-        .run(id);
-      return { success: result.changes > 0 };
-    } catch (error) {
-      debugLogger.error("Error archiving agent conversation", { error: error.message }, "database");
-      throw error;
-    }
-  }
 
-  unarchiveAgentConversation(id) {
-    try {
-      if (!this.db) throw new Error("Database not initialized");
-      const result = this.db
-        .prepare(
-          "UPDATE agent_conversations SET archived_at = NULL WHERE id = ? AND deleted_at IS NULL"
-        )
-        .run(id);
-      return { success: result.changes > 0 };
-    } catch (error) {
-      debugLogger.error(
-        "Error unarchiving agent conversation",
-        { error: error.message },
-        "database"
-      );
-      throw error;
-    }
-  }
 
-  updateAgentConversationCloudId(id, cloudId) {
-    try {
-      if (!this.db) throw new Error("Database not initialized");
-      const result = this.db
-        .prepare("UPDATE agent_conversations SET cloud_id = ? WHERE id = ? AND deleted_at IS NULL")
-        .run(cloudId, id);
-      return { success: result.changes > 0 };
-    } catch (error) {
-      debugLogger.error(
-        "Error updating agent conversation cloud_id",
-        { error: error.message },
-        "database"
-      );
-      throw error;
-    }
-  }
 
   _normalizeEmail(email) {
     const trimmed = (email || "").trim().toLowerCase();
@@ -6040,16 +5420,13 @@ class DatabaseManager {
     }
   }
 
-  // Confirmed cloud deletes and access revocation retire note chats; denied
-  // deletes use the restore method above instead.
+  // Confirmed cloud deletes and access revocation; denied deletes use the
+  // restore method above instead.
   hardDeleteNote(id) {
     try {
       if (!this.db) throw new Error("Database not initialized");
       if (!this.getNote(id)) return { success: false, id, error: "Note not found" };
       const result = this.db.transaction(() => {
-        this._retireConversationsWhere("note_id = ?", [id], {
-          scrubSyncedMessages: true,
-        });
         this._deleteSpeakerRowsForNotes("SELECT id FROM notes WHERE id = ?", id);
         return this.db.prepare("DELETE FROM notes WHERE id = ?").run(id);
       })();
@@ -6119,7 +5496,7 @@ class DatabaseManager {
 
   // A folder DELETE permission denial means the server changed nothing.
   // Restore only rows hidden by that exact optimistic operation; independent
-  // note/conversation tombstones were never journaled and remain deleted.
+  // note tombstones were never journaled and remain deleted.
   restoreFolderAfterDeniedDelete(id) {
     try {
       if (!this.db) throw new Error("Database not initialized");
@@ -6159,16 +5536,9 @@ class DatabaseManager {
         }
 
         const noteStates = journalRows.filter((row) => row.entity_type === "note");
-        const conversationStates = journalRows.filter((row) => row.entity_type === "conversation");
         const noteExists = this.db.prepare("SELECT 1 FROM notes WHERE id = ?");
-        const conversationExists = this.db.prepare(
-          "SELECT 1 FROM agent_conversations WHERE id = ?"
-        );
         if (noteStates.some((row) => !noteExists.get(row.entity_id))) {
           return { success: false, id, error: "A folder note row is missing" };
-        }
-        if (conversationStates.some((row) => !conversationExists.get(row.entity_id))) {
-          return { success: false, id, error: "A folder conversation row is missing" };
         }
 
         this.db
@@ -6196,19 +5566,6 @@ class DatabaseManager {
             state.entity_id
           );
         }
-        const restoreConversation = this.db.prepare(
-          `UPDATE agent_conversations
-           SET deleted_at = ?, sync_status = ?, updated_at = ?
-           WHERE id = ?`
-        );
-        for (const state of conversationStates) {
-          restoreConversation.run(
-            state.original_deleted_at,
-            state.original_sync_status,
-            state.original_updated_at,
-            state.entity_id
-          );
-        }
 
         this.db.prepare("DELETE FROM optimistic_folder_delete_rows WHERE folder_id = ?").run(id);
         const getNote = this.db.prepare("SELECT * FROM notes WHERE id = ?");
@@ -6217,7 +5574,6 @@ class DatabaseManager {
           id,
           folder: this.db.prepare("SELECT * FROM folders WHERE id = ?").get(id),
           notes: noteStates.map((state) => getNote.get(state.entity_id)),
-          conversationIds: conversationStates.map((state) => state.entity_id),
         };
       })();
     } catch (error) {
@@ -6238,8 +5594,6 @@ class DatabaseManager {
       const childNotes = "SELECT id FROM notes WHERE folder_id = ?";
       const heldNotes =
         "SELECT entity_id FROM optimistic_folder_delete_rows WHERE folder_id = ? AND entity_type = 'note'";
-      const heldConversations =
-        "SELECT entity_id FROM optimistic_folder_delete_rows WHERE folder_id = ? AND entity_type = 'conversation'";
       const accountScope = this._accountScopeCondition("notes");
       const noteIds = this.db
         .prepare(`${childNotes} AND ${accountScope.sql}`)
@@ -6248,45 +5602,10 @@ class DatabaseManager {
       let relocatedNotes = [];
       const result = this.db.transaction(() => {
         relocatedNotes = this._releaseOutOfScopeChildNotes(id);
-        // Note chats normally have note_id only. Retire them while the child
-        // rows still identify which chats belong to this folder cleanup, then
-        // handle independently folder-scoped conversations.
-        this._retireConversationsWhere(`note_id IN (${childNotes})`, [id], {
-          scrubSyncedMessages: true,
-        });
-        // The journal is the authoritative ownership record for the
-        // optimistic operation. Use it as well as current parent columns so a
-        // late stale write cannot strand a held row by changing its scope.
-        this.db
-          .prepare(
-            `DELETE FROM agent_messages
-             WHERE conversation_id IN (${heldConversations})`
-          )
-          .run(id);
-        this.db
-          .prepare(
-            `DELETE FROM agent_conversations
-             WHERE cloud_id IS NULL AND id IN (${heldConversations})`
-          )
-          .run(id);
-        this.db
-          .prepare(
-            `UPDATE agent_conversations
-             SET deleted_at = COALESCE(deleted_at, datetime('now')),
-                 sync_status = 'pending', updated_at = datetime('now')
-             WHERE cloud_id IS NOT NULL AND id IN (${heldConversations})`
-          )
-          .run(id);
         this._deleteSpeakerRowsForNotes(childNotes, id);
         this._deleteSpeakerRowsForNotes(heldNotes, id);
         this.db.prepare(`DELETE FROM notes WHERE id IN (${heldNotes})`).run(id);
         this.db.prepare(`DELETE FROM notes WHERE id IN (${childNotes})`).run(id);
-        this._retireConversationsWhere("folder_id = ?", [id], {
-          scrubSyncedMessages: true,
-        });
-        // Held cloud chats now become ordinary pending cloud deletes. Rows
-        // tombstoned before the folder action were never journaled and keep
-        // their existing pending state.
         const deleted = this.db.prepare("DELETE FROM folders WHERE id = ?").run(id);
         this.db.prepare("DELETE FROM optimistic_folder_delete_rows WHERE folder_id = ?").run(id);
         return deleted;
@@ -6347,24 +5666,13 @@ class DatabaseManager {
           .prepare(serverOwnedChildren)
           .all(id)
           .map((row) => row.id);
-        // Note chats have no folder_id, so retire them before deleting the
-        // server-owned notes that prove they belonged to this revoked folder.
-        this._retireConversationsWhere(`note_id IN (${serverOwnedChildren})`, [id], {
-          scrubSyncedMessages: true,
-        });
         this._deleteSpeakerRowsForNotes(serverOwnedChildren, id);
         this.db.prepare(`DELETE FROM notes WHERE id IN (${serverOwnedChildren})`).run(id);
         const relocateNote = this.db.prepare(
           "UPDATE notes SET space_id = ?, folder_id = ?, client_note_id = ?, cloud_id = NULL, cloud_updated_at = NULL, owner_user_id = NULL, updated_by_user_id = NULL, sync_status = 'pending', left_team = 0, is_shared = 0, share_token = NULL, updated_at = datetime('now') WHERE id = ?"
         );
-        const detachNoteConversation = this.db.prepare(
-          "UPDATE agent_conversations SET space_id = NULL, folder_id = NULL WHERE note_id = ?"
-        );
         for (const noteId of preservedIds) {
           relocateNote.run(privateSpaceId, preserveFolder ? id : null, randomUUID(), noteId);
-          // Note-scoped chats follow a preserved dirty note, not the revoked
-          // team container. Folder-only chats are handled separately below.
-          detachNoteConversation.run(noteId);
         }
         let preservedFolder = null;
         if (preserveFolder) {
@@ -6381,15 +5689,7 @@ class DatabaseManager {
             )
             .run(privateSpaceId, name, randomUUID(), id);
           preservedFolder = this.db.prepare("SELECT * FROM folders WHERE id = ?").get(id);
-          // Folder-scoped chats follow the preserved folder into the private
-          // space so their space ref doesn't dangle on the revoked space.
-          this.db
-            .prepare("UPDATE agent_conversations SET space_id = ? WHERE folder_id = ?")
-            .run(privateSpaceId, id);
         } else {
-          this._retireConversationsWhere("folder_id = ?", [id], {
-            scrubSyncedMessages: true,
-          });
           this.db.prepare("DELETE FROM folders WHERE id = ?").run(id);
         }
         const getNote = this.db.prepare("SELECT * FROM notes WHERE id = ?");
@@ -6682,250 +5982,12 @@ class DatabaseManager {
     }
   }
 
-  getPendingConversations() {
-    try {
-      if (!this.db) throw new Error("Database not initialized");
-      // The cloud conversation contract has no space/folder scope yet.
-      // Keep container chats local so another device cannot pull them as
-      // global chats. Cloud-backed tombstones still use the delete queue.
-      return this.db
-        .prepare(
-          "SELECT * FROM agent_conversations WHERE sync_status = 'pending' AND deleted_at IS NULL AND space_id IS NULL AND folder_id IS NULL"
-        )
-        .all();
-    } catch (error) {
-      debugLogger.error(
-        "Error getting pending conversations",
-        { error: error.message },
-        "database"
-      );
-      throw error;
-    }
-  }
 
-  getPendingConversationDeletes() {
-    try {
-      if (!this.db) throw new Error("Database not initialized");
-      return this.db
-        .prepare(
-          `SELECT * FROM agent_conversations c
-           WHERE deleted_at IS NOT NULL AND cloud_id IS NOT NULL
-             AND sync_status = 'pending'
-             AND NOT EXISTS (
-               SELECT 1 FROM optimistic_folder_delete_rows r
-               WHERE r.entity_type = 'conversation' AND r.entity_id = c.id
-             )`
-        )
-        .all();
-    } catch (error) {
-      debugLogger.error(
-        "Error getting pending conversation deletes",
-        { error: error.message },
-        "database"
-      );
-      throw error;
-    }
-  }
 
-  getConversationByClientId(clientId) {
-    try {
-      if (!this.db) throw new Error("Database not initialized");
-      return (
-        this.db
-          .prepare(
-            `SELECT c.*,
-               EXISTS (
-                 SELECT 1 FROM optimistic_folder_delete_rows r
-                 WHERE r.entity_type = 'conversation' AND r.entity_id = c.id
-               ) AS folder_delete_pending
-             FROM agent_conversations c
-             WHERE c.client_conversation_id = ?`
-          )
-          .get(clientId) || null
-      );
-    } catch (error) {
-      debugLogger.error(
-        "Error getting conversation by client id",
-        { error: error.message },
-        "database"
-      );
-      throw error;
-    }
-  }
 
-  upsertConversationFromCloud(cloudConv, messages) {
-    try {
-      if (!this.db) throw new Error("Database not initialized");
-      const transaction = this.db.transaction(() => {
-        // A local tombstone represents an unacknowledged delete. A newer live
-        // cloud revision must not cancel that intent or restore message bodies
-        // while the delete retries. Match by cloud id as a fallback for legacy
-        // rows without a client_conversation_id.
-        let existing = null;
-        if (cloudConv.client_conversation_id != null) {
-          existing = this.db
-            .prepare("SELECT * FROM agent_conversations WHERE client_conversation_id = ?")
-            .get(cloudConv.client_conversation_id);
-        }
-        if (!existing && cloudConv.id != null) {
-          existing = this.db
-            .prepare("SELECT * FROM agent_conversations WHERE cloud_id = ?")
-            .get(cloudConv.id);
-        }
-        if (existing?.deleted_at) return existing;
 
-        const convStmt = this.db.prepare(`
-          INSERT INTO agent_conversations (client_conversation_id, cloud_id, title, note_id, sync_status, created_at, updated_at)
-          VALUES (?, ?, ?, ?, 'synced', ?, ?)
-          ON CONFLICT(client_conversation_id) DO UPDATE SET
-            cloud_id = excluded.cloud_id,
-            title = excluded.title,
-            note_id = excluded.note_id,
-            sync_status = 'synced',
-            updated_at = excluded.updated_at
-        `);
-        convStmt.run(
-          cloudConv.client_conversation_id ?? null,
-          cloudConv.id ?? null,
-          cloudConv.title ?? "Untitled",
-          cloudConv.note_id ?? null,
-          cloudConv.created_at ?? new Date().toISOString(),
-          cloudConv.updated_at ?? new Date().toISOString()
-        );
-        const conv = this.db
-          .prepare("SELECT * FROM agent_conversations WHERE client_conversation_id = ?")
-          .get(cloudConv.client_conversation_id);
-        this.db.prepare("DELETE FROM agent_messages WHERE conversation_id = ?").run(conv.id);
-        if (messages && messages.length > 0) {
-          const msgStmt = this.db.prepare(
-            "INSERT INTO agent_messages (conversation_id, role, content, metadata, created_at) VALUES (?, ?, ?, ?, ?)"
-          );
-          for (const msg of messages) {
-            msgStmt.run(
-              conv.id,
-              msg.role ?? "user",
-              msg.content ?? "",
-              msg.metadata ? JSON.stringify(msg.metadata) : null,
-              msg.created_at ?? new Date().toISOString()
-            );
-          }
-        }
-        return conv;
-      });
-      return transaction();
-    } catch (error) {
-      debugLogger.error(
-        "Error upserting conversation from cloud",
-        { error: error.message },
-        "database"
-      );
-      throw error;
-    }
-  }
 
-  markConversationSynced(id, cloudId) {
-    try {
-      if (!this.db) throw new Error("Database not initialized");
-      const result = this.db
-        .prepare(
-          `UPDATE agent_conversations
-           SET cloud_id = COALESCE(cloud_id, ?),
-               sync_status = CASE WHEN deleted_at IS NULL THEN 'synced' ELSE 'pending' END
-           WHERE id = ?`
-        )
-        .run(cloudId, id);
-      return { success: result.changes > 0 };
-    } catch (error) {
-      debugLogger.error("Error marking conversation synced", { error: error.message }, "database");
-      throw error;
-    }
-  }
 
-  acknowledgeConversationCreate(id, snapshot, cloudId) {
-    try {
-      if (!this.db) throw new Error("Database not initialized");
-      if (!snapshot || !cloudId) {
-        return { success: false, outcome: "unresolved", cloud_id: null };
-      }
-
-      return this.db.transaction(() => {
-        const current = this.db
-          .prepare(
-            `SELECT c.*, COUNT(m.id) AS message_count
-             FROM agent_conversations c
-             LEFT JOIN agent_messages m ON m.conversation_id = c.id
-             WHERE c.id = ?
-             GROUP BY c.id`
-          )
-          .get(id);
-        const expectedClientId = snapshot.client_conversation_id ?? null;
-
-        if (!current || (current.client_conversation_id ?? null) !== expectedClientId) {
-          const identityStillExists = expectedClientId
-            ? this.db
-                .prepare("SELECT 1 FROM agent_conversations WHERE client_conversation_id = ?")
-                .get(expectedClientId)
-            : null;
-          return {
-            success: true,
-            outcome: identityStillExists ? "unresolved" : "orphaned",
-            cloud_id: null,
-          };
-        }
-
-        if (current.cloud_id) {
-          return { success: true, outcome: "already-linked", cloud_id: current.cloud_id };
-        }
-
-        if (current.deleted_at) {
-          this.db
-            .prepare(
-              `UPDATE agent_conversations
-               SET cloud_id = ?, sync_status = 'pending'
-               WHERE id = ? AND cloud_id IS NULL`
-            )
-            .run(cloudId, id);
-          return { success: true, outcome: "delete-pending", cloud_id: cloudId };
-        }
-
-        const unchanged =
-          current.title === snapshot.title &&
-          current.updated_at === snapshot.updated_at &&
-          Number(current.message_count) === snapshot.message_count;
-        if (!unchanged) {
-          return { success: true, outcome: "changed", cloud_id: null };
-        }
-
-        this.db
-          .prepare(
-            `UPDATE agent_conversations
-             SET cloud_id = ?, sync_status = 'synced'
-             WHERE id = ? AND cloud_id IS NULL`
-          )
-          .run(cloudId, id);
-        return { success: true, outcome: "synced", cloud_id: cloudId };
-      })();
-    } catch (error) {
-      debugLogger.error(
-        "Error acknowledging conversation create",
-        { error: error.message },
-        "database"
-      );
-      throw error;
-    }
-  }
-
-  hardDeleteConversation(id) {
-    try {
-      if (!this.db) throw new Error("Database not initialized");
-      this.db.prepare("DELETE FROM agent_messages WHERE conversation_id = ?").run(id);
-      const result = this.db.prepare("DELETE FROM agent_conversations WHERE id = ?").run(id);
-      return { success: result.changes > 0 };
-    } catch (error) {
-      debugLogger.error("Error hard deleting conversation", { error: error.message }, "database");
-      throw error;
-    }
-  }
 
   getPendingTranscriptions() {
     try {

@@ -244,8 +244,7 @@ describe("modelDirUtils cache policy (#1279, #1399)", () => {
     fs.writeFileSync(path.join(legacyRoot, "whisper-models", "ggml-base.bin"), "model");
     fs.mkdirSync(path.join(legacyRoot, "models"), { recursive: true });
     fs.writeFileSync(path.join(legacyRoot, "models", "qwen.gguf"), "llm");
-    fs.mkdirSync(path.join(legacyRoot, "qdrant-data"), { recursive: true });
-    fs.mkdirSync(path.join(legacyRoot, "embedding-models"), { recursive: true });
+    fs.mkdirSync(path.join(legacyRoot, "yt-dlp"), { recursive: true });
 
     const { getCacheRoot } = loadFresh(home);
     const root = getCacheRoot();
@@ -258,9 +257,8 @@ describe("modelDirUtils cache policy (#1279, #1399)", () => {
     assert.strictEqual(fs.readFileSync(path.join(root, "models", "qwen.gguf"), "utf8"), "llm");
     assert.ok(!fs.existsSync(path.join(legacyRoot, "whisper-models")));
     assert.ok(!fs.existsSync(path.join(legacyRoot, "models")));
-    // qdrantManager and localEmbeddings read these from the home cache directly.
-    assert.ok(fs.existsSync(path.join(legacyRoot, "qdrant-data")));
-    assert.ok(fs.existsSync(path.join(legacyRoot, "embedding-models")));
+    // yt-dlp is read from the home cache directly.
+    assert.ok(fs.existsSync(path.join(legacyRoot, "yt-dlp")));
   });
 
   it("migrates legacy model dirs when USERPROFILE redirects the cache", () => {

@@ -290,7 +290,6 @@ const TrayManager = require("./src/helpers/tray");
 const dockManager = require("./src/helpers/dockManager");
 const autoStart = require("./src/helpers/autoStart");
 const IPCHandlers = require("./src/helpers/ipcHandlers");
-const CliBridge = require("./src/helpers/cliBridge");
 const UpdateManager = require("./src/updater");
 const GlobeKeyManager = require("./src/helpers/globeKeyManager");
 const DevServerManager = require("./src/helpers/devServerManager");
@@ -351,9 +350,7 @@ let audioTapManager = null;
 let linuxPortalAudioManager = null;
 let windowsLoopbackAudioManager = null;
 let meetingAecManager = null;
-let semanticSearch = null;
 let ipcHandlers = null;
-let cliBridge = null;
 let globeKeyAlertShown = false;
 let macAccessibilityFeaturesReady = false;
 let startMacAccessibilityFeatures = null;
@@ -582,7 +579,6 @@ function initializeCoreManagers() {
     linuxPortalAudioManager,
     windowsLoopbackAudioManager,
     meetingAecManager,
-    getSemanticSearch: () => semanticSearch,
     getTrayManager: () => trayManager,
     oauthProtocolRegistered: protocolRegistered,
     oauthProtocol: OAUTH_PROTOCOL,
@@ -1023,12 +1019,6 @@ async function startApp() {
   registerSidecars();
   startAuthBridgeServer();
 
-  cliBridge = new CliBridge(ipcHandlers);
-  cliBridge.start().catch((err) => {
-    debugLogger.error("CLI bridge failed to start", { error: err.message });
-    cliBridge = null;
-  });
-
   await migrateCookieToBearerToken();
 
   applyOpenWhisprOriginHeader(session.defaultSession);
@@ -1133,32 +1123,6 @@ async function startApp() {
   }
 
   await hotkeyManager.hyprlandRegistrationReady;
-
-  // Set up voice agent hotkey (dictation routed straight to the dictation
-  // agent, bypassing cleanup). Tap-only slots gate autorepeat like the
-  // dictation toggle does.
-  const isVoiceAgentPress = createHotkeyRepeatGate();
-  const voiceAgentHotkeyCallback = () => {
-    if (!isVoiceAgentPress()) return;
-    windowManager.sendToggleVoiceAgent();
-  };
-  windowManager._voiceAgentHotkeyCallback = voiceAgentHotkeyCallback;
-
-  const savedVoiceAgentKey = environmentManager.getVoiceAgentKey?.() || "";
-  if (savedVoiceAgentKey) {
-    const result = await hotkeyManager.registerSlot(
-      "voiceAgent",
-      savedVoiceAgentKey,
-      voiceAgentHotkeyCallback
-    );
-    if (!result.success) {
-      debugLogger.warn(
-        "Failed to restore voice agent hotkey",
-        { hotkey: savedVoiceAgentKey },
-        "hotkey"
-      );
-    }
-  }
 
   // Set up translation hotkey (dictation cleaned up and translated into the
   // configured target language before pasting)
@@ -1287,18 +1251,6 @@ async function startApp() {
     });
   }
 
-  if (
-    process.env.DICTATION_AGENT_PROVIDER === "local" &&
-    process.env.LOCAL_DICTATION_AGENT_MODEL &&
-    process.env.LOCAL_DICTATION_AGENT_MODEL !== cleanupLocalModel
-  ) {
-    const modelManager = require("./src/helpers/modelManagerBridge").default;
-    modelManager.prewarmServer(process.env.LOCAL_DICTATION_AGENT_MODEL).catch((err) => {
-      debugLogger.debug("dictation-agent llama-server pre-warm error (non-fatal)", {
-        error: err.message,
-      });
-    });
-  }
 
   // Auto-download diarization models if binary is available
   if (
@@ -1312,19 +1264,6 @@ async function startApp() {
     });
   }
 
-  const QdrantManager = require("./src/helpers/qdrantManager");
-  const SemanticSearchLifecycle = require("./src/helpers/semanticSearchLifecycle");
-  const localEmbeddings = require("./src/helpers/localEmbeddings");
-  const qdrantManager = new QdrantManager();
-  semanticSearch = new SemanticSearchLifecycle({
-    qdrant: qdrantManager,
-    vectorIndex: require("./src/helpers/vectorIndex"),
-    embeddings: localEmbeddings,
-    noteEmbedText: localEmbeddings.LocalEmbeddings.noteEmbedText,
-    database: databaseManager,
-    logger: debugLogger,
-  });
-  sidecarRegistry.register("qdrant", () => semanticSearch.stop());
 
   if (process.platform === "win32") {
     const nircmdStatus = clipboardManager.getNircmdStatus();
@@ -1401,20 +1340,13 @@ async function startApp() {
         }
       }
 
-      // Check voice agent slot for Globe/Fn key
-      const voiceAgentUsesGlobe = hotkeyManager
-        .getSlotHotkeys("voiceAgent")
-        .some(isGlobeLikeHotkey);
       const translationUsesGlobe = hotkeyManager
         .getSlotHotkeys("translation")
         .some(isGlobeLikeHotkey);
-      if (voiceAgentUsesGlobe) {
-        windowManager.sendToggleVoiceAgent();
-      }
       if (translationUsesGlobe) {
         windowManager.sendToggleTranslation();
       }
-      if (!voiceAgentUsesGlobe && !translationUsesGlobe && !dictationUsesGlobe) {
+      if (!translationUsesGlobe && !dictationUsesGlobe) {
         debugLogger?.debug("[Globe] Ignored — hotkey is not GLOBE", { currentHotkey });
       }
     });
@@ -1488,10 +1420,6 @@ async function startApp() {
     let rightModActiveKey = null;
 
     globeKeyManager.on("right-modifier-down", async (modifier) => {
-      // Check voice agent slot for right-modifier
-      if (hotkeyManager.slotHasHotkey("voiceAgent", modifier)) {
-        windowManager.sendToggleVoiceAgent();
-      }
       if (hotkeyManager.slotHasHotkey("translation", modifier)) {
         windowManager.sendToggleTranslation();
       }
@@ -1560,7 +1488,7 @@ async function startApp() {
       }
     });
 
-    const MAC_NATIVE_HOTKEY_SLOTS = ["dictation", "voiceAgent", "translation"];
+    const MAC_NATIVE_HOTKEY_SLOTS = ["dictation", "translation"];
     const syncMacNativeHotkeyConfiguration = () => {
       globeKeyManager.setConfiguration(
         hotkeyManager.getMacNativeListenerConfig(MAC_NATIVE_HOTKEY_SLOTS)
@@ -1577,9 +1505,6 @@ async function startApp() {
       if (hotkeyManager.isInListeningMode && hotkeyManager.isInListeningMode()) return;
       if (!isMouseButtonHotkey(button)) return;
 
-      if (hotkeyManager.slotHasHotkey("voiceAgent", button)) {
-        windowManager.sendToggleVoiceAgent();
-      }
       if (hotkeyManager.slotHasHotkey("translation", button)) {
         windowManager.sendToggleTranslation();
       }
@@ -1728,9 +1653,7 @@ async function startApp() {
         }
         return;
       }
-      if (hotkeyManager.slotHasHotkey("voiceAgent", key)) {
-        windowManager.sendToggleVoiceAgent();
-      } else if (hotkeyManager.slotHasHotkey("translation", key)) {
+      if (hotkeyManager.slotHasHotkey("translation", key)) {
         windowManager.sendToggleTranslation();
       } else if (hotkeyManager.slotHasHotkey("meeting", key)) {
         windowManager.startManualMeeting();
@@ -1990,10 +1913,6 @@ function performSyncTeardown() {
   if (authBridgeServer) {
     authBridgeServer.close();
     authBridgeServer = null;
-  }
-  if (cliBridge) {
-    cliBridge.stop().catch(() => {});
-    cliBridge = null;
   }
   if (hotkeyManager) {
     hotkeyManager.unregisterAll();

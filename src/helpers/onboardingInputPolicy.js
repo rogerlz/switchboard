@@ -1,10 +1,9 @@
-const ONBOARDING_DEMO_KINDS = new Set(["dictation", "assistant"]);
+const ONBOARDING_DEMO_KINDS = new Set(["dictation"]);
 const ONBOARDING_DEMO_STATUSES = new Set([
   "listening",
   "level",
   "processing",
   "partial",
-  "replying",
   "success",
   "error",
 ]);

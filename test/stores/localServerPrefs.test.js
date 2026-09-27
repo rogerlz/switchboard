@@ -9,11 +9,8 @@ const UNMANAGED = { status: "unmanaged", policy: null, appVersion: null };
 
 const ALL_CLOUD = {
   _llmScopeKeysMigrated: "1",
-  _dictationAgentSeeded: "1",
   cleanupMode: "openwhispr",
-  dictationAgentMode: "openwhispr",
   noteFormattingMode: "openwhispr",
-  chatAgentMode: "openwhispr",
   translationMode: "openwhispr",
 };
 
@@ -29,7 +26,7 @@ async function loadStore(t, initialStorage, cachePrefix) {
   return { ...store, ...policy };
 }
 
-test("typed chat on a local model keeps the server once cleanup moves to the cloud", async (t) => {
+test("local translation keeps the server once cleanup moves to the cloud", async (t) => {
   const s = await loadStore(
     t,
     {
@@ -37,11 +34,12 @@ test("typed chat on a local model keeps the server once cleanup moves to the clo
       cleanupMode: "local",
       cleanupProvider: "qwen",
       cleanupModel: MODEL,
-      chatAgentMode: "local",
-      chatAgentProvider: "qwen",
-      chatAgentModel: MODEL,
+      useDictationTranslation: "true",
+      translationMode: "local",
+      translationProvider: "qwen",
+      translationModel: MODEL,
     },
-    "openwhispr-local-server-prefs-chat-test-"
+    "openwhispr-local-server-prefs-translation-test-"
   );
 
   s.setResolvedLLMConfig("dictationCleanup", { mode: "openwhispr", cloudMode: "openwhispr" });
@@ -75,11 +73,17 @@ test("note formatting counts the local model it inherits from cleanup", async (t
 test("the server stops once the last local scope leaves", async (t) => {
   const s = await loadStore(
     t,
-    { ...ALL_CLOUD, dictationAgentMode: "local", dictationAgentModel: MODEL },
+    {
+      ...ALL_CLOUD,
+      useDictationTranslation: "true",
+      translationMode: "local",
+      translationProvider: "qwen",
+      translationModel: MODEL,
+    },
     "openwhispr-local-server-prefs-last-test-"
   );
 
-  s.setResolvedLLMConfig("dictationAgent", { mode: "openwhispr", cloudMode: "openwhispr" });
+  s.setResolvedLLMConfig("dictationTranslation", { mode: "openwhispr", cloudMode: "openwhispr" });
   const needs = s.resolveLocalServerNeeds(
     s.selectLocalServerPrefs(s.useSettingsStore.getState(), UNMANAGED)
   );

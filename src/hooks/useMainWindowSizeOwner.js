@@ -24,9 +24,6 @@ export function useMainWindowSizeOwner({
   isCommandMenuOpen,
   isCompactPill,
   isDictationActive,
-  assistantOpen,
-  assistantMounted,
-  assistantOpenRef,
   liveTranscriptOpen,
   liveTranscriptMounted,
   liveTranscriptOpenRef,
@@ -85,11 +82,7 @@ export function useMainWindowSizeOwner({
   const lastSizeKeyRef = useRef(null);
   const panelSizeReservationRef = useRef(false);
   useEffect(() => {
-    const panelOwnsWindow =
-      assistantOpenRef.current ||
-      liveTranscriptOpenRef.current ||
-      assistantMounted ||
-      liveTranscriptMounted;
+    const panelOwnsWindow = liveTranscriptOpenRef.current || liveTranscriptMounted;
     if (panelOwnsWindow) {
       panelSizeReservationRef.current = true;
       if (panelReturnSuppressedRef.current) {
@@ -174,9 +167,6 @@ export function useMainWindowSizeOwner({
     const timeout = setTimeout(() => void requestMainWindowSize(target), 340);
     return () => clearTimeout(timeout);
   }, [
-    assistantOpen,
-    assistantMounted,
-    assistantOpenRef,
     liveTranscriptOpen,
     liveTranscriptMounted,
     liveTranscriptOpenRef,
@@ -188,18 +178,14 @@ export function useMainWindowSizeOwner({
   ]);
 
   useEffect(() => {
-    if (
-      dictationErrorActionCount > 0 ||
-      !handoffActive ||
-      (!assistantMounted && !liveTranscriptMounted)
-    ) {
+    if (dictationErrorActionCount > 0 || !handoffActive || !liveTranscriptMounted) {
       return;
     }
 
     // A panel already owns stable native bounds, so an error displayed inside
     // it has no compact resize to await. Release only the visual suppression.
     void handoffRef.current?.releaseAfter(async () => {});
-  }, [assistantMounted, dictationErrorActionCount, handoffActive, liveTranscriptMounted]);
+  }, [dictationErrorActionCount, handoffActive, liveTranscriptMounted]);
 
   return { dictationErrorPillHandoffActive: handoffActive, panelReturnResizeActive };
 }

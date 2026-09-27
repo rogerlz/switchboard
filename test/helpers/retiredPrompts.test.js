@@ -5,13 +5,12 @@ const path = require("node:path");
 const { createHash } = require("node:crypto");
 
 const load = () => import("../../src/config/retiredPrompts.js");
-const loadRegistry = () => import("../../src/config/prompts/registry.ts");
 
 // Byte-exact copies of retired shipped defaults, extracted from git history.
 const fixtures = require("./retiredPromptFixtures.json");
 
 const LOCALES_DIR = path.join(__dirname, "..", "..", "src", "locales");
-const BUNDLE_KEYS = ["cleanupPrompt", "fullPrompt", "translatePrompt"];
+const BUNDLE_KEYS = ["cleanupPrompt", "translatePrompt"];
 
 const sha256 = (text) => createHash("sha256").update(text, "utf8").digest("hex");
 
@@ -69,7 +68,7 @@ test("treats a one-character edit of a retired default as a user customization",
 test("never flags any currently shipped locale default", async () => {
   const { isRetiredDefaultPrompt } = await load();
   const bundles = readLocaleBundles();
-  assert.ok(Object.keys(bundles).length >= 9, "expected locale bundles");
+  assert.ok(Object.keys(bundles).length >= 2, "expected locale bundles");
   for (const [locale, bundle] of Object.entries(bundles)) {
     for (const key of BUNDLE_KEYS) {
       assert.equal(
@@ -113,8 +112,6 @@ test("current-hash snapshot matches the live locale bundles (ratchet)", async ()
       if (typeof bundle[key] === "string") expected[`${locale}/${key}`] = sha256(bundle[key]);
     }
   }
-  const { PROMPT_KINDS } = await loadRegistry();
-  expected.chatAgent = sha256(PROMPT_KINDS.chatAgent.fallback);
 
   assert.deepEqual(
     CURRENT_DEFAULT_PROMPT_HASHES,

@@ -1,6 +1,6 @@
 import { useCallback, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { BookOpen, CornerDownLeft, Download, Pencil, Plus, Sparkles, Upload, X } from "./icons";
+import { BookOpen, CornerDownLeft, Download, Pencil, Plus, Upload, X } from "./icons";
 import { Input } from "./ui/input";
 import { Textarea } from "./ui/textarea";
 import { Button } from "./ui/button";
@@ -11,7 +11,6 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "./ui/tabs";
 import { useToast } from "./ui/useToast";
 import SnippetsView from "./SnippetsView";
 import { useSettings } from "../hooks/useSettings";
-import { getAgentName } from "../utils/agentName";
 import { parseDictionaryImportText } from "../helpers/dictionaryImport";
 import { getDictionaryHintWords } from "../utils/snippets";
 import { WHISPER_DECODER_PROMPT_CHARS } from "../utils/dictionaryPromptCap";
@@ -19,7 +18,6 @@ import { WHISPER_DECODER_PROMPT_CHARS } from "../utils/dictionaryPromptCap";
 export default function DictionaryView() {
   const { t } = useTranslation();
   const { customDictionary, updateCustomDictionary, snippets } = useSettings();
-  const agentName = getAgentName();
   const { toast } = useToast();
 
   const [newWord, setNewWord] = useState("");
@@ -40,12 +38,7 @@ export default function DictionaryView() {
     [customDictionary, snippets]
   );
 
-  // Same membership rule as agentNameDictionaryChanges: a stored spelling that
-  // differs only by case is still the agent name's entry, so keep it hidden.
-  const userWords = useMemo(() => {
-    const agentWord = agentName.trim().toLowerCase();
-    return customDictionary.filter((w) => w.trim().toLowerCase() !== agentWord);
-  }, [customDictionary, agentName]);
+  const userWords = customDictionary;
 
   const searchQuery = newWord.trim().toLowerCase();
   const visibleWords = useMemo(
@@ -122,7 +115,7 @@ export default function DictionaryView() {
       </div>
       <h4 className="text-xs font-semibold text-foreground mb-1">{t("dictionary.emptyTitle")}</h4>
       <p className="text-xs text-foreground/45 leading-relaxed max-w-[240px] mb-4">
-        {t("dictionary.emptyDescription", { agentName })}
+        {t("dictionary.emptyDescription")}
       </p>
       <Button size="sm" onClick={() => addInputRef.current?.focus()}>
         <Plus size={12} />
@@ -239,18 +232,6 @@ export default function DictionaryView() {
             </div>
           )}
 
-          {/* ─── Agent name (always recognized) ─── */}
-          <div className="rounded-md border border-primary/15 dark:border-primary/20 bg-primary/3 dark:bg-primary/6 px-4 py-2.5 flex items-center justify-between gap-3">
-            <div className="flex items-center gap-2 min-w-0">
-              <Sparkles size={11} className="text-primary/70 shrink-0" />
-              <span dir="auto" className="text-xs font-medium text-primary truncate">
-                {agentName}
-              </span>
-            </div>
-            <span className="text-xs text-foreground/45 shrink-0">
-              {t("dictionary.agentDefault")}
-            </span>
-          </div>
 
           {/* ─── Dictionary list ─── */}
           <div className="rounded-md border border-foreground/8 dark:border-white/10 bg-foreground/[0.02] dark:bg-white/[0.03] px-4 py-3">

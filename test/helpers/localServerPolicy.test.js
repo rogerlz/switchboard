@@ -8,13 +8,8 @@ const NOTHING_LOCAL = {
   useCleanupModel: true,
   cleanupMode: "openwhispr",
   cleanupModel: "",
-  useDictationAgent: true,
-  dictationAgentMode: "openwhispr",
-  dictationAgentModel: "",
   noteFormattingMode: "openwhispr",
   noteFormattingModel: "",
-  chatAgentMode: "openwhispr",
-  chatAgentModel: "",
   useDictationTranslation: false,
   translationMode: "openwhispr",
   translationModel: "",
@@ -22,7 +17,6 @@ const NOTHING_LOCAL = {
 
 const LOCAL_CLEANUP = {
   ...NOTHING_LOCAL,
-  useDictationAgent: false,
   cleanupMode: "local",
   cleanupModel: "qwen3-8b-q4_k_m",
 };
@@ -32,7 +26,6 @@ test("a local scope pre-warms the model it selected", async () => {
 
   assert.deepEqual(resolveLocalServerNeeds(LOCAL_CLEANUP), {
     cleanup: "qwen3-8b-q4_k_m",
-    dictationAgent: "",
     models: ["qwen3-8b-q4_k_m"],
   });
 });
@@ -54,7 +47,6 @@ test("a switched-off scope needs no server even with a local model selected", as
 
   assert.deepEqual(resolveLocalServerNeeds({ ...LOCAL_CLEANUP, useCleanupModel: false }), {
     cleanup: "",
-    dictationAgent: "",
     models: [],
   });
 });
@@ -75,13 +67,12 @@ test("the shared server survives one scope leaving while the other stays local",
     ...NOTHING_LOCAL,
     cleanupMode: "providers",
     cleanupModel: "gpt-5-mini",
-    dictationAgentMode: "local",
-    dictationAgentModel: "gemma-4-e4b-it-q4_k_m",
+    noteFormattingMode: "local",
+    noteFormattingModel: "gemma-4-e4b-it-q4_k_m",
   });
 
   assert.deepEqual(needs, {
     cleanup: "",
-    dictationAgent: "gemma-4-e4b-it-q4_k_m",
     models: ["gemma-4-e4b-it-q4_k_m"],
   });
 });
@@ -95,25 +86,19 @@ test("the server has no consumer once no scope runs locally", async () => {
       useDictationTranslation: true,
       cleanupMode: mode,
       cleanupModel: "gpt-5-mini",
-      dictationAgentMode: mode,
-      dictationAgentModel: "gpt-5-mini",
       noteFormattingMode: mode,
       noteFormattingModel: "gpt-5-mini",
-      chatAgentMode: mode,
-      chatAgentModel: "gpt-5-mini",
       translationMode: mode,
       translationModel: "gpt-5-mini",
     });
 
-    assert.deepEqual(needs, { cleanup: "", dictationAgent: "", models: [] }, mode);
+    assert.deepEqual(needs, { cleanup: "", models: [] }, mode);
   }
 });
 
-// Before the shared rule, only cleanup and the Voice Assistant counted, so
-// moving cleanup to the cloud stopped a server that typed chat, note
-// formatting or translation was still using.
+// Before the shared rule, only cleanup counted, so moving cleanup to the cloud
+// stopped a server that note formatting or translation was still using.
 for (const [scope, overrides] of [
-  ["chat", { chatAgentMode: "local", chatAgentModel: "qwen3-8b-q4_k_m" }],
   ["note formatting", { noteFormattingMode: "local", noteFormattingModel: "qwen3-8b-q4_k_m" }],
   [
     "translation",
@@ -130,9 +115,8 @@ for (const [scope, overrides] of [
     const needs = resolveLocalServerNeeds({ ...NOTHING_LOCAL, ...overrides });
 
     assert.deepEqual(needs.models, ["qwen3-8b-q4_k_m"]);
-    // Pre-warm targets stay limited to the two startup scopes.
+    // Pre-warm targets stay limited to the startup scope.
     assert.equal(needs.cleanup, "");
-    assert.equal(needs.dictationAgent, "");
   });
 }
 
@@ -153,11 +137,11 @@ test("scopes sharing a model list it once", async () => {
 
   const needs = resolveLocalServerNeeds({
     ...LOCAL_CLEANUP,
-    useDictationAgent: true,
-    dictationAgentMode: "local",
-    dictationAgentModel: "qwen3-8b-q4_k_m",
-    chatAgentMode: "local",
-    chatAgentModel: "gemma-4-e4b-it-q4_k_m",
+    noteFormattingMode: "local",
+    noteFormattingModel: "qwen3-8b-q4_k_m",
+    useDictationTranslation: true,
+    translationMode: "local",
+    translationModel: "gemma-4-e4b-it-q4_k_m",
   });
 
   assert.deepEqual(needs.models, ["qwen3-8b-q4_k_m", "gemma-4-e4b-it-q4_k_m"]);

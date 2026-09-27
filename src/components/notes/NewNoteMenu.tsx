@@ -1,6 +1,6 @@
 import { useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { ChevronDown, MessageSquare, NotebookPen, Plus, Users } from "../icons";
+import { ChevronDown, NotebookPen, Plus, Users } from "../icons";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -28,19 +28,16 @@ const SOFT_DIVIDER_CLASS = "bg-foreground/8";
 
 interface NewNoteMenuProps {
   onNewNote: () => void;
-  /** Opens a new chat in the Chat tab; omitted when policy turns the assistant off. */
-  onNewChat?: () => void;
 }
 
 /** The topbar's split "New note" button; the chevron offers the other things to create. */
-export default function NewNoteMenu({ onNewNote, onNewChat }: NewNoteMenuProps) {
+export default function NewNoteMenu({ onNewNote }: NewNoteMenuProps) {
   const { t } = useTranslation();
   const canCreateTeamSpace = useCanCreateTeamSpace();
   const [createSpaceOpen, setCreateSpaceOpen] = useState(false);
   const itemChosenRef = useRef(false);
 
-  // The chat input and the space dialog take focus themselves, so those closes
-  // keep it. A new note focuses nothing (the editor mounts fresh), and dismissing
+  // The space dialog takes focus itself, so that close keeps it. A new note focuses nothing (the editor mounts fresh), and dismissing
   // the menu returns focus to the chevron, as Radix does by default.
   const keepFocus = (action: () => void) => () => {
     itemChosenRef.current = true;
@@ -87,15 +84,6 @@ export default function NewNoteMenu({ onNewNote, onNewChat }: NewNoteMenuProps) 
               <NotebookPen className="h-4 w-4" />
               {t("notes.createMenu.note")}
             </DropdownMenuItem>
-            {onNewChat && (
-              <>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem onSelect={keepFocus(onNewChat)} className="gap-2.5">
-                  <MessageSquare className="h-4 w-4" />
-                  {t("notes.createMenu.assistantChat")}
-                </DropdownMenuItem>
-              </>
-            )}
             {canCreateTeamSpace && (
               <>
                 <DropdownMenuSeparator />

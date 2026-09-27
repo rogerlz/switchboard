@@ -106,10 +106,7 @@ function sync({ loaded, signedIn = false, policySettled = true, ...scopes }) {
       useLocalWhisper: false,
       useCleanupModel: true,
       cleanupMode: "openwhispr",
-      useDictationAgent: true,
-      dictationAgentMode: "openwhispr",
       noteFormattingMode: "openwhispr",
-      chatAgentMode: "openwhispr",
       useDictationTranslation: false,
       translationMode: "openwhispr",
       policySettled,
@@ -119,12 +116,12 @@ function sync({ loaded, signedIn = false, policySettled = true, ...scopes }) {
 }
 
 test("a window sync keeps the server while another scope still needs its model", async () => {
-  await sync({ loaded: MODEL, chatAgentMode: "local", chatAgentModel: MODEL });
+  await sync({ loaded: MODEL, noteFormattingMode: "local", noteFormattingModel: MODEL });
   assert.equal(modelManager.stops, 0);
 });
 
 test("a window sync stops the server once no scope needs its model", async () => {
-  await sync({ loaded: MODEL, chatAgentMode: "local", chatAgentModel: "gemma-4-e2b" });
+  await sync({ loaded: MODEL, noteFormattingMode: "local", noteFormattingModel: "gemma-4-e2b" });
   assert.equal(modelManager.stops, 1);
 });
 

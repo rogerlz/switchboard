@@ -30,12 +30,9 @@ const PERSISTED_KEYS = [
   "LOCAL_WHISPER_MODEL",
   "CLEANUP_PROVIDER",
   "LOCAL_CLEANUP_MODEL",
-  "DICTATION_AGENT_PROVIDER",
-  "LOCAL_DICTATION_AGENT_MODEL",
   "LLAMA_GPU_BACKEND",
   "LLAMA_VULKAN_ENABLED",
   "DICTATION_KEY",
-  "VOICE_AGENT_KEY",
   "TRANSLATION_KEY",
   "MEETING_KEY",
   "ACTIVATION_MODE",
@@ -385,23 +382,6 @@ class EnvironmentManager {
     return result;
   }
 
-  getVoiceAgentKey() {
-    const key = this._getKey("VOICE_AGENT_KEY");
-    if (key) return key;
-    // The chat-agent window is gone; its hotkey now opens the assistant by voice.
-    const legacy = this._getKey("CHAT_AGENT_KEY");
-    if (legacy) {
-      this.saveVoiceAgentKey(legacy);
-      delete process.env.CHAT_AGENT_KEY;
-    }
-    return legacy;
-  }
-
-  saveVoiceAgentKey(key) {
-    const result = this._saveKey("VOICE_AGENT_KEY", key);
-    this.saveAllKeysToEnvFile().catch(() => {});
-    return result;
-  }
 
   getTranslationKey() {
     return this._getKey("TRANSLATION_KEY");

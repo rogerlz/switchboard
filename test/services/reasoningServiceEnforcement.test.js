@@ -100,39 +100,6 @@ test("ReasoningService entry points enforce the org policy", async (t) => {
     }
   );
 
-  await t.test(
-    "streaming chat rejects before any dispatch when the agent is disabled",
-    async () => {
-      setPolicy({ agentEnabled: false, llmModes: ["providers"], llmByokProviders: ["openai"] });
-      const stream = reasoningService.processTextStreaming(
-        [{ role: "user", content: "hi" }],
-        "gpt-4.1",
-        "openai",
-        { systemPrompt: "s" }
-      );
-      await assert.rejects(stream.next(), { message: AGENT_RESTRICTED });
-    }
-  );
-
-  await t.test("agent streaming rejects a policy-blocked provider mode", async () => {
-    setPolicy({ llmModes: ["self-hosted"], llmByokProviders: [] });
-    const stream = reasoningService.processTextStreamingAI(
-      [{ role: "user", content: "hi" }],
-      "gpt-4.1",
-      "openai",
-      { systemPrompt: "s" }
-    );
-    await assert.rejects(stream.next(), { message: REASONING_RESTRICTED });
-  });
-
-  await t.test("cloud agent streaming enforces the openwhispr mode", async () => {
-    setPolicy({ llmModes: ["providers"], llmByokProviders: ["openai"] });
-    const stream = reasoningService.processTextStreamingCloud([{ role: "user", content: "hi" }], {
-      systemPrompt: "s",
-    });
-    await assert.rejects(stream.next(), { message: REASONING_RESTRICTED });
-  });
-
   await t.test("managed Custom endpoints fail closed before inference dispatch", async () => {
     setPolicy({ llmModes: ["providers"], llmByokProviders: ["custom"] });
     const originalFetch = globalThis.fetch;
@@ -266,64 +233,69 @@ test("ReasoningService entry points enforce the org policy", async (t) => {
     }
   });
 
-  await t.test("implicit cleanup pins the selected provider instead of inferring from its model", async () => {
-    setPolicy({
-      llmModes: ["providers"],
-      llmByokProviders: ["openai", "groq"],
-    });
-    useSettingsStore.setState({
-      cleanupMode: "providers",
-      cleanupProvider: "openai",
-      cleanupModel: "llama-3.3-70b-versatile",
-    });
-    globalThis.window.electronAPI.getOpenAIKey = async () => "openai-key";
-
-    const originalFetch = globalThis.fetch;
-    const requestedUrls = [];
-    globalThis.fetch = async (url) => {
-      requestedUrls.push(String(url));
-      return new Response(JSON.stringify({ error: "expected test stop" }), {
-        status: 400,
-        headers: { "content-type": "application/json" },
+  await t.test(
+    "implicit cleanup pins the selected provider instead of inferring from its model",
+    async () => {
+      setPolicy({
+        llmModes: ["providers"],
+        llmByokProviders: ["openai", "groq"],
       });
-    };
-
-    try {
-      await assert.rejects(
-        reasoningService.processText("hi", "llama-3.3-70b-versatile"),
-        { message: "expected test stop" }
-      );
-      assert.ok(requestedUrls.length > 0);
-      assert.ok(requestedUrls.every((url) => url.startsWith("https://api.openai.com/")));
-    } finally {
-      globalThis.fetch = originalFetch;
-    }
-  });
-
-  await t.test("implicit self-hosted cleanup without a URL never infers a cloud provider", async () => {
-    usePolicyStore.setState({ status: "unmanaged", appVersion: "1.8.1", policy: null });
-    useSettingsStore.setState({
-      cleanupMode: "self-hosted",
-      cleanupRemoteUrl: "",
-      cleanupModel: "gpt-4.1",
-    });
-
-    const originalFetch = globalThis.fetch;
-    let fetchCalls = 0;
-    globalThis.fetch = async () => {
-      fetchCalls += 1;
-      return new Response(null, { status: 500 });
-    };
-
-    try {
-      await assert.rejects(reasoningService.processText("hi", "gpt-4.1"), {
-        message: HTTPS_REQUIRED,
+      useSettingsStore.setState({
+        cleanupMode: "providers",
+        cleanupProvider: "openai",
+        cleanupModel: "llama-3.3-70b-versatile",
       });
-      assert.equal(fetchCalls, 0);
-    } finally {
-      globalThis.fetch = originalFetch;
+      globalThis.window.electronAPI.getOpenAIKey = async () => "openai-key";
+
+      const originalFetch = globalThis.fetch;
+      const requestedUrls = [];
+      globalThis.fetch = async (url) => {
+        requestedUrls.push(String(url));
+        return new Response(JSON.stringify({ error: "expected test stop" }), {
+          status: 400,
+          headers: { "content-type": "application/json" },
+        });
+      };
+
+      try {
+        await assert.rejects(reasoningService.processText("hi", "llama-3.3-70b-versatile"), {
+          message: "expected test stop",
+        });
+        assert.ok(requestedUrls.length > 0);
+        assert.ok(requestedUrls.every((url) => url.startsWith("https://api.openai.com/")));
+      } finally {
+        globalThis.fetch = originalFetch;
+      }
     }
-  });
+  );
+
+  await t.test(
+    "implicit self-hosted cleanup without a URL never infers a cloud provider",
+    async () => {
+      usePolicyStore.setState({ status: "unmanaged", appVersion: "1.8.1", policy: null });
+      useSettingsStore.setState({
+        cleanupMode: "self-hosted",
+        cleanupRemoteUrl: "",
+        cleanupModel: "gpt-4.1",
+      });
+
+      const originalFetch = globalThis.fetch;
+      let fetchCalls = 0;
+      globalThis.fetch = async () => {
+        fetchCalls += 1;
+        return new Response(null, { status: 500 });
+      };
+
+      try {
+        await assert.rejects(reasoningService.processText("hi", "gpt-4.1"), {
+          message: HTTPS_REQUIRED,
+        });
+        assert.equal(fetchCalls, 0);
+      } finally {
+        globalThis.fetch = originalFetch;
+      }
+    }
+  );
 
   await t.test(
     "self-hosted execution rejects unsafe endpoint schemes before dispatch",
@@ -342,23 +314,6 @@ test("ReasoningService entry points enforce the org policy", async (t) => {
             reasoningService.processText("hi", "custom-model", null, { lanUrl }),
             { message: HTTPS_REQUIRED }
           );
-
-          const textStream = reasoningService.processTextStreaming(
-            [{ role: "user", content: "hi" }],
-            "custom-model",
-            "custom",
-            { systemPrompt: "s", lanUrl }
-          );
-          await assert.rejects(textStream.next(), { message: HTTPS_REQUIRED });
-
-          const toolStream = reasoningService.processTextStreamingAI(
-            [{ role: "user", content: "hi" }],
-            "custom-model",
-            "custom",
-            { systemPrompt: "s", lanUrl },
-            {}
-          );
-          await assert.rejects(toolStream.next(), { message: HTTPS_REQUIRED });
         }
 
         assert.equal(fetchCalls, 0);

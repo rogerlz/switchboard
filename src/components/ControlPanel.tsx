@@ -38,7 +38,6 @@ import {
 import { usePolicyStore } from "../stores/policyStore";
 import { usePolicySnapshot } from "../hooks/usePolicy";
 import {
-  isAgentAllowed,
   isControlPanelViewAllowed,
   isPolicyActionAllowed,
   isTranscriptionContextAllowed,
@@ -76,18 +75,11 @@ import {
   shouldRunTranslateStep,
 } from "../helpers/translationChain";
 import { applyChineseScript, resolveChineseScriptTarget } from "../utils/chineseScript";
-import { getAgentName } from "../utils/agentName";
 import HistoryView from "./HistoryView";
-import BackgroundActionToastListener from "./notes/BackgroundActionToastListener";
 import SpaceSyncToastListener from "./notes/SpaceSyncToastListener";
 import { syncService } from "../services/SyncService.js";
 import logger from "../utils/logger";
-import AcceptInvitationModal from "./AcceptInvitationModal";
 import JoinYourTeamModal from "./JoinYourTeamModal";
-import {
-  consumePendingInvitationToken,
-  clearPendingInvitationToken,
-} from "../utils/pendingInvitationToken";
 
 const platform = getCachedPlatform();
 
@@ -101,7 +93,6 @@ const InsightsView = React.lazy(() => import("./InsightsView"));
 const DictionaryView = React.lazy(() => import("./DictionaryView"));
 const UploadAudioView = React.lazy(() => import("./notes/UploadAudioView"));
 const IntegrationsView = React.lazy(() => import("./IntegrationsView"));
-const ChatView = React.lazy(() => import("./chat/ChatView"));
 const CommandSearch = React.lazy(() => import("./CommandSearch"));
 
 interface ControlPanelProps {
@@ -126,7 +117,6 @@ export default function ControlPanel({ initialSettingsSection }: ControlPanelPro
   );
   const [showReferrals, setShowReferrals] = useState(false);
   const [showInviteTeam, setShowInviteTeam] = useState(false);
-  const [invitationToken, setInvitationToken] = useState<string | null>(null);
   const [invitationNotesEntry, setInvitationNotesEntry] = useState<{
     workspaceId: string;
     teamIds: string[];
@@ -169,7 +159,7 @@ export default function ControlPanel({ initialSettingsSection }: ControlPanelPro
     joinable,
     dismiss: dismissJoinable,
     markRequested,
-  } = useJoinableWorkspaces(user?.id ?? null, isSignedIn && !invitationToken);
+  } = useJoinableWorkspaces(user?.id ?? null, isSignedIn);
   const { workspaces, active: activeWorkspace } = useWorkspace();
   // Invitations are owner/admin-only (server-enforced), so the sidebar row
   // only exists when the user can manage a workspace.
@@ -201,7 +191,6 @@ export default function ControlPanel({ initialSettingsSection }: ControlPanelPro
   }, []);
   useSignInCloudNudge(isSignedIn, openTranscriptionSettings);
 
-  const agentAllowedByPolicy = usePolicyStore(isAgentAllowed);
   const { createNote } = useCreateNote();
   // The note is created before the view switches so Notes mounts with it already open.
   const handleNewNote = useCallback(async () => {
@@ -210,10 +199,10 @@ export default function ControlPanel({ initialSettingsSection }: ControlPanelPro
   }, [createNote]);
   const policyActionsAllowed = usePolicyStore((state) => isPolicyActionAllowed(state));
   useEffect(() => {
-    if (!isControlPanelViewAllowed(activeView, agentAllowedByPolicy, policyActionsAllowed)) {
+    if (!isControlPanelViewAllowed(activeView, policyActionsAllowed)) {
       setActiveView("home");
     }
-  }, [activeView, agentAllowedByPolicy, policyActionsAllowed]);
+  }, [activeView, policyActionsAllowed]);
   const updateRequiredByOrg = usePolicyStore(isUpdateRequiredByOrg);
   const policyMinAppVersion = usePolicyStore((s) => s.policy?.minAppVersion ?? null);
 
@@ -228,14 +217,11 @@ export default function ControlPanel({ initialSettingsSection }: ControlPanelPro
         localTranscriptionProvider: effective.localTranscriptionProvider,
         useCleanupModel: effective.useCleanupModel,
         cleanupMode: effective.cleanupMode,
-        useDictationAgent: effective.useDictationAgent,
-        dictationAgentMode: effective.dictationAgentMode,
       };
     })
   );
   const gpuAccelAvailable = useGpuBannerAvailability({
     settings: gpuBannerSettings,
-    agentAllowedByPolicy,
     dismissed: gpuBannerDismissed,
     settingsOpen: showSettings,
     platform,
@@ -354,30 +340,6 @@ export default function ControlPanel({ initialSettingsSection }: ControlPanelPro
       duration: 8000,
     });
   }, [usage?.isPastDue, toast, t]);
-
-  useEffect(() => {
-    const unsubscribe = window.electronAPI?.onWorkspaceInvitationToken?.((token) => {
-      setInvitationToken(token);
-      // Consume the main-process stash so a handled push isn't re-pulled on a
-      // later remount.
-      void window.electronAPI?.getPendingInvitationToken?.();
-    });
-    window.electronAPI?.getPendingInvitationToken?.().then((token) => {
-      if (token) setInvitationToken(token);
-    });
-    return () => unsubscribe?.();
-  }, []);
-
-  useEffect(() => {
-    // Also when signed out (the modal's "Sign in to accept" handles auth);
-    // isSignedIn stays in the deps so a stored token resurfaces after sign-in.
-    if (!authLoaded) return;
-    const pending = consumePendingInvitationToken();
-    if (pending) {
-      setInvitationToken(pending);
-      clearPendingInvitationToken();
-    }
-  }, [authLoaded, isSignedIn]);
 
   useEffect(() => {
     const drain = async () => {
@@ -622,8 +584,7 @@ export default function ControlPanel({ initialSettingsSection }: ControlPanelPro
                 import("../stores/settingsStore"),
               ]);
               const settings = getEffectiveSettings();
-              const agentName = getAgentName();
-              const route = resolveReasoningRoute(rawText, settings, agentName, false, true);
+              const route = resolveReasoningRoute(settings, true);
               if (route.kind === "translation") {
                 const { text, translated } = await executeTranslationChain({
                   text: rawText,
@@ -632,11 +593,11 @@ export default function ControlPanel({ initialSettingsSection }: ControlPanelPro
                     ReasoningService.processText(
                       currentText,
                       getEffectiveCleanupModel(),
-                      agentName,
+                      null,
                       route.cleanupConfig
                     ),
                   runTranslate: (currentText: string) =>
-                    ReasoningService.processText(currentText, route.model, agentName, route.config),
+                    ReasoningService.processText(currentText, route.model, null, route.config),
                   shouldTranslate: shouldRunTranslateStep(
                     settings.translationSourceLanguage,
                     settings.translationTargetLanguage
@@ -703,8 +664,7 @@ export default function ControlPanel({ initialSettingsSection }: ControlPanelPro
               const model = getEffectiveCleanupModel();
               const isCloud = isCloudCleanupMode();
               if (model || isCloud) {
-                const agentName = getAgentName();
-                const reasonedText = await ReasoningService.processText(rawText, model, agentName, {
+                const reasonedText = await ReasoningService.processText(rawText, model, null, {
                   disableThinking: getSettings().cleanupDisableThinking,
                   requireCompleteOutput: true,
                 });
@@ -932,15 +892,6 @@ export default function ControlPanel({ initialSettingsSection }: ControlPanelPro
         </Suspense>
       )}
 
-      <AcceptInvitationModal
-        token={invitationToken}
-        onClose={() => setInvitationToken(null)}
-        onAccepted={(entry) => {
-          setInvitationNotesEntry(entry);
-          setActiveView("personal-notes");
-        }}
-      />
-
       <JoinYourTeamModal
         joinable={joinable}
         domain={user?.email?.split("@")[1] ?? null}
@@ -1040,10 +991,7 @@ export default function ControlPanel({ initialSettingsSection }: ControlPanelPro
               isSidePanelLayout={isSidePanelLayout}
               onExitSidePanel={handleExitSidePanel}
               actions={
-                <NewNoteMenu
-                  onNewNote={handleNewNote}
-                  onNewChat={agentAllowedByPolicy ? () => setActiveView("chat") : undefined}
-                />
+<NewNoteMenu onNewNote={handleNewNote} />
               }
             />
             <div className="scrollbar-hidden flex-1 overflow-y-auto">
@@ -1127,11 +1075,7 @@ export default function ControlPanel({ initialSettingsSection }: ControlPanelPro
                               className="h-7 text-xs"
                               onClick={() => {
                                 setSettingsSection(
-                                  gpuAccelAvailable.transcription
-                                    ? "transcription"
-                                    : gpuAccelAvailable.intelligence === "dictationAgent"
-                                      ? "dictationAgent"
-                                      : "intelligence"
+                                  gpuAccelAvailable.transcription ? "transcription" : "intelligence"
                                 );
                                 setShowSettings(true);
                               }}
@@ -1185,11 +1129,6 @@ export default function ControlPanel({ initialSettingsSection }: ControlPanelPro
                   />
                 </Suspense>
               )}
-              {activeView === "chat" && agentAllowedByPolicy && (
-                <Suspense fallback={null}>
-                  <ChatView />
-                </Suspense>
-              )}
               {activeView === "personal-notes" && (
                 <Suspense fallback={null}>
                   <PersonalNotesView
@@ -1239,7 +1178,6 @@ export default function ControlPanel({ initialSettingsSection }: ControlPanelPro
           </div>
         </main>
       </div>
-      <BackgroundActionToastListener />
       <SpaceSyncToastListener />
     </div>
   );

@@ -16,17 +16,9 @@ const LIVE_TRANSCRIPT_FINAL_HIDE_MS = 4000;
  * Owns the live transcript panel: its open/close/entrance choreography, the
  * buffered text scheduler, and the measure-then-reveal pipeline that keeps a
  * new transcript line from pushing the panel up before its BrowserWindow
- * catches up. The assistant panel always wins the shared surface, checked
- * through `assistantOpenRef`.
+ * catches up.
  */
-export function useLiveTranscriptPanel({
-  resizeToContent,
-  assistantOpenRef,
-  onWillOpen,
-  isRecording,
-  isProcessing,
-  isAssistantVoice,
-}) {
+export function useLiveTranscriptPanel({ resizeToContent, onWillOpen, isRecording, isProcessing }) {
   const [open, setOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
   const [text, setText] = useState("");
@@ -200,7 +192,7 @@ export function useLiveTranscriptPanel({
 
   const openPanel = useCallback(() => {
     clearFinalHide();
-    if (suppressedRef.current || assistantOpenRef.current || openRef.current) {
+    if (suppressedRef.current || openRef.current) {
       return;
     }
     if (openPromiseRef.current) return;
@@ -216,11 +208,7 @@ export function useLiveTranscriptPanel({
       // Live Transcript owns an adaptive footprint. Enter at its footer-sized
       // surface instead of flashing the full Agent window before measurement.
       await requestHeight(LIVE_TRANSCRIPT_SURFACE_LIMITS.minHeight);
-      if (
-        generation !== openGenerationRef.current ||
-        suppressedRef.current ||
-        assistantOpenRef.current
-      ) {
+      if (generation !== openGenerationRef.current || suppressedRef.current) {
         if (generation === openGenerationRef.current) {
           openRef.current = false;
         }
@@ -282,7 +270,6 @@ export function useLiveTranscriptPanel({
       }
     });
   }, [
-    assistantOpenRef,
     clearEntranceTimers,
     clearFinalHide,
     onWillOpen,
@@ -408,21 +395,20 @@ export function useLiveTranscriptPanel({
       manuallyCollapsed: true,
       isRecording,
       isProcessing,
-      isAssistantVoice,
     });
-  }, [isAssistantVoice, isProcessing, isRecording]);
+  }, [isProcessing, isRecording]);
 
   const previousNormalRecordingRef = useRef(false);
   useLayoutEffect(() => {
-    const normalRecording = isRecording && !isAssistantVoice;
+    const normalRecording = isRecording;
     if (normalRecording && !previousNormalRecordingRef.current) {
       clearFinalHide();
       finalHoldRef.current = false;
     }
-  }, [clearFinalHide, isAssistantVoice, isRecording]);
+  }, [clearFinalHide, isRecording]);
 
   useEffect(() => {
-    const normalRecording = isRecording && !isAssistantVoice;
+    const normalRecording = isRecording;
     if (normalRecording && !previousNormalRecordingRef.current) {
       suppressedRef.current = false;
       setManuallyCollapsed(false);
@@ -433,16 +419,12 @@ export function useLiveTranscriptPanel({
       setPhase("listening");
     }
     previousNormalRecordingRef.current = normalRecording;
-
-    if (isRecording && isAssistantVoice && mounted) {
-      close({ clear: true });
-    }
-  }, [isAssistantVoice, isRecording, mounted, close, resetText]);
+  }, [isRecording, mounted, close, resetText]);
 
   useEffect(() => {
-    if (!isAssistantVoice && (isRecording || isProcessing)) return;
+    if (isRecording || isProcessing) return;
     setManuallyCollapsed(false);
-  }, [isAssistantVoice, isProcessing, isRecording]);
+  }, [isProcessing, isRecording]);
 
   useEffect(
     () => () => {

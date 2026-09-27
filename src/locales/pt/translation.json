@@ -3349,7 +3349,7 @@
       "addPlaceholder": "Adicione uma frase-gatilho — \"minha agenda\", \"meu LinkedIn\""
     },
     "emptyTitle": "Seu dicionário está vazio",
-    "emptyDescription": "Adicione palavras que {{agentName}} deve sempre acertar: nomes, ferramentas, siglas.",
+    "emptyDescription": "Adicione palavras que o OpenWhispr deve sempre acertar: nomes, ferramentas, siglas.",
     "addFirstWord": "Adicione sua primeira palavra",
     "importList": "Importar uma lista",
     "agentDefault": "Adicionado por padrão"

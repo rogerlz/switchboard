@@ -14,21 +14,7 @@ async function loadRouteResolver(t, provider = "test", mode = "providers") {
         export const getEffectiveCleanupModel = () => "cleanup-model";
         export const selectResolvedLLMConfig = () => ({ model: "cleanup-model", provider: ${JSON.stringify(provider)}, mode: ${JSON.stringify(mode)} });
         export const isCloudCleanupMode = () => false;
-        export const isCloudDictationAgentMode = () => false;
         export const isCloudTranslationMode = () => false;
-      `,
-      "/dictationAgentInference": `
-        export const resolveDictationAgentInference = () => ({
-          reachable: true,
-          model: "agent-model",
-          displayProvider: "test",
-          config: { provider: "test" },
-        });
-        export const resolveDictationAgentVisionInference = () => ({
-          active: false,
-          model: "",
-          config: {},
-        });
       `,
       "/dictationTranslationInference": `
         export const resolveDictationTranslationInference = () => ({
@@ -40,7 +26,6 @@ async function loadRouteResolver(t, provider = "test", mode = "providers") {
       `,
       "/config/prompts": `
         export const resolvePrompt = () => "route prompt";
-        export const appendScreenContextSuffix = (prompt) => prompt;
         export const wrapCleanupTranscript = (text) => text;
         export const getCleanupSystemPrompt = () => "cleanup prompt";
       `,
@@ -49,8 +34,8 @@ async function loadRouteResolver(t, provider = "test", mode = "providers") {
   const settings = { useCleanupModel: true, cleanupDisableThinking: true };
   const resolveReasoningRoute = (await vite.ssrLoadModule("/helpers/audioManager.js"))
     .resolveReasoningRoute;
-  return (text, { voiceAgentRequested = false, translationRequested = false } = {}) =>
-    resolveReasoningRoute(text, settings, "Jarvis", voiceAgentRequested, translationRequested);
+  return (_text, { translationRequested = false } = {}) =>
+    resolveReasoningRoute(settings, translationRequested);
 }
 
 test("the cleanup route pins temperature 0 and requires complete output", async (t) => {
@@ -92,14 +77,4 @@ test("a stale Gemini selection does not change other cleanup modes", async (t) =
     resolveRoute("translate this", { translationRequested: true }).cleanupConfig.temperature,
     0
   );
-});
-
-test("the agent route keeps its provider defaults", async (t) => {
-  const resolveRoute = await loadRouteResolver(t);
-
-  const route = resolveRoute("Jarvis, what is on my calendar", { voiceAgentRequested: true });
-
-  assert.equal(route.kind, "agent");
-  assert.equal(route.config.temperature, undefined);
-  assert.equal(route.config.requireCompleteOutput, undefined);
 });

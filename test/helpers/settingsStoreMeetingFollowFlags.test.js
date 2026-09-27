@@ -4,7 +4,6 @@ const { createRendererServer, installBrowserGlobals } = require("../lib/renderer
 const {
   resolveMeetingTranscriptionOptions,
 } = require("../../src/helpers/meetingTranscriptionRouting.js");
-const { buildNoteFormattingOverrides } = require("../../src/helpers/noteFormattingOverrides.js");
 const modelRegistryData = require("../../src/models/modelRegistryData.json");
 
 // migrateMeetingFollowFlags() copies the dictation keys into Note Recording once
@@ -295,27 +294,6 @@ test("Note Recording modes survive the follow-flag migration", async (t) => {
       assert.equal(state.cleanupMode, "openwhispr", "dictation cleanup untouched");
     }
   );
-
-  // Mirror of the case above, snapshot cloud-ward: leaving the key absent keeps
-  // today's behavior, which is to follow dictation cleanup.
-  await t.test("a cloud reasoning snapshot never overrides a since-local cleanup", async () => {
-    const { mod, state } = await load({
-      ...LATCHED_LOCAL,
-      noteFormattingProvider: "anthropic",
-      noteFormattingModel: "claude-sonnet-4-6",
-      cleanupMode: "local",
-      cleanupProvider: "llama",
-      cleanupModel: "qwen3-8b",
-    });
-    assert.equal(storage.getItem("noteFormattingMode"), null);
-    const overrides = buildNoteFormattingOverrides(
-      mod.selectResolvedNoteFormatting(state),
-      mod.selectIsCloudNoteFormattingMode(state)
-    );
-    // processText treats an override carrying no provider as implicit cleanup
-    // and dispatches from the cleanup scope, which is local.
-    assert.equal(overrides.provider, undefined, "no pin, so no anthropic dispatch");
-  });
 
   await t.test(
     "the heal reads the Note Recording snapshot, not today's dictation keys",

@@ -12,7 +12,6 @@ const DBUS_NAME_REQUEST_TIMEOUT_MS = 5000;
 const SLOT_TOGGLE_METHOD = {
   dictation: "Toggle",
   meeting: "ToggleMeeting",
-  voiceAgent: "ToggleVoiceAgent",
   translation: "ToggleTranslation",
 };
 

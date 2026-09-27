@@ -30,26 +30,6 @@ function collectSegments(tree) {
   return out;
 }
 
-// Every `value` a rich-text editor in the tree was handed — the body content.
-function collectEditorValues(tree) {
-  const out = [];
-  walk(tree, (node) => {
-    if (typeof node.props.value === "string") out.push(node.props.value);
-  });
-  return out;
-}
-
-function activeSegment(segments) {
-  // The active tab is the one rendered with the full-strength label colour;
-  // the inactive ones get text-foreground/60.
-  const active = [];
-  for (const [value, node] of segments) {
-    const className = String(node.props.className ?? "");
-    if (/(^|\s)text-foreground($|\s)/.test(className)) active.push(value);
-  }
-  return active;
-}
-
 // The strip is the element the component measures through its ref; its first
 // child is the sliding highlight, positioned through its inline style.
 function findSegmentStrip(tree) {
@@ -98,8 +78,6 @@ const NOTE = {
   space_id: null,
   folder_id: null,
 };
-
-const ENHANCEMENT = { content: NOTE.enhanced_content, isStale: false, onChange() {} };
 
 function baseProps(enhancement) {
   return {
@@ -200,65 +178,6 @@ async function loadNoteEditor(t) {
   const unmount = () => React.act(async () => root.unmount());
   return { render, click, latest, unmount, resizeCallbacks };
 }
-
-test("deleting the AI summary moves the selection to Your notes", async (t) => {
-  const { render, latest, unmount } = await loadNoteEditor(t);
-
-  await render(ENHANCEMENT);
-  const withSummary = collectSegments(latest());
-  assert.deepEqual([...withSummary.keys()].sort(), ["enhanced", "raw", "transcript"]);
-  assert.deepEqual(activeSegment(withSummary), ["enhanced"], "AI Summary starts selected");
-
-  // The user clears the summary text: RichTextEditor emits "", the draft stores
-  // "", and PersonalNotesView stops passing an enhancement at all.
-  await render(undefined);
-  const afterDelete = collectSegments(latest());
-  assert.deepEqual(
-    [...afterDelete.keys()].sort(),
-    ["raw", "transcript"],
-    "the AI Summary button is gone"
-  );
-  // The body already falls back — only the tab strip disagreed with it.
-  assert.ok(
-    collectEditorValues(latest()).includes(NOTE.content),
-    "the body renders the plain notes content"
-  );
-  assert.deepEqual(
-    activeSegment(afterDelete),
-    ["raw"],
-    "selection falls back to Your notes instead of pointing at a tab that no longer exists"
-  );
-
-  await unmount();
-});
-
-test("the highlight slides onto Your notes when the summary is deleted", async (t) => {
-  const { render, click, latest, unmount } = await loadNoteEditor(t);
-
-  await render(ENHANCEMENT);
-  const strip = findSegmentStrip(latest());
-  strip.props.ref.current = measurableStrip(["transcript", "raw", "enhanced"]);
-  // Take a real measurement over the AI Summary tab, as the app has by the time
-  // the user starts deleting.
-  await click("transcript");
-  await click("enhanced");
-  assert.deepEqual(highlightStyle(latest()), {
-    width: 110,
-    height: 26,
-    transform: "translateX(192px)",
-    opacity: 1,
-  });
-
-  strip.props.ref.current = measurableStrip(["transcript", "raw"]);
-  await render(undefined);
-  assert.deepEqual(
-    highlightStyle(latest()),
-    { width: 90, height: 26, transform: "translateX(102px)", opacity: 1 },
-    "the highlight moved onto Your notes instead of freezing over the removed tab"
-  );
-
-  await unmount();
-});
 
 test("hides the highlight instead of freezing it when no tab matches the selection", async (t) => {
   const { render, click, latest, unmount, resizeCallbacks } = await loadNoteEditor(t);

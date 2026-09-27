@@ -1,4 +1,4 @@
-const { app, screen, BrowserWindow, dialog, ipcMain, Menu } = require("electron");
+const { app, screen, BrowserWindow, dialog, ipcMain } = require("electron");
 const debugLogger = require("./debugLogger");
 const { createLinuxWindowInputRegion } = require("./linuxWindowInputRegion");
 // Aliased: this class has an openExternalUrl method wrapping the helper.
@@ -16,13 +16,9 @@ const { i18nMain } = require("./i18nMain");
 const { NotificationDismissTimer, getNotificationTimeoutMs } = require("./notificationTimer");
 const {
   DICTATION_LIFECYCLE,
-  DICTATION_INPUT_KIND,
   normalizeDictationLifecycle,
-  normalizeDictationInputKind,
-  resolveAgentDictationPillState,
   shouldIgnoreDictationHotkey,
   isDictationRecording,
-  shouldBlockDictationWhilePanelOpen,
 } = require("./dictationLifecycle");
 const { DEV_SERVER_PORT } = DevServerManager;
 const DRAG_MOVE_TOLERANCE_PX = 2;
@@ -39,7 +35,6 @@ const {
   WINDOW_SIZES,
   WindowPositionUtil,
 } = require("./windowConfig");
-const AGENT_DICTATION_PILL_SIZE = Object.freeze({ ...WINDOW_SIZES.BASE });
 const { centeredBounds, clampedBounds } = require("./onboardingWindowBounds");
 const { ONBOARDING_DEMO_KINDS, isOnboardingInputAllowed } = require("./onboardingInputPolicy");
 const { createHotkeyRepeatGate } = require("./hotkeyRepeatGate");
@@ -63,11 +58,6 @@ class WindowManager {
     // Set by main.js so the tray's listen item rebuilds with dictation state.
     this.onDictationStateChanged = null;
     this.notificationWindow = null;
-    this.agentDictationPillWindow = null;
-    this._agentDictationPillReady = false;
-    this._agentDictationPillSize = AGENT_DICTATION_PILL_SIZE;
-    this._agentDictationPillHorizontalDirection = "left";
-    this._agentDictationPillScreenListener = null;
     this._notificationDismissTimer = new NotificationDismissTimer(() => {
       // Dismiss first: a prompt raised from the timeout handler must not be
       // closed by this dismissal. The engine is not told the card closed either —
@@ -95,9 +85,6 @@ class WindowManager {
     this._activeHorizontalDirection = null;
     this._isDictatingToggle = false;
     this._dictationLifecycleState = DICTATION_LIFECYCLE.IDLE;
-    this._dictationInputKind = DICTATION_INPUT_KIND.DICTATION;
-    this._assistantPanelOpen = false;
-    this._assistantPanelBusy = false;
     this._pendingMeetingNoteNavigation = null;
     this._pendingNoteNavigation = null;
 
@@ -123,7 +110,6 @@ class WindowManager {
 
     this.setMainWindowInteractivity(false);
     this.registerMainWindowEvents();
-    this.registerAssistantSelectionContextMenu();
 
     // Register load event handlers BEFORE loading to catch all events
     this.mainWindow.webContents.on(
@@ -165,70 +151,6 @@ class WindowManager {
     MenuManager.setupMainMenu(() => this.openSettings());
   }
 
-  registerAssistantSelectionContextMenu() {
-    this.mainWindow?.webContents.on("context-menu", (_event, params) => {
-      if (!this._assistantPanelOpen || !params?.selectionText?.trim()) return;
-
-      Menu.buildFromTemplate([{ role: "copy" }]).popup({ window: this.mainWindow });
-    });
-  }
-
-  _updateMainContentProtection() {
-    if (!this.mainWindow || this.mainWindow.isDestroyed()) return;
-    this.mainWindow.setContentProtection(
-      Boolean(this._screenContextProtection || this._assistantPanelOpen)
-    );
-  }
-
-  setScreenContextProtection(enabled) {
-    this._screenContextProtection = Boolean(enabled);
-    this._updateMainContentProtection();
-  }
-
-  // The pill window is created focusable:false so it never steals focus; the
-  // assistant panel makes it focusable so it can take keyboard input at all.
-  // How it then becomes key is platform-split — see the branches below.
-  setAssistantPanelOpen(open) {
-    this._assistantPanelOpen = Boolean(open);
-    if (!this._assistantPanelOpen) {
-      this._assistantPanelBusy = false;
-    }
-    if (this.mainWindow && !this.mainWindow.isDestroyed()) {
-      if (this._assistantPanelOpen) {
-        // The window may have been hidden while the command was in flight
-        // (PTT tap, auto-hide, tray); focus() is a no-op on a hidden window.
-        if (!this.mainWindow.isVisible()) this.mainWindow.showInactive();
-        this.mainWindow.setFocusable(true);
-        // macOS: never request app activation for the overlay. focus() calls
-        // NSApp activate, and when another OpenWhispr window (control panel)
-        // lives on a different Space, macOS answers a granted activation by
-        // sliding the whole desktop to it — the "massive flash" on panel
-        // open/close. The window is a non-activating panel, so clicking its
-        // input still makes it key (typing and Escape work from then on)
-        // without activating the app or stealing the user's keyboard.
-        if (process.platform !== "darwin") {
-          this.mainWindow.focus();
-        }
-      } else {
-        // On Windows/Linux the pill is a normal/toolbar window, so focus()
-        // activated OpenWhispr — blur before dropping focusability to hand
-        // the foreground back to the app the user was in. On macOS nothing
-        // was activated, and blur() would only churn key-window state.
-        if (process.platform !== "darwin") {
-          this.mainWindow.blur();
-        }
-        this.mainWindow.setFocusable(false);
-      }
-      this.enforceMainWindowOnTop();
-    }
-    if (this._assistantPanelOpen) this.showAgentDictationPill();
-    else this.hideAgentDictationPill();
-    this._updateMainContentProtection();
-  }
-
-  setAssistantPanelBusy(busy) {
-    this._assistantPanelBusy = Boolean(busy);
-  }
 
   setMainWindowInteractivity(shouldCapture) {
     if (!this.mainWindow || this.mainWindow.isDestroyed()) {
@@ -304,12 +226,6 @@ class WindowManager {
       return { success: false, message: "Window not available" };
     }
 
-    // Content-height resizing belongs to Live Transcript. Agent Mode keeps the
-    // shared modal at its normal responsive footprint and scrolls its center.
-    if (this._assistantPanelOpen) {
-      return this.resizeMainWindow("ASSISTANT");
-    }
-
     return this._enqueueMainWindowMutation(() =>
       this._performMainWindowResize("ASSISTANT_CONTENT", { surfaceHeight })
     );
@@ -320,15 +236,6 @@ class WindowManager {
       return { success: false, message: "Window not available" };
     }
 
-    // A dictation error is an overlay when Agent Mode already owns the shared
-    // window. Its card may measure itself, but that measurement must not
-    // replace the Agent surface geometry underneath it. Otherwise the native
-    // window contracts to the error card's height and remains there after the
-    // overlay dismisses because the Agent panel never actually closed.
-    if (this._assistantPanelOpen) {
-      const bounds = this.mainWindow.getBounds();
-      return { success: true, bounds, changed: false };
-    }
 
     return this._enqueueMainWindowMutation(() =>
       this._performMainWindowResize("DICTATION_ERROR_CONTENT", { surfaceHeight })
@@ -868,49 +775,9 @@ class WindowManager {
     }
   }
 
-  // Visibility is part of "available": a ready pill that is merely hidden
-  // (onboarding took the screen, a panel close hid it) cannot show a
-  // recording, so counting it as a live surface would let dictation start
-  // with nothing on screen. A blocked press re-kicks the show below.
-  _isAgentDictationPillAvailable() {
-    const pillWindow = this.agentDictationPillWindow;
-    return Boolean(
-      pillWindow &&
-      !pillWindow.isDestroyed() &&
-      this._agentDictationPillReady &&
-      pillWindow.isVisible()
-    );
-  }
-
-  _shouldBlockDictationInput(inputKind) {
-    const blocked = shouldBlockDictationWhilePanelOpen({
-      assistantPanelOpen: this._assistantPanelOpen,
-      assistantPanelBusy: this._assistantPanelBusy,
-      inputKind,
-      companionAvailable: this._isAgentDictationPillAvailable(),
-    });
-    // A dictation press that lost to a missing companion re-kicks its load
-    // (a companion mid-load is left alone), so the surface can come back and
-    // the next press can land.
-    if (blocked && this._assistantPanelOpen && inputKind === DICTATION_INPUT_KIND.DICTATION) {
-      this.showAgentDictationPill();
-    }
-    // Fail-closed by design: while the companion is recreating after a crash
-    // (blocked && !companionAvailable above), a blocked "dictation" press
-    // could actually be a STOP of an already-running recording, not a start —
-    // this blanket block doesn't distinguish them. That costs the user one
-    // extra press with a hot mic (Escape/the cancel hotkey still work in the
-    // meantime). If that gap ever needs closing, a future reader should
-    // consider letting the press through when `this._isDictatingToggle` is
-    // already true, rather than loosening the block for starts too.
-    return blocked;
-  }
 
   _sendDictationToggle(channel, inputKind) {
     if (!this._isOnboardingInputAllowed(inputKind)) return;
-    if (this._shouldBlockDictationInput(inputKind)) {
-      return;
-    }
     if (this.hotkeyManager.isInListeningMode()) {
       return;
     }
@@ -942,8 +809,7 @@ class WindowManager {
       // About-to-start guess: open the mic one IPC message ahead of the toggle.
       // A wrong guess (renderer declines) is bounded by the prepared capture's
       // max-age expiry, and the renderer dedups its own prepare call. Pass the
-      // toggle's own kind so the pre-warm survives the assistant demo, whose
-      // gate rejects "dictation".
+      // toggle's own kind so the onboarding gate judges the pre-warm like it.
       if (isStarting) {
         this.sendPrepareDictation({ inputKind });
       }
@@ -951,18 +817,13 @@ class WindowManager {
     }
   }
 
-  setDictationLifecycleState(state, inputKind = DICTATION_INPUT_KIND.DICTATION) {
+  setDictationLifecycleState(state) {
     const nextState = normalizeDictationLifecycle(state);
-    const nextInputKind = normalizeDictationInputKind(inputKind);
-    if (nextState === this._dictationLifecycleState && nextInputKind === this._dictationInputKind) {
-      return;
-    }
+    if (nextState === this._dictationLifecycleState) return;
 
     this._dictationLifecycleState = nextState;
-    this._dictationInputKind = nextInputKind;
     this._isDictatingToggle = isDictationRecording(nextState);
     this.meetingDetectionEngine?.setUserRecording(this._isDictatingToggle);
-    this._sendAgentDictationPillState();
     this.onDictationStateChanged?.();
   }
 
@@ -971,36 +832,6 @@ class WindowManager {
     return this._isDictatingToggle;
   }
 
-  _sendAgentDictationPillState() {
-    const pillWindow = this.agentDictationPillWindow;
-    if (!pillWindow || pillWindow.isDestroyed() || !this._agentDictationPillReady) return;
-    pillWindow.webContents.send(
-      "agent-dictation-pill-state-changed",
-      this.getAgentDictationPillState()
-    );
-  }
-
-  getAgentDictationPillState() {
-    return {
-      ...resolveAgentDictationPillState(this._dictationLifecycleState, this._dictationInputKind),
-      horizontalDirection: this._agentDictationPillHorizontalDirection,
-    };
-  }
-
-  setDictationAudioLevel(level) {
-    if (
-      !this._assistantPanelOpen ||
-      this._dictationLifecycleState !== DICTATION_LIFECYCLE.RECORDING ||
-      this._dictationInputKind !== DICTATION_INPUT_KIND.DICTATION
-    ) {
-      return;
-    }
-    const numericLevel = Number(level);
-    if (!Number.isFinite(numericLevel)) return;
-    const pillWindow = this.agentDictationPillWindow;
-    if (!pillWindow || pillWindow.isDestroyed() || !this._agentDictationPillReady) return;
-    pillWindow.webContents.send("agent-dictation-pill-audio-level-changed", numericLevel);
-  }
 
   isDictationProcessing() {
     return shouldIgnoreDictationHotkey(this._dictationLifecycleState);
@@ -1010,30 +841,13 @@ class WindowManager {
     this._sendDictationToggle("toggle-dictation", "dictation");
   }
 
-  sendToggleVoiceAgent() {
-    this._sendDictationToggle("toggle-voice-agent", "assistant");
-  }
-
   sendToggleTranslation() {
     this._sendDictationToggle("toggle-translation", "translation");
   }
 
-  // The tray's Ask assistant. Only the renderer can open the panel, and only it
-  // knows the policy and recording state the pill menu gates the item on, so it
-  // decides: nothing is shown or created here, and an accepted command surfaces
-  // the pill itself through setAssistantPanelOpen. Onboarding blocks it outright
-  // rather than through the demo-aware gate — the tray is never part of the demo.
-  sendOpenAssistantPanel() {
-    if (this.hotkeyManager.isInListeningMode() || this._onboardingActive) return;
-    if (!this.mainWindow || this.mainWindow.isDestroyed()) return;
-    this.mainWindow.webContents.send("open-assistant-panel");
-  }
 
   sendStartDictation() {
     if (!this._isOnboardingInputAllowed("dictation")) return;
-    if (this._shouldBlockDictationInput("dictation")) {
-      return;
-    }
     if (this.hotkeyManager.isInListeningMode()) {
       return;
     }
@@ -1059,9 +873,6 @@ class WindowManager {
 
   sendPrepareDictation({ inputKind = "dictation" } = {}) {
     if (!this._isOnboardingInputAllowed(inputKind)) return;
-    if (this._shouldBlockDictationInput(inputKind)) {
-      return;
-    }
     if (this.hotkeyManager.isInListeningMode()) {
       return;
     }
@@ -1398,20 +1209,11 @@ class WindowManager {
     await this.loadWindowContent(this.controlPanelWindow, true);
   }
 
-  _sendAgentDictationPreview(channel, payload) {
-    if (!this._assistantPanelOpen || this._dictationInputKind !== DICTATION_INPUT_KIND.DICTATION) {
-      return;
-    }
-    const pillWindow = this.agentDictationPillWindow;
-    if (!pillWindow || pillWindow.isDestroyed() || !this._agentDictationPillReady) return;
-    pillWindow.webContents.send(channel, payload);
-  }
 
   async showTranscriptionPreview(text) {
     if (this._onboardingActive) return;
     if (!this.mainWindow || this.mainWindow.isDestroyed()) return;
     this.mainWindow.webContents.send("preview-text", text);
-    this._sendAgentDictationPreview("preview-text", text);
     // Partials arrive several times a second; re-showing a visible window
     // restacks it (and re-fires "show") on every chunk (#1262).
     if (!this.mainWindow.isVisible()) {
@@ -1424,7 +1226,6 @@ class WindowManager {
     if (this._onboardingActive) return;
     if (!this.mainWindow || this.mainWindow.isDestroyed()) return;
     this.mainWindow.webContents.send("preview-append", text);
-    this._sendAgentDictationPreview("preview-append", text);
   }
 
   holdTranscriptionPreview(options = {}) {
@@ -1434,7 +1235,6 @@ class WindowManager {
       showCleanup: !!options.showCleanup,
     };
     this.mainWindow.webContents.send("preview-hold", payload);
-    this._sendAgentDictationPreview("preview-hold", payload);
   }
 
   completeTranscriptionPreview(text) {
@@ -1442,24 +1242,13 @@ class WindowManager {
     if (!this.mainWindow || this.mainWindow.isDestroyed()) return;
     const payload = { text };
     this.mainWindow.webContents.send("preview-result", payload);
-    this._sendAgentDictationPreview("preview-result", payload);
     this.enforceMainWindowOnTop();
   }
 
-  // A recoverable dictation error's "View Transcript" action has no surface in
-  // the main window while the Agent panel owns it (openPanel refuses under
-  // assistantOpenRef), so the recovered text shows on the companion instead.
-  showAgentDictationFinalTranscript(text) {
-    this._sendAgentDictationPreview("agent-dictation-pill-final-transcript", text);
-  }
 
   hideTranscriptionPreview() {
     if (!this.mainWindow || this.mainWindow.isDestroyed()) return;
     this.mainWindow.webContents.send("preview-hide");
-    const pillWindow = this.agentDictationPillWindow;
-    if (pillWindow && !pillWindow.isDestroyed() && this._agentDictationPillReady) {
-      pillWindow.webContents.send("preview-hide");
-    }
   }
 
   // The display the user is working on is the one showing the app being dictated
@@ -1546,13 +1335,6 @@ class WindowManager {
     if (this._onboardingActive) return;
     const { focus = false, reposition = false, targetPidPromise } = options;
     if (!this.mainWindow || this.mainWindow.isDestroyed()) return;
-    if (this._assistantPanelOpen) {
-      // The open panel owns geometry (no reposition), but it must never be
-      // left invisible: surface the window if something hid it.
-      if (!this.mainWindow.isVisible()) this.mainWindow.showInactive();
-      if (focus) this.mainWindow.focus();
-      return;
-    }
     if (reposition) {
       void this._repositionToActiveDisplay(targetPidPromise);
     }
@@ -1596,7 +1378,6 @@ class WindowManager {
   _hideNormalAppSurfaces() {
     this.hideDictationPanel();
     this.hideTranscriptionPreview();
-    this.hideAgentDictationPill();
     this.dismissMeetingNotification({ flushQueued: false });
   }
 
@@ -1775,180 +1556,10 @@ class WindowManager {
   }
 
   hideDictationPanel() {
-    // An open panel, or a command still thinking toward one, must not lose
-    // its window (a PTT tap during thinking used to hide it — the panel then
-    // opened invisibly and nothing could show it again).
-    if (this._assistantPanelOpen || this._assistantPanelBusy) return;
     this._mainWindowPlacementCoordinator.cancelPending();
     if (this.mainWindow && !this.mainWindow.isDestroyed()) this.mainWindow.hide();
   }
 
-  positionAgentDictationPill() {
-    const pillWindow = this.agentDictationPillWindow;
-    if (
-      !pillWindow ||
-      pillWindow.isDestroyed() ||
-      !this.mainWindow ||
-      this.mainWindow.isDestroyed()
-    ) {
-      return;
-    }
-
-    const mainBounds = this.mainWindow.getBounds();
-    const display = screen.getDisplayMatching(mainBounds);
-    const mainSide = resolveHorizontalWindowDirection(
-      mainBounds,
-      display,
-      this._panelStartPosition
-    );
-    const oppositeEdge = mainSide === "right" ? "bottom-left" : "bottom-right";
-    const horizontalDirection = oppositeEdge === "bottom-left" ? "left" : "right";
-    const directionChanged = horizontalDirection !== this._agentDictationPillHorizontalDirection;
-    this._agentDictationPillHorizontalDirection = horizontalDirection;
-    pillWindow.setBounds(
-      WindowPositionUtil.getMainWindowPosition(display, this._agentDictationPillSize, oppositeEdge)
-    );
-    if (directionChanged) this._sendAgentDictationPillState();
-  }
-
-  resizeAgentDictationPillToContent(surfaceHeight = null) {
-    const pillWindow = this.agentDictationPillWindow;
-    if (
-      !pillWindow ||
-      pillWindow.isDestroyed() ||
-      !this.mainWindow ||
-      this.mainWindow.isDestroyed()
-    ) {
-      return { success: false, message: "Window not available" };
-    }
-
-    const mainBounds = this.mainWindow.getBounds();
-    const display = screen.getDisplayMatching(mainBounds);
-    const nextSize =
-      surfaceHeight === null
-        ? AGENT_DICTATION_PILL_SIZE
-        : fitAssistantContentWindowToWorkArea(surfaceHeight, display.workArea || display.bounds);
-    const currentBounds = pillWindow.getBounds();
-    const changed =
-      currentBounds.width !== nextSize.width || currentBounds.height !== nextSize.height;
-    this._agentDictationPillSize = nextSize;
-    this.positionAgentDictationPill();
-    return { success: true, bounds: pillWindow.getBounds(), changed };
-  }
-
-  showAgentDictationPill() {
-    if (this._onboardingActive) return;
-    if (!this._assistantPanelOpen || !this.mainWindow || this.mainWindow.isDestroyed()) return;
-
-    let pillWindow = this.agentDictationPillWindow;
-    if (!pillWindow || pillWindow.isDestroyed()) {
-      pillWindow = new BrowserWindow({
-        ...NOTIFICATION_WINDOW_CONFIG,
-        ...AGENT_DICTATION_PILL_SIZE,
-      });
-      this.agentDictationPillWindow = pillWindow;
-      this._agentDictationPillReady = false;
-      this._agentDictationPillSize = AGENT_DICTATION_PILL_SIZE;
-      // Registered lazily with the first companion window (screen.on in the
-      // constructor would fire before `screen` is usable in some test/boot orders)
-      // and kept for the app's lifetime; positionAgentDictationPill no-ops safely
-      // when no pill exists.
-      if (!this._agentDictationPillScreenListener) {
-        this._agentDictationPillScreenListener = () => this.positionAgentDictationPill();
-        screen.on("display-metrics-changed", this._agentDictationPillScreenListener);
-        screen.on("display-added", this._agentDictationPillScreenListener);
-        screen.on("display-removed", this._agentDictationPillScreenListener);
-      }
-      // The companion exists only while the content-protected Agent panel is
-      // open; keep it out of screen shares along with the panel it accompanies.
-      pillWindow.setContentProtection(true);
-      this._applyAgentDictationPillClickThrough(pillWindow, true);
-
-      pillWindow.on("closed", () => {
-        if (this.agentDictationPillWindow !== pillWindow) return;
-        this.agentDictationPillWindow = null;
-        this._agentDictationPillReady = false;
-        this._agentDictationPillSize = AGENT_DICTATION_PILL_SIZE;
-      });
-      pillWindow.webContents.on("did-finish-load", () => {
-        if (this.agentDictationPillWindow !== pillWindow) return;
-        this._agentDictationPillReady = true;
-        this._sendAgentDictationPillState();
-        this.showAgentDictationPill();
-      });
-      pillWindow.webContents.on("render-process-gone", (_event, details) => {
-        if (this.agentDictationPillWindow !== pillWindow) return;
-        // "clean-exit" is benign teardown already handled by the `closed`
-        // listener below; tear down on every other reason (a blocklist, not
-        // an allowlist) so an abnormal reason we don't yet have a name for
-        // still fails closed instead of leaving a dead renderer marked ready.
-        if (details?.reason === "clean-exit") return;
-        debugLogger.warn(
-          "Agent dictation pill renderer gone; closing so the next press recreates it",
-          { reason: details?.reason, exitCode: details?.exitCode },
-          "window"
-        );
-        // Readiness must drop immediately: with a dead renderer the fail-closed
-        // dictation gate would otherwise approve recordings nobody can see.
-        this._agentDictationPillReady = false;
-        if (!pillWindow.isDestroyed()) pillWindow.close();
-      });
-
-      const loadPromise =
-        process.env.NODE_ENV === "development"
-          ? DevServerManager.waitForDevServer().then(() =>
-              pillWindow.loadURL(`${DevServerManager.DEV_SERVER_URL}?agent-dictation-pill=true`)
-            )
-          : (() => {
-              const fileInfo = DevServerManager.getAppFilePath(false);
-              if (!fileInfo) return Promise.reject(new Error("Failed to get app file path"));
-              return pillWindow.loadFile(fileInfo.path, {
-                query: { ...fileInfo.query, "agent-dictation-pill": "true" },
-              });
-            })();
-      void loadPromise.catch((error) => {
-        debugLogger.warn("Failed to load Agent dictation pill", { error: error.message }, "window");
-        if (!pillWindow.isDestroyed()) pillWindow.close();
-      });
-      return;
-    }
-
-    if (!this._agentDictationPillReady) return;
-    this.positionAgentDictationPill();
-    WindowPositionUtil.setupAlwaysOnTop(pillWindow);
-    if (!pillWindow.isVisible()) pillWindow.showInactive();
-    pillWindow.moveTop?.();
-  }
-
-  hideAgentDictationPill() {
-    const pillWindow = this.agentDictationPillWindow;
-    if (!pillWindow || pillWindow.isDestroyed()) return;
-    if (pillWindow.isVisible()) pillWindow.hide();
-    if (this._agentDictationPillReady) pillWindow.webContents.send("preview-hide");
-    // A hover-captured window never sees its mouseleave once hidden; reset so
-    // the next show cannot start out swallowing clicks under stale capture.
-    this._applyAgentDictationPillClickThrough(pillWindow, true);
-    this._agentDictationPillSize = AGENT_DICTATION_PILL_SIZE;
-    this.positionAgentDictationPill();
-  }
-
-  setAgentDictationPillInteractivity(interactive) {
-    const pillWindow = this.agentDictationPillWindow;
-    if (!pillWindow || pillWindow.isDestroyed()) return;
-    this._applyAgentDictationPillClickThrough(pillWindow, !interactive);
-  }
-
-  // Like the dictation pill and meeting notification, the companion is
-  // click-through on macOS so its transparent bounds never swallow clicks
-  // meant for the app beneath; hovering re-captures via IPC. Windows
-  // forwarding is unreliable for floating panels and Linux ignores `forward`
-  // (one hover-out would strand the pill unreachable, #1456), so both keep
-  // normal hit-testing.
-  _applyAgentDictationPillClickThrough(pillWindow, clickThrough) {
-    if (process.platform !== "darwin") return;
-    if (clickThrough) pillWindow.setIgnoreMouseEvents(true, { forward: true });
-    else pillWindow.setIgnoreMouseEvents(false);
-  }
 
   isDictationPanelVisible() {
     if (!this.mainWindow || this.mainWindow.isDestroyed()) {
@@ -2003,20 +1614,14 @@ class WindowManager {
 
     this.mainWindow.on("show", () => {
       this.enforceMainWindowOnTop();
-      if (this._assistantPanelOpen) this.showAgentDictationPill();
     });
 
     this.mainWindow.on("focus", () => {
       this.enforceMainWindowOnTop();
-      if (this._assistantPanelOpen) this.showAgentDictationPill();
     });
-
-    this.mainWindow.on("move", () => this.positionAgentDictationPill());
 
     this.mainWindow.on("closed", () => {
       this.dragManager.cleanup();
-      const pillWindow = this.agentDictationPillWindow;
-      if (pillWindow && !pillWindow.isDestroyed()) pillWindow.close();
       this.mainWindow = null;
     });
   }
@@ -2074,7 +1679,7 @@ class WindowManager {
     }
 
     // Notifications must clear every other window, including our own floating
-    // dictation panel and assistant pill.
+    // dictation panel.
     WindowPositionUtil.setupAlwaysOnTop(win, { level: "screen-saver" });
 
     this._pendingNotificationData = promptData;

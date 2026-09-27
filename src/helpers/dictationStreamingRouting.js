@@ -131,7 +131,6 @@ export function buildStreamingSessionOptions({
   settings,
   language,
   keyterms,
-  voiceAgentRequested = false,
 }) {
   const options = {
     provider: providerName,
@@ -143,9 +142,8 @@ export function buildStreamingSessionOptions({
     environment: settings.cortiEnvironment,
     tenant: settings.cortiTenant,
   };
-  // Tinfoil realtime shows the live preview for normal dictation (#1120), but
-  // assistant voice skips it because the Assistant panel owns that surface.
-  if (providerName === "tinfoil-realtime" && !voiceAgentRequested) {
+  // Tinfoil realtime shows the live preview for dictation (#1120).
+  if (providerName === "tinfoil-realtime") {
     options.preview = true;
   }
   if (providerName === "orukeet") {

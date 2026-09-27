@@ -5,17 +5,6 @@ const os = require("node:os");
 const path = require("node:path");
 const Module = require("node:module");
 
-const HOTKEY_ENV_KEYS = ["VOICE_AGENT_KEY", "CHAT_AGENT_KEY"];
-
-function snapshotEnvironment() {
-  return new Map(
-    HOTKEY_ENV_KEYS.map((name) => [
-      name,
-      { present: Object.hasOwn(process.env, name), value: process.env[name] },
-    ])
-  );
-}
-
 function restoreEnvironment(snapshot) {
   for (const [name, { present, value }] of snapshot) {
     if (present) process.env[name] = value;
@@ -70,46 +59,6 @@ function installDotenvStub(t) {
   });
 }
 
-test("adopts a legacy chat-agent hotkey as the voice-agent hotkey", async (t) => {
-  const userDataDirectory = fs.mkdtempSync(
-    path.join(os.tmpdir(), "openwhispr-voice-agent-hotkey-")
-  );
-  const environmentSnapshot = snapshotEnvironment();
-  const originalResourcesPath = process.resourcesPath;
-  process.resourcesPath = userDataDirectory;
-  delete process.env.VOICE_AGENT_KEY;
-  process.env.CHAT_AGENT_KEY = "CommandOrControl+;";
-
-  t.after(() => {
-    restoreEnvironment(environmentSnapshot);
-    process.resourcesPath = originalResourcesPath;
-    fs.rmSync(userDataDirectory, { recursive: true, force: true });
-  });
-
-  installDotenvStub(t);
-  const EnvironmentManager = loadEnvironmentManager(t, userDataDirectory);
-  const environmentManager = new EnvironmentManager();
-  const saveAllKeysToEnvFile = environmentManager.saveAllKeysToEnvFile.bind(environmentManager);
-  let persistence;
-  environmentManager.saveAllKeysToEnvFile = () => {
-    persistence = saveAllKeysToEnvFile();
-    return persistence;
-  };
-
-  const hotkey = environmentManager.getVoiceAgentKey();
-
-  assert.equal(hotkey, "CommandOrControl+;");
-  assert.ok(persistence);
-  const persistenceResult = await persistence;
-  const persistedEnvPath = path.join(userDataDirectory, ".env");
-  const persistedEnv = fs.readFileSync(persistedEnvPath, "utf8");
-
-  assert.equal(persistenceResult.path, persistedEnvPath);
-  assert.equal(process.env.VOICE_AGENT_KEY, "CommandOrControl+;");
-  assert.equal(process.env.CHAT_AGENT_KEY, undefined);
-  assert.match(persistedEnv, /^VOICE_AGENT_KEY=CommandOrControl\+;$/m);
-  assert.doesNotMatch(persistedEnv, /^CHAT_AGENT_KEY=/m);
-});
 
 test("device cleanup clears persisted settings and encrypted secret files", async (t) => {
   const userDataDirectory = fs.mkdtempSync(

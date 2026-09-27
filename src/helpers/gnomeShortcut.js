@@ -16,10 +16,6 @@ const SLOT_CONFIG = {
     path: "/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/openwhispr-meeting/",
     name: "OpenWhispr Meeting",
   },
-  voiceAgent: {
-    path: "/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/openwhispr-voice-agent/",
-    name: "OpenWhispr Voice Assistant",
-  },
   translation: {
     path: "/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/openwhispr-translation/",
     name: "OpenWhispr Translation",
@@ -136,7 +132,6 @@ class GnomeShortcutManager {
     this.bus = null;
     this.dictationCallback = null;
     this.meetingCallback = null;
-    this.voiceAgentCallback = null;
     this.translationCallback = null;
     this.globalShortcutsPortal = new GnomeGlobalShortcutsPortal();
     // Track which slots have been registered in gsettings
@@ -159,11 +154,6 @@ class GnomeShortcutManager {
   setMeetingCallback(callback) {
     this.meetingCallback = callback;
     debugLogger.log("[GnomeShortcut] Meeting callback registered");
-  }
-
-  setVoiceAgentCallback(callback) {
-    this.voiceAgentCallback = callback;
-    debugLogger.log("[GnomeShortcut] Voice agent callback registered");
   }
 
   setTranslationCallback(callback) {
@@ -228,11 +218,6 @@ class GnomeShortcutManager {
               this.meetingCallback();
             }
           },
-          ToggleVoiceAgent: () => {
-            if (this.voiceAgentCallback) {
-              this.voiceAgentCallback();
-            }
-          },
           ToggleTranslation: () => {
             if (this.translationCallback) {
               this.translationCallback();
@@ -245,7 +230,6 @@ class GnomeShortcutManager {
           methods: {
             Toggle: ["", ""],
             ToggleMeeting: ["", ""],
-            ToggleVoiceAgent: ["", ""],
             ToggleTranslation: ["", ""],
           },
         }
@@ -317,7 +301,6 @@ class GnomeShortcutManager {
     const SLOT_DBUS_METHOD = {
       dictation: "Toggle",
       meeting: "ToggleMeeting",
-      voiceAgent: "ToggleVoiceAgent",
       translation: "ToggleTranslation",
     };
     const dbusMethod = SLOT_DBUS_METHOD[slotName] || "Toggle";

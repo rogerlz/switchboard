@@ -744,43 +744,6 @@ for (const { name, appName, copied } of [
   });
 }
 
-test("an assistant answer remains available when a dormant browser has no input", async () => {
-  const { createAssistantResponseDelivery, deliverAssistantResponse } =
-    await import("../../src/helpers/assistantResponseDelivery.ts");
-  const { manager } = makeMacClipboardHarness({ copyOutput: "COPY_OK 42 Chrome" });
-  const pastes = [];
-  const writes = [];
-  manager.textEditMonitor.getSelectedText = async () => ({ state: "unknown" });
-  manager.textEditMonitor.isFocusedEditable = async () => "unknown";
-  // Posting Cmd+V succeeds even when there is no field to receive it.
-  manager.clipboardManager._pasteText = async (text) => {
-    pastes.push(text);
-    return { restoreComplete: Promise.resolve() };
-  };
-
-  const capture = await manager.captureSelectedText({ probeEditable: true });
-  const delivery = createAssistantResponseDelivery({
-    autoPasteEnabled: true,
-    deliverySessionId: capture.sessionId,
-    restoreClipboard: true,
-    allowClipboardFallback: false,
-  });
-  const result = await deliverAssistantResponse(delivery, "Agent response", {
-    electronAPI: {
-      pasteAtCapturedTarget: (...args) => manager.pasteAtCapturedTarget(...args),
-      writeClipboard: async (text) => {
-        writes.push(text);
-        return { success: true };
-      },
-    },
-    clipboard: {},
-  });
-
-  assert.deepEqual(result, { pasted: false, copied: true });
-  assert.deepEqual(pastes, []);
-  assert.deepEqual(writes, ["Agent response"]);
-});
-
 test("a failed macOS copy stays non-fatal so the command still runs", async () => {
   const { manager } = makeMacClipboardHarness({ copied: null });
   manager._runCopyHelper = async () => ({ success: false, stdout: "", stderr: "" });

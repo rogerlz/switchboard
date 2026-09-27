@@ -234,37 +234,6 @@ test("Live Transcript hands visual border ownership to the shared panel", async 
   assert.doesNotMatch(standalone, /data-integrated-with-panel/);
 });
 
-test("Agent Mode uses the supplied mark, a purple perimeter glow, and a neutral waveform", async () => {
-  const agentRecording = await renderPill("recording", true, "right", {
-    agentMode: true,
-  });
-  const normalRecording = await renderPill("recording", true);
-  const { AGENT_MODE_PATH } = await import("../../src/components/dictation/voiceIdentityMorph.ts");
-  const styles = readDictationStyles();
-
-  assert.match(AGENT_MODE_PATH, /^M6\.14226 /);
-  assert.match(styles, /--color-agent-brand:/);
-  assert.doesNotMatch(styles, /\.voice-pill-control\[data-agent-mode="true"\]\s*\{/);
-  // The agent glow is the same Signal treatment re-palettes to the agent's
-  // purple around the brand color.
-  assert.match(styles, /\.processing-signal-glow\[data-agent="true"\]\s*\{/);
-  assert.match(styles, /--signal-core: #8787ff/);
-  assert.doesNotMatch(styles, /agent-waveform-background|agent-waveform-highlight/);
-  // Listening stays glow-free; the purple Signal glow is reserved for the
-  // post-recording thinking state so "hearing you" and "working" read apart.
-  assert.match(agentRecording, /class="processing-signal-glow" data-agent="true"/);
-  assert.doesNotMatch(agentRecording, /data-active/);
-  assert.match(agentRecording, /data-agent-mode="true"/);
-  assert.match(agentRecording, /voice-identity-final-agent/);
-  assert.ok(agentRecording.includes(`d="${AGENT_MODE_PATH}"`));
-  assert.doesNotMatch(agentRecording, /agent-waveform-background|text-agent-brand/);
-  assert.equal(
-    (agentRecording.match(/w-0\.5 rounded-full bg-current/g) || []).length,
-    await totalWaveBars()
-  );
-  assert.doesNotMatch(normalRecording, /agent-waveform-background/);
-});
-
 test("Agent thinking keeps the purple glow on the same persistent pill root", async () => {
   const agentThinking = await renderPill("thinking", false, "right", {
     agentMode: true,

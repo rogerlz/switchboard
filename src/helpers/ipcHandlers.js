@@ -19,10 +19,7 @@ const accountScopeBinding = require("./accountScopeBinding");
 const { createCloudApiRequestHandler } = require("./cloudApiRequest");
 const { decodeLeaderboardPngDataUrl, leaderboardImageFilename } = require("./leaderboardImage");
 const { withPolicyRequestHeaders } = require("./policyRequestHeaders");
-const {
-  createWorkspacePolicyManager,
-  isScreenContextBlocked,
-} = require("./workspacePolicyManager");
+const { createWorkspacePolicyManager } = require("./workspacePolicyManager");
 const { createEnterpriseIdentityManager } = require("./enterpriseIdentityManager");
 const { createCloudConfigRequestHandler } = require("./cloudConfigRequest");
 const { extractAnthropicText, describeMissingAnthropicText } = require("./anthropicResponse");
@@ -141,7 +138,6 @@ const {
 const { normalizeStoredSpeakerCount } = require("./speakerCount");
 const { downsample24kTo16k, pcm16ToWav } = require("../utils/audioUtils");
 const postMigrationDetector = require("./postMigrationDetector");
-const screenContextCapture = require("./screenContextCapture");
 const {
   DEFAULT_EXPECTED_SPEAKER_COUNT,
   MAX_SPEAKER_COUNT,
@@ -160,7 +156,6 @@ const {
   getMeetingConnectionKey,
 } = require("./meetingStreamingProviders");
 const { fetchRealtimeTokenForProvider } = require("./realtimeTokenProviders");
-const { getCalendarAvailability } = require("./calendarAvailabilityService");
 
 // Meeting capture runs at 24 kHz (see meetingRecordingStore AudioContext); cloud
 // streaming providers must be told the true PCM rate or they misread the audio.
@@ -261,7 +256,6 @@ const {
   formatSpeakerTranscript,
 } = require("./speakerMerge");
 const { timestampRequestFields, mapVerboseSegments } = require("./uploadTimestamps");
-const { listLocalTranscriptionModels } = require("./localTranscriptionModels");
 
 // Canonicalize allowed dirs so realpath'd inputs match on macOS (/var -> /private/var).
 // Deliberately narrow: user-picked paths anywhere else are approved individually via
@@ -616,7 +610,6 @@ class IPCHandlers {
     this.linuxPortalAudioManager = managers.linuxPortalAudioManager;
     this.windowsLoopbackAudioManager = managers.windowsLoopbackAudioManager;
     this.meetingAecManager = managers.meetingAecManager;
-    this.getSemanticSearch = managers.getSemanticSearch;
     this.oauthProtocolRegistered = managers.oauthProtocolRegistered === true;
     this.oauthProtocol = managers.oauthProtocol || "openwhispr";
     this.sessionId = crypto.randomUUID();
@@ -624,7 +617,6 @@ class IPCHandlers {
     // upload, or local transcription + diarization sharing one id), so a
     // cancel can abort the exact job.
     this._uploadCancelRegistry = createUploadCancelRegistry();
-    this._agentStreamRequests = new AgentStreamRequestRegistry();
     this._cloudReasonRequests = new AgentStreamRequestRegistry();
     this._cloudTranscriptionRequests = new AgentStreamRequestRegistry();
     this._enterpriseReasoningRequests = new AgentStreamRequestRegistry();
@@ -868,8 +860,7 @@ class IPCHandlers {
     return this._getWhisperVadSettings();
   }
 
-  // Shared by the upload IPC handler and the CLI bridge. `filePath` must
-  // already have passed resolveAllowedAudioPath (or approveAudioPath).
+  // `filePath` must already have passed resolveAllowedAudioPath.
   async transcribeLocalFile(filePath, options = {}) {
     const audioBuffer = fs.readFileSync(filePath);
     if (isSherpaLocalProvider(options.provider)) {
@@ -881,16 +872,6 @@ class IPCHandlers {
     });
   }
 
-  approveAudioPath(filePath) {
-    approveAudioPath(filePath);
-  }
-
-  listLocalTranscriptionModels() {
-    return listLocalTranscriptionModels({
-      whisperManager: this.whisperManager,
-      parakeetManager: this.parakeetManager,
-    });
-  }
 
   _resolveWhisperVadOptions(context) {
     const settings = this._getWhisperVadSettings();
@@ -906,11 +887,6 @@ class IPCHandlers {
     };
   }
 
-  // Note writes are journaled by SQLite triggers (pending_vector_changes); this
-  // only wakes an active semantic index to drain them.
-  notifyVectorChanges() {
-    this.getSemanticSearch?.()?.notifyChanges();
-  }
 
   _mirrorDeleteFolderIfUnshared(folderName) {
     if (!this._noteFilesEnabled) return;
@@ -1377,7 +1353,6 @@ class IPCHandlers {
       if (!ONBOARDING_DEMO_STATUSES.has(event.status)) return false;
       const text = typeof event.text === "string" ? event.text.slice(0, 20000) : undefined;
       const message = typeof event.message === "string" ? event.message.slice(0, 500) : undefined;
-      const tool = typeof event.tool === "string" ? event.tool.slice(0, 64) : undefined;
       const level = Number.isFinite(event.level)
         ? Math.min(1, Math.max(0, event.level))
         : undefined;
@@ -1387,7 +1362,6 @@ class IPCHandlers {
         status: event.status,
         text,
         message,
-        tool,
         level,
       });
       return true;
@@ -1791,7 +1765,7 @@ class IPCHandlers {
     // in the dictation renderer. Only confirmed renderer state may change the
     // main-process recording gate; raw key presses are merely requests and can
     // be declined while a transcript is still being finalized.
-    ipcMain.on("dictation-lifecycle-state-changed", (event, state, inputKind) => {
+    ipcMain.on("dictation-lifecycle-state-changed", (event, state) => {
       const dictationWindow = this.windowManager.mainWindow;
       if (
         !dictationWindow ||
@@ -1800,33 +1774,9 @@ class IPCHandlers {
       ) {
         return;
       }
-      this.windowManager.setDictationLifecycleState(state, inputKind);
+      this.windowManager.setDictationLifecycleState(state);
     });
 
-    ipcMain.on("show-agent-dictation-final-transcript", (event, text) => {
-      const dictationWindow = this.windowManager.mainWindow;
-      if (
-        !dictationWindow ||
-        dictationWindow.isDestroyed() ||
-        event.sender !== dictationWindow.webContents
-      ) {
-        return;
-      }
-      if (typeof text !== "string" || !text.trim()) return;
-      this.windowManager.showAgentDictationFinalTranscript(text);
-    });
-
-    ipcMain.on("dictation-audio-level-changed", (event, level) => {
-      const dictationWindow = this.windowManager.mainWindow;
-      if (
-        !dictationWindow ||
-        dictationWindow.isDestroyed() ||
-        event.sender !== dictationWindow.webContents
-      ) {
-        return;
-      }
-      this.windowManager.setDictationAudioLevel(level);
-    });
 
     // Dictionary handlers
     ipcMain.on("auto-learn-changed", (_event, enabled) => {
@@ -1995,7 +1945,6 @@ class IPCHandlers {
         );
         if (result?.success && result?.note) {
           setImmediate(() => broadcastToWindows("note-added", result.note));
-          this.notifyVectorChanges();
           this._asyncMirrorWrite(result.note);
         }
         return result;
@@ -2018,7 +1967,6 @@ class IPCHandlers {
       const result = this.databaseManager.updateNote(id, updates);
       if (result?.success && result?.note) {
         setImmediate(() => broadcastToWindows("note-updated", result.note));
-        this.notifyVectorChanges();
         this._asyncMirrorWrite(result.note);
         if (updates.participants) {
           this._tryAutoLabelOneOnOne(id);
@@ -2035,69 +1983,6 @@ class IPCHandlers {
     ipcMain.handle("db-search-notes", async (event, query, limit, spaceId, folderId) => {
       return this.databaseManager.searchNotes(query, limit, spaceId, folderId);
     });
-
-    ipcMain.handle(
-      "db-semantic-search-notes",
-      async (event, query, limit = 5, spaceId, folderId) => {
-        try {
-          // Qdrant payload updates are best-effort. Use its space filter to
-          // reduce the candidate set, then validate every scoped vector hit
-          // against SQLite before it can enter the fused ranking.
-          const overFetch = folderId != null ? limit * 4 : limit * 2;
-          const vectorFilter =
-            spaceId != null
-              ? { must: [{ key: "space_id", match: { value: spaceId } }] }
-              : undefined;
-          const [ftsResults, vectorResults] = await Promise.all([
-            this.databaseManager.searchNotes(query, overFetch, spaceId, folderId),
-            this.getSemanticSearch?.()?.search(query, overFetch, vectorFilter),
-          ]);
-          if (vectorResults == null) return ftsResults.slice(0, limit);
-          const scopedIds = new Set(
-            this.databaseManager.getNoteIdsInScope(
-              spaceId,
-              folderId,
-              vectorResults.map(({ noteId }) => noteId)
-            )
-          );
-
-          // Filter low-confidence semantic matches before RRF
-          const filteredVectorResults = vectorResults.filter(
-            ({ noteId, score }) => score > 0.3 && scopedIds.has(noteId)
-          );
-
-          // Reciprocal Rank Fusion (K=60, matching cloud implementation)
-          const scores = new Map();
-          ftsResults.forEach((note, i) => {
-            scores.set(note.id, (scores.get(note.id) || 0) + 1 / (60 + i));
-          });
-          filteredVectorResults.forEach(({ noteId }, i) => {
-            scores.set(noteId, (scores.get(noteId) || 0) + 1 / (60 + i));
-          });
-
-          const rankedIds = [...scores.entries()]
-            .sort((a, b) => b[1] - a[1])
-            .slice(0, limit)
-            .map(([id]) => id);
-
-          const noteMap = new Map();
-          ftsResults.forEach((n) => noteMap.set(n.id, n));
-          for (const id of rankedIds) {
-            if (!noteMap.has(id)) {
-              const note = this.databaseManager.getNote(id);
-              if (note) noteMap.set(id, note);
-            }
-          }
-
-          return rankedIds.map((id) => noteMap.get(id)).filter(Boolean);
-        } catch (error) {
-          debugLogger.error("Semantic search failed, falling back to FTS5", {
-            error: error.message,
-          });
-          return this.databaseManager.searchNotes(query, limit, spaceId, folderId);
-        }
-      }
-    );
 
     ipcMain.handle("db-update-note-cloud-id", async (event, id, cloudId) => {
       return this.databaseManager.updateNoteCloudId(id, cloudId);
@@ -2133,7 +2018,6 @@ class IPCHandlers {
       const folderName = this._noteFilesEnabled ? this._getFolderName(id) : null;
       const result = this.databaseManager.deleteFolder(id);
       if (result?.success) {
-        this.notifyVectorChanges();
         // Other accounts' notes were released to the space root; their mirror
         // files leave with the folder directory, so rewrite the live ones.
         for (const note of result.relocatedNotes ?? []) {
@@ -2166,7 +2050,6 @@ class IPCHandlers {
       const result = this.databaseManager.moveFolderToSpace(id, spaceId);
       if (result?.success) {
         // Qdrant payloads carry space_id — the triggers journaled the moved notes.
-        this.notifyVectorChanges();
         if (result.folder) {
           setImmediate(() => broadcastToWindows("folder-synced", result.folder));
         }
@@ -2233,7 +2116,6 @@ class IPCHandlers {
       }
       try {
         const result = this.databaseManager.deleteAccountData(accountId);
-        this.notifyVectorChanges();
         for (const noteId of result.deletedNoteIds) {
           this._asyncMirrorDelete(noteId);
         }
@@ -2265,9 +2147,6 @@ class IPCHandlers {
       const result = this.databaseManager.purgeSpace(id, options);
       if (result?.success) {
         if (!result.preservedForOtherAccounts) {
-          // The purge row and the relocated notes' trigger rows drain together.
-          this.databaseManager.addPendingVectorPurge(result.spaceId);
-          this.notifyVectorChanges();
           for (const note of result.relocatedNotes ?? []) {
             this._asyncMirrorWrite(note);
           }
@@ -2285,158 +2164,6 @@ class IPCHandlers {
       return result;
     });
 
-    ipcMain.handle("db-get-actions", async () => {
-      return this.databaseManager.getActions();
-    });
-
-    ipcMain.handle("db-get-action", async (event, id) => {
-      return this.databaseManager.getAction(id);
-    });
-
-    ipcMain.handle("db-create-action", async (event, name, description, prompt, icon) => {
-      const result = this.databaseManager.createAction(name, description, prompt, icon);
-      if (result?.success && result?.action) {
-        setImmediate(() => {
-          broadcastToWindows("action-created", result.action);
-        });
-      }
-      return result;
-    });
-
-    ipcMain.handle("db-update-action", async (event, id, updates) => {
-      const result = this.databaseManager.updateAction(id, updates);
-      if (result?.success && result?.action) {
-        setImmediate(() => {
-          broadcastToWindows("action-updated", result.action);
-        });
-      }
-      return result;
-    });
-
-    ipcMain.handle("db-delete-action", async (event, id) => {
-      const result = this.databaseManager.deleteAction(id);
-      if (result?.success) {
-        setImmediate(() => {
-          broadcastToWindows("action-deleted", { id });
-        });
-      }
-      return result;
-    });
-
-    // Agent conversation handlers
-    ipcMain.handle(
-      "db-create-agent-conversation",
-      async (event, title, noteId, spaceId, folderId) => {
-        return this.databaseManager.createAgentConversation(title, noteId, spaceId, folderId);
-      }
-    );
-
-    ipcMain.handle("db-get-conversations-for-note", async (event, noteId, limit) => {
-      return this.databaseManager.getConversationsForNote(noteId, limit);
-    });
-
-    ipcMain.handle(
-      "db-get-conversations-for-container",
-      async (event, spaceId, folderId, limit) => {
-        return this.databaseManager.getConversationsForContainer(spaceId, folderId, limit);
-      }
-    );
-
-    ipcMain.handle("db-get-agent-conversations", async (event, limit) => {
-      return this.databaseManager.getAgentConversations(limit);
-    });
-
-    ipcMain.handle("db-get-agent-conversation", async (event, id) => {
-      return this.databaseManager.getAgentConversation(id);
-    });
-
-    ipcMain.handle("db-delete-agent-conversation", async (event, id) => {
-      const result = this.databaseManager.deleteAgentConversation(id);
-      if (this.vectorIndex?.isReady?.()) {
-        this.vectorIndex.deleteConversationChunks(id).catch(() => {});
-      }
-      return result;
-    });
-
-    ipcMain.handle("db-update-agent-conversation-title", async (event, id, title) => {
-      return this.databaseManager.updateAgentConversationTitle(id, title);
-    });
-
-    ipcMain.handle(
-      "db-add-agent-message",
-      async (event, conversationId, role, content, metadata) => {
-        const result = this.databaseManager.addAgentMessage(
-          conversationId,
-          role,
-          content,
-          metadata
-        );
-        if (result && this.vectorIndex?.isReady?.()) {
-          const conv = this.databaseManager.getAgentConversation(conversationId);
-          if (conv && conv.messages?.length % 3 === 0) {
-            this.vectorIndex
-              .upsertConversationChunks(conversationId, conv.title, conv.messages)
-              .catch(() => {});
-          }
-        }
-        return result;
-      }
-    );
-
-    ipcMain.handle("db-get-agent-messages", async (event, conversationId) => {
-      return this.databaseManager.getAgentMessages(conversationId);
-    });
-
-    ipcMain.handle(
-      "db-get-agent-conversations-with-preview",
-      async (event, limit, offset, includeArchived) => {
-        return this.databaseManager.getAgentConversationsWithPreview(
-          limit,
-          offset,
-          includeArchived
-        );
-      }
-    );
-
-    ipcMain.handle("db-search-agent-conversations", async (event, query, limit) => {
-      return this.databaseManager.searchAgentConversations(query, limit);
-    });
-
-    ipcMain.handle("db-archive-agent-conversation", async (event, id) => {
-      return this.databaseManager.archiveAgentConversation(id);
-    });
-
-    ipcMain.handle("db-unarchive-agent-conversation", async (event, id) => {
-      return this.databaseManager.unarchiveAgentConversation(id);
-    });
-
-    ipcMain.handle("db-update-agent-conversation-cloud-id", async (event, id, cloudId) => {
-      return this.databaseManager.updateAgentConversationCloudId(id, cloudId);
-    });
-
-    ipcMain.handle("db-semantic-search-conversations", async (event, query, limit) => {
-      if (this.vectorIndex?.isReady?.()) {
-        try {
-          const vectorResults = await this.vectorIndex.searchConversations(query, limit);
-          if (vectorResults?.length > 0) {
-            const ids = vectorResults.map((r) => r.conversationId);
-            const previews = ids
-              .map((id) => this.databaseManager.getAgentConversation(id))
-              .filter(Boolean)
-              .map((c) => ({
-                ...c,
-                message_count: c.messages?.length ?? 0,
-                last_message: c.messages?.[c.messages.length - 1]?.content,
-              }));
-            if (previews.length > 0) return previews;
-          }
-        } catch {
-          // fall through to keyword search
-        }
-      }
-      return this.databaseManager.searchAgentConversations(query, limit);
-    });
-
     // Notes sync
     ipcMain.handle("db-get-pending-notes", (_, spaceKind) =>
       this.databaseManager.getPendingNotes(spaceKind)
@@ -2451,7 +2178,6 @@ class IPCHandlers {
       const note = this.databaseManager.upsertNoteFromCloud(cloudNote, localFolderId, localSpaceId);
       if (note) {
         setImmediate(() => broadcastToWindows("note-synced", note));
-        this.notifyVectorChanges();
       }
       return note;
     });
@@ -2496,7 +2222,6 @@ class IPCHandlers {
     ipcMain.handle("db-hard-delete-note", (_, id) => {
       const result = this.databaseManager.hardDeleteNote(id);
       if (result?.success) {
-        this.notifyVectorChanges();
         this._asyncMirrorDelete(id);
         setImmediate(() => broadcastToWindows("note-deleted", { id }));
       }
@@ -2537,7 +2262,6 @@ class IPCHandlers {
     ipcMain.handle("db-restore-folder-after-denied-delete", (_, id) => {
       const result = this.databaseManager.restoreFolderAfterDeniedDelete(id);
       if (result?.success) {
-        this.notifyVectorChanges();
         for (const note of result.notes ?? []) {
           this._asyncMirrorWrite(note);
         }
@@ -2553,7 +2277,6 @@ class IPCHandlers {
     ipcMain.handle("db-hard-delete-folder", (_, id) => {
       const result = this.databaseManager.hardDeleteFolder(id);
       if (result?.success) {
-        this.notifyVectorChanges();
         // Other accounts' notes were released to the space root; their mirror
         // files leave with the folder directory, so rewrite the live ones.
         for (const note of result.relocatedNotes ?? []) {
@@ -2571,7 +2294,6 @@ class IPCHandlers {
       if (result?.success) {
         // The triggers journaled the relocated and deleted notes. Mirror files live by
         // folder, so rewrite the relocated notes and drop the server-owned ones.
-        this.notifyVectorChanges();
         for (const note of result.relocatedNotes ?? []) {
           this._asyncMirrorWrite(note);
         }
@@ -2614,33 +2336,6 @@ class IPCHandlers {
       if (result?.success && result.space) {
         // Live skeleton toggling: the tree keys pending/synced off this flag.
         setImmediate(() => broadcastToWindows("space-synced", result.space));
-      }
-      return result;
-    });
-
-    // Conversations sync
-    ipcMain.handle("db-get-pending-conversations", () =>
-      this.databaseManager.getPendingConversations()
-    );
-    ipcMain.handle("db-get-pending-conversation-deletes", () =>
-      this.databaseManager.getPendingConversationDeletes()
-    );
-    ipcMain.handle("db-get-conversation-by-client-id", (_, clientId) =>
-      this.databaseManager.getConversationByClientId(clientId)
-    );
-    ipcMain.handle("db-upsert-conversation-from-cloud", (_, cloudConv, messages) =>
-      this.databaseManager.upsertConversationFromCloud(cloudConv, messages)
-    );
-    ipcMain.handle("db-acknowledge-conversation-create", (_, id, snapshot, cloudId) =>
-      this.databaseManager.acknowledgeConversationCreate(id, snapshot, cloudId)
-    );
-    ipcMain.handle("db-mark-conversation-synced", (_, id, cloudId) =>
-      this.databaseManager.markConversationSynced(id, cloudId)
-    );
-    ipcMain.handle("db-hard-delete-conversation", (_, id) => {
-      const result = this.databaseManager.hardDeleteConversation(id);
-      if (result?.success) {
-        setImmediate(() => broadcastToWindows("conversation-deleted", { id }));
       }
       return result;
     });
@@ -2919,37 +2614,6 @@ class IPCHandlers {
       } finally {
         release();
       }
-    });
-
-    ipcMain.handle("capture-selected-text", async (event, options = {}) => {
-      if (!this.selectionManager) {
-        return { status: "unavailable", code: "selection_manager_unavailable" };
-      }
-      return this.selectionManager.captureSelectedText({
-        probeEditable: options.probeEditable === true,
-      });
-    });
-
-    ipcMain.handle("replace-selected-text", async (event, sessionId, text, options = {}) => {
-      if (!this.selectionManager) {
-        return { success: false, code: "selection_manager_unavailable" };
-      }
-      return this.selectionManager.replaceSelectedText(sessionId, text, {
-        restoreClipboard: options.restoreClipboard !== false,
-        allowClipboardFallback: options.allowClipboardFallback === true,
-        webContents: event.sender,
-      });
-    });
-
-    ipcMain.handle("paste-at-captured-target", async (event, sessionId, text, options = {}) => {
-      if (!this.selectionManager) {
-        return { success: false, code: "selection_manager_unavailable" };
-      }
-      return this.selectionManager.pasteAtCapturedTarget(sessionId, text, {
-        restoreClipboard: options.restoreClipboard !== false,
-        allowClipboardFallback: options.allowClipboardFallback === true,
-        webContents: event.sender,
-      });
     });
 
     ipcMain.handle("paste-text", async (event, text, options) => {
@@ -3902,11 +3566,6 @@ class IPCHandlers {
         await this.diarizationManager?.shutdown();
       } catch (e) {
         errors.push(`Diarization stop: ${e.message}`);
-      }
-      try {
-        await this.getSemanticSearch?.()?.stop();
-      } catch (e) {
-        errors.push(`Vector index stop: ${e.message}`);
       }
       try {
         const onnxWorkerClient = require("./onnxWorkerClient");
@@ -5183,13 +4842,6 @@ class IPCHandlers {
           clearVars.push("CLEANUP_PROVIDER", "LOCAL_CLEANUP_MODEL");
         }
 
-        if (localServer.dictationAgent) {
-          setVars.DICTATION_AGENT_PROVIDER = "local";
-          setVars.LOCAL_DICTATION_AGENT_MODEL = localServer.dictationAgent;
-        } else {
-          clearVars.push("DICTATION_AGENT_PROVIDER", "LOCAL_DICTATION_AGENT_MODEL");
-        }
-
         // Stop the shared llama-server only when no scope still needs the model
         // it holds, so the active scopes keep their server when another leaves.
         const modelManager = require("./modelManagerBridge").default;
@@ -5596,149 +5248,8 @@ class IPCHandlers {
     );
     ipcMain.handle("open-accessibility-settings", () => openSystemSettings("accessibility"));
     ipcMain.handle("open-system-audio-settings", () => openSystemSettings("systemAudio"));
-    ipcMain.handle("open-screen-recording-settings", () => openSystemSettings("screenRecording"));
     ipcMain.handle("open-login-items-settings", () => openSystemSettings("loginItems"));
 
-    ipcMain.handle("capture-screen-context", async (event) => {
-      // Capture immediately so the screenshot reflects the invocation moment;
-      // the policy verdict resolves concurrently and decides whether to
-      // return it. A signed-out user has no workspace and no policy; managed
-      // users are gated even if a stale renderer asks. null matches capture's
-      // contract — a screenshot must never break the dictation it accompanies.
-      // The target's window rect picks the display it is on rather than the one
-      // under the cursor, and the panel reposition has normally cached it already.
-      // A failed rect read falls back to the cursor rather than rejecting: the
-      // policy branch below can abandon this promise, and capture's contract is
-      // to yield null, never to throw.
-      const targetPid = this.textEditMonitor?.lastTargetPid;
-      const capturePromise = Promise.resolve(
-        targetPid ? this.textEditMonitor.getTargetWindowBounds?.(targetPid) : null
-      )
-        .catch(() => null)
-        .then((targetBounds) => screenContextCapture.captureActiveDisplay(targetBounds));
-      const authHeaders = await getAuthHeader(event);
-      if (authHeaders.Authorization || authHeaders.Cookie) {
-        // Bound the verdict wait: a lapsed policy TTL on a degraded network
-        // must not stall an allowed user's capture past the renderer's 3s
-        // consume race. The renderer gate already fails closed while policy
-        // is unresolved, so this defense-in-depth gate lets an unresolved
-        // verdict through while the refresh completes in flight — a resolved
-        // denial (cached or fresh) still blocks.
-        const snapshot = await Promise.race([
-          workspacePolicyManager.getPolicy({
-            expectedAuthGeneration: tokenStore.getState().generation,
-            authHeaders,
-          }),
-          new Promise((resolve) => setTimeout(() => resolve(null), 1500)),
-        ]);
-        if (snapshot && isScreenContextBlocked(snapshot)) {
-          debugLogger.warn(
-            "Screen context capture blocked by org policy",
-            { code: snapshot.code ?? null },
-            "screenContext"
-          );
-          return null;
-        }
-      }
-      return capturePromise;
-    });
-
-    // Snapshot the launch-time TCC status so a mid-session grant (which macOS
-    // only honors after a relaunch) is detectable even if the renderer never
-    // checked before the user granted.
-    screenContextCapture.getAccessStatus();
-
-    ipcMain.handle("check-screen-recording-access", () => screenContextCapture.getAccessResult());
-
-    ipcMain.handle("request-screen-recording-access", async () => {
-      const status = await screenContextCapture.requestAccess();
-      if (process.platform === "darwin" && status !== "granted") {
-        await openSystemSettings("screenRecording");
-      }
-      return screenContextCapture.getAccessResult();
-    });
-
-    // Preserve the renderer setting while app-wide content protection is
-    // temporarily disabled for screen recording.
-    ipcMain.handle("screen-context-set-enabled", (event, enabled) => {
-      this.windowManager?.setScreenContextProtection(enabled);
-      return { success: true };
-    });
-
-    // Panel open: window becomes focusable so follow-up keyboard input works.
-    // Only the dictation renderer may flip main-window focusability.
-    ipcMain.handle("set-assistant-panel-open", (event, open) => {
-      const dictationWindow = this.windowManager?.mainWindow;
-      if (
-        !dictationWindow ||
-        dictationWindow.isDestroyed() ||
-        event.sender !== dictationWindow.webContents
-      ) {
-        return { success: false, error: "Not the dictation window" };
-      }
-      this.windowManager.setAssistantPanelOpen(open);
-      return { success: true };
-    });
-
-    // Busy state is enforced in the main process so a hotkey cannot trigger
-    // native capture side effects before the renderer has a chance to reject it.
-    ipcMain.handle("set-assistant-panel-busy", (event, busy) => {
-      const dictationWindow = this.windowManager?.mainWindow;
-      if (
-        !dictationWindow ||
-        dictationWindow.isDestroyed() ||
-        event.sender !== dictationWindow.webContents
-      ) {
-        return { success: false, error: "Not the dictation window" };
-      }
-      this.windowManager.setAssistantPanelBusy(busy);
-      return { success: true };
-    });
-
-    const isAgentDictationPill = (event) => {
-      const pillWindow = this.windowManager?.agentDictationPillWindow;
-      return pillWindow && !pillWindow.isDestroyed() && event.sender === pillWindow.webContents;
-    };
-
-    // The pill disables its own controls when an assistant or translation
-    // capture owns the lifecycle, but that state travels by IPC — a click can
-    // race it. Re-check here so a stale pill can never toggle or cancel a
-    // recording it does not own.
-    const isAgentDictationPillInteractive = () =>
-      this.windowManager.getAgentDictationPillState().interactive;
-
-    ipcMain.handle("toggle-agent-panel-dictation", (event) => {
-      if (!isAgentDictationPill(event) || !isAgentDictationPillInteractive()) {
-        return { success: false };
-      }
-      this.windowManager.sendToggleDictation();
-      return { success: true };
-    });
-
-    ipcMain.handle("cancel-agent-panel-dictation", (event) => {
-      if (!isAgentDictationPill(event) || !isAgentDictationPillInteractive()) {
-        return { success: false };
-      }
-      this.windowManager.sendCancelActiveDictation();
-      return { success: true };
-    });
-
-    ipcMain.handle("get-agent-dictation-pill-state", (event) => {
-      return isAgentDictationPill(event)
-        ? this.windowManager.getAgentDictationPillState()
-        : { lifecycle: "idle", interactive: false, horizontalDirection: "left" };
-    });
-
-    ipcMain.handle("resize-agent-dictation-pill-to-content", (event, surfaceHeight = null) => {
-      if (!isAgentDictationPill(event)) return { success: false };
-      return this.windowManager.resizeAgentDictationPillToContent(surfaceHeight);
-    });
-
-    ipcMain.handle("set-agent-dictation-pill-interactivity", (event, interactive) => {
-      if (!isAgentDictationPill(event)) return { success: false };
-      this.windowManager.setAgentDictationPillInteractivity(Boolean(interactive));
-      return { success: true };
-    });
 
     ipcMain.handle("open-calendar-privacy-settings", () => openSystemSettings("calendars"));
 
@@ -9463,167 +8974,6 @@ class IPCHandlers {
       this._cloudReasonRequests.cancelSender(event.sender.id);
     });
 
-    ipcMain.on("cloud-agent-stream-start", async (event, requestId, messages, opts = {}) => {
-      if (typeof requestId !== "string" || !requestId.trim()) return;
-
-      const sender = event.sender;
-      const senderId = sender.id;
-      const controller = this._agentStreamRequests.begin(senderId, requestId);
-      const cancelSenderRequests = () => this._agentStreamRequests.cancelSender(senderId);
-      const sendToRenderer = (channel, payload) => {
-        if (!sender.isDestroyed()) sender.send(channel, payload);
-      };
-      sender.once("destroyed", cancelSenderRequests);
-
-      try {
-        const apiUrl = getApiUrl();
-        if (!apiUrl) throw new Error("OpenWhispr API URL not configured");
-
-        const authHeader = await getAuthHeader(event);
-        if (!Object.keys(authHeader).length) throw new Error("Not authenticated");
-
-        const response = await proxyFetch(`${apiUrl}/api/agent/stream`, {
-          method: "POST",
-          headers: withPolicyHeaders({
-            "Content-Type": "application/json",
-            ...authHeader,
-          }),
-          body: JSON.stringify({
-            messages,
-            systemPrompt: opts.systemPrompt,
-            tools: opts.tools,
-            ...(opts.screenContext ? { screenContext: opts.screenContext } : {}),
-            sessionId: this.sessionId,
-            clientType: "desktop",
-            appVersion: app.getVersion(),
-          }),
-          signal: controller.signal,
-        });
-
-        if (!response.ok) {
-          const error = await readPolicyResponseError(response, `API error: ${response.status}`);
-          if (response.status === 401 && !error.code) error.code = "AUTH_EXPIRED";
-          if (response.status === 503 && !error.code) error.code = "SERVER_ERROR";
-          sendToRenderer("cloud-agent-stream-error", {
-            requestId,
-            ...toPolicyFailure(error),
-          });
-          return;
-        }
-
-        const reader = response.body.getReader();
-        const decoder = new TextDecoder();
-        let buffer = "";
-
-        try {
-          while (true) {
-            const { done, value } = await reader.read();
-            if (done) break;
-
-            buffer += decoder.decode(value, { stream: true });
-            const lines = buffer.split("\n");
-            buffer = lines.pop() || "";
-
-            for (const line of lines) {
-              if (!line.trim()) continue;
-              try {
-                sendToRenderer("cloud-agent-stream-chunk", {
-                  requestId,
-                  chunk: JSON.parse(line),
-                });
-              } catch {
-                // skip malformed NDJSON line
-              }
-            }
-          }
-          if (buffer.trim()) {
-            try {
-              sendToRenderer("cloud-agent-stream-chunk", {
-                requestId,
-                chunk: JSON.parse(buffer),
-              });
-            } catch {
-              // skip malformed remainder
-            }
-          }
-        } finally {
-          reader.releaseLock();
-        }
-
-        sendToRenderer("cloud-agent-stream-end", { requestId });
-      } catch (error) {
-        if (controller.signal.aborted) {
-          sendToRenderer("cloud-agent-stream-end", { requestId });
-          return;
-        }
-        debugLogger.error("Cloud agent stream error:", error);
-        sendToRenderer("cloud-agent-stream-error", {
-          requestId,
-          ...toPolicyFailure(error),
-        });
-      } finally {
-        sender.removeListener("destroyed", cancelSenderRequests);
-        this._agentStreamRequests.complete(senderId, requestId, controller);
-      }
-    });
-
-    ipcMain.on("cloud-agent-stream-cancel", (event, requestId) => {
-      if (typeof requestId !== "string" || !requestId.trim()) return;
-      this._agentStreamRequests.cancel(event.sender.id, requestId);
-    });
-
-    ipcMain.handle("agent-open-note", async (_event, noteId) => {
-      try {
-        const note = this.databaseManager.getNote(noteId);
-        await this.windowManager.queueNoteNavigation({
-          noteId,
-          folderId: note?.folder_id ?? null,
-        });
-        return { success: true };
-      } catch (error) {
-        debugLogger.error("Failed to open note from agent:", error);
-        return { success: false, error: error.message };
-      }
-    });
-
-    ipcMain.handle("agent-web-search", async (event, query, numResults = 5) => {
-      try {
-        const apiUrl = getApiUrl();
-        if (!apiUrl) throw new Error("OpenWhispr API URL not configured");
-
-        const authHeader = await getAuthHeader(event);
-        if (!Object.keys(authHeader).length) throw new Error("Not authenticated");
-
-        debugLogger.debug("Agent web search request", { query, numResults }, "cloud-api");
-
-        const response = await proxyFetch(`${apiUrl}/api/agent/web-search`, {
-          method: "POST",
-          headers: withPolicyHeaders({
-            "Content-Type": "application/json",
-            ...authHeader,
-          }),
-          body: JSON.stringify({ query, numResults }),
-        });
-
-        if (!response.ok) {
-          if (response.status === 401) {
-            return { success: false, error: "Session expired", code: "AUTH_EXPIRED" };
-          }
-          if (response.status === 503) {
-            return { success: false, error: "Request timed out", code: "SERVER_ERROR" };
-          }
-          const error = await readPolicyResponseError(response, `API error: ${response.status}`);
-          return toPolicyFailure(error);
-        }
-
-        const data = await response.json();
-        return { success: true, ...data };
-      } catch (error) {
-        debugLogger.error("Agent web search error:", error);
-        return toPolicyFailure(error);
-      }
-    });
-
     ipcMain.handle(
       "cloud-streaming-usage",
       async (event, text, audioDurationSeconds, opts = {}) => {
@@ -11240,43 +10590,6 @@ class IPCHandlers {
       return this.cortiStreaming.getStatus();
     });
 
-    // Agent mode handlers
-    ipcMain.handle("update-voice-agent-hotkey", async (_event, hotkey) => {
-      const hotkeyManager = this.windowManager.hotkeyManager;
-      const voiceAgentCallback = this.windowManager._voiceAgentHotkeyCallback;
-      if (!voiceAgentCallback) {
-        return { success: false, message: "Voice agent hotkey callback not initialized" };
-      }
-
-      if (!hotkey) {
-        const removed = await hotkeyManager.unregisterSlot("voiceAgent");
-        if (removed === false) return { success: false };
-        this.environmentManager.saveVoiceAgentKey?.("");
-        this.windowManager.reconcileNativeKeyListeners();
-        this._notifyHotkeyChanged("");
-        return { success: true, message: "Voice agent hotkey cleared" };
-      }
-
-      const result = await hotkeyManager.registerSlot("voiceAgent", hotkey, voiceAgentCallback, {
-        atomic: true,
-      });
-      this.windowManager.reconcileNativeKeyListeners();
-      if (result.success) {
-        this.environmentManager.saveVoiceAgentKey?.(hotkey);
-        this._notifyHotkeyChanged(hotkey);
-        return { success: true, message: `Voice agent hotkey updated to: ${hotkey}` };
-      }
-
-      return {
-        success: false,
-        message: result.error || `Failed to update voice agent hotkey to: ${hotkey}`,
-      };
-    });
-
-    ipcMain.handle("get-voice-agent-key", async () => {
-      return this.environmentManager.getVoiceAgentKey?.() || "";
-    });
-
     ipcMain.handle("update-translation-hotkey", async (_event, hotkey) => {
       const hotkeyManager = this.windowManager.hotkeyManager;
       const translationCallback = this.windowManager._translationHotkeyCallback;
@@ -11326,34 +10639,6 @@ class IPCHandlers {
         this._activeRecordingPipeline = null;
       }
       return { success: true };
-    });
-
-    // Provider-neutral availability over the shared calendar cache.
-    ipcMain.handle("calendar-get-availability", async (_event, request) => {
-      try {
-        return {
-          success: true,
-          availability: getCalendarAvailability({
-            request,
-            databaseManager: this.databaseManager,
-            calendarProviders: [
-              { provider: "google", manager: this.googleCalendarManager },
-              { provider: "microsoft", manager: this.microsoftCalendarManager },
-              { provider: "apple", manager: this.appleCalendarManager },
-            ],
-          }),
-        };
-      } catch (error) {
-        debugLogger.warn(
-          "Calendar availability request failed",
-          { error: error instanceof Error ? error.message : String(error) },
-          "calendar"
-        );
-        return {
-          success: false,
-          error: error instanceof Error ? error.message : "Failed to check calendar availability",
-        };
-      }
     });
 
     // Google Calendar
@@ -11847,7 +11132,6 @@ class IPCHandlers {
           // never per-note work (sync storm / O(notes × files) mirror scans).
           setImmediate(() => {
             try {
-              this.notifyVectorChanges();
               if (this._noteFilesEnabled) this._rebuildMirror();
             } catch (sideEffectError) {
               debugLogger.error(
@@ -12458,7 +11742,6 @@ class IPCHandlers {
     const result = this.databaseManager.deleteNote(id);
     if (result?.success) {
       setImmediate(() => broadcastToWindows("note-deleted", { id }));
-      this.notifyVectorChanges();
       this._asyncMirrorDelete(id);
     }
     return result;

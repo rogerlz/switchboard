@@ -8,7 +8,6 @@
 // locally. A scope that is switched off never runs, so it needs no server.
 // Modes and models must be the resolved, policy-effective ones (see
 // selectLocalServerPrefs), since those are what the request path runs on.
-// dictationAgentVision is absent because it can never be local.
 const localModelOf = (enabled, mode, model) =>
   enabled && mode === "local" ? model?.trim() || "" : "";
 
@@ -16,28 +15,20 @@ export function resolveLocalServerNeeds({
   useCleanupModel,
   cleanupMode,
   cleanupModel,
-  useDictationAgent,
-  dictationAgentMode,
-  dictationAgentModel,
   noteFormattingMode,
   noteFormattingModel,
-  chatAgentMode,
-  chatAgentModel,
   useDictationTranslation,
   translationMode,
   translationModel,
 }) {
   const cleanup = localModelOf(useCleanupModel, cleanupMode, cleanupModel);
-  const dictationAgent = localModelOf(useDictationAgent, dictationAgentMode, dictationAgentModel);
   const models = [
     cleanup,
-    dictationAgent,
     localModelOf(true, noteFormattingMode, noteFormattingModel),
-    localModelOf(true, chatAgentMode, chatAgentModel),
     localModelOf(useDictationTranslation, translationMode, translationModel),
   ].filter((model, index, all) => model && all.indexOf(model) === index);
 
-  return { cleanup, dictationAgent, models };
+  return { cleanup, models };
 }
 
 // The server holds one model, so it can also go when no scope needs the model

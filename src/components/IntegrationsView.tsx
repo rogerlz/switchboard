@@ -22,8 +22,6 @@ import { useSystemAudioPermission } from "../hooks/useSystemAudioPermission";
 import { canManageSystemAudioInApp } from "../utils/systemAudioAccess";
 import type { CalendarAccount } from "../types/calendar";
 import ApiKeysSection from "./ApiKeysSection";
-import CliIntegrationCard from "./CliIntegrationCard";
-import McpIntegrationCard from "./McpIntegrationCard";
 import googleCalendarIcon from "../assets/icons/google-calendar.svg";
 import microsoftCalendarIcon from "../assets/icons/microsoft-calendar.svg";
 import appleCalendarIcon from "../assets/icons/apple-calendar.svg";
@@ -464,16 +462,6 @@ export default function IntegrationsView({ isPaid, onUpgrade }: IntegrationsView
             </div>
           </SettingsPanelRow>
         </SettingsPanel>
-      </div>
-
-      <div>
-        <SectionLabel>{t("integrations.sections.mcp")}</SectionLabel>
-        <McpIntegrationCard isPaid={isPaid} onUpgrade={onUpgrade} />
-      </div>
-
-      <div>
-        <SectionLabel>{t("integrations.sections.cli")}</SectionLabel>
-        <CliIntegrationCard isPaid={isPaid} onUpgrade={onUpgrade} />
       </div>
 
       {!hasAccounts && (

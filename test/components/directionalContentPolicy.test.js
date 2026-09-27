@@ -30,7 +30,6 @@ test("dynamic prose and identity values keep their own direction", () => {
       "src/components/notes/SpacesTree.tsx",
       /<span\s+dir="auto"[^>]*\s+title=\{workspace\.name\}[\s\S]*?\{workspace\.name\}/,
     ],
-    ["src/components/EmailVerificationStep.tsx", /<span\s+dir="ltr"[^>]*>\s*\{email\}/],
     [
       "src/components/SettingsModal.tsx",
       /<p\s+dir="auto"[^>]*>\s*\{user\.name \|\| t\("settingsPage\.account\.user"\)\}/,
@@ -75,16 +74,11 @@ test("technical output values remain LTR inside an Arabic document", () => {
     ],
     ["src/components/ui/TechnicalErrorDetails.tsx", /<pre\s+dir="ltr"[\s\S]*?\{text\}/],
     ["src/components/ui/NixOsPasteInfo.tsx", /<div\s+dir="ltr"[\s\S]*?<pre/],
-    ["src/components/McpIntegrationCard.tsx", /<span\s+dir="ltr"[\s\S]*?\{MCP_URL\}/],
     [
       "src/components/settings/WorkspaceBillingCard.tsx",
       /<span\s+dir="ltr"[^>]*>\s*\{seatsUsed\} \/ \{seatsTotal\}/,
     ],
     ["src/components/settings/WorkspaceMembersTab.tsx", /<bdi dir="ltr">\{member\.email\}<\/bdi>/],
-    [
-      "src/components/dictation/AssistantPanel.tsx",
-      /<kbd\s+dir="ltr"[\s\S]*?\{readableVoiceHotkey\}/,
-    ],
     [
       "src/components/EnterpriseProviderConfig.tsx",
       /<select\s+dir="ltr"\s+value=\{store\.bedrockRegion\}/,
@@ -103,14 +97,6 @@ test("technical output values remain LTR inside an Arabic document", () => {
     ],
     ["src/components/ui/SidebarModal.tsx", /<span\s+dir="ltr"[\s\S]*?v\{version\}/],
     ["src/components/ui/ModelCardList.tsx", /<span\s+dir="ltr"[\s\S]*?\{model\.label\}/],
-    [
-      "src/components/onboarding/ProviderSetupStep.tsx",
-      /<span\s+dir="ltr">\s*\{models\.find[\s\S]*?\?\? selectedModel\}/,
-    ],
-    [
-      "src/components/onboarding/RequiredModelDownloadStep.tsx",
-      /<span\s+dir="ltr"[\s\S]*?\{info\?\.name \?\? modelId\}/,
-    ],
   ];
 
   for (const [file, pattern] of expectations) {
@@ -171,21 +157,9 @@ test("direction-sensitive transient motion mirrors in RTL", () => {
 
 test("user-authored names and previews detect direction at their display boundary", () => {
   const expectations = [
-    ["src/components/CommandSearch.tsx", /<p\s+dir="auto"[^>]*>\s*\{conv\.title\}/],
-    [
-      "src/components/CommandSearch.tsx",
-      /<p\s+dir="auto"[^>]*>\s*\{conv\.last_message\.slice\(0, 90\)\}/,
-    ],
     ["src/components/CommandSearch.tsx", /<span\s+dir="auto"[^>]*>\s*\{spaceLabel\(scopeSpace\)\}/],
     ["src/components/CommandSearch.tsx", /<span\s+dir="auto"[^>]*>\s*\{spaceLabel\(space\)\}/],
     ["src/components/CommandSearch.tsx", /<p\s+dir="auto"[^>]*>\s*\{target\.label\}/],
-    ["src/components/chat/ConversationItem.tsx", /<p\s+dir="auto"[^>]*>\s*\{conversation\.title\}/],
-    [
-      "src/components/chat/ConversationItem.tsx",
-      /<p\s+dir="auto"[^>]*>\s*\{conversation\.preview\}/,
-    ],
-    ["src/components/chat/ChatMessage.tsx", /<p\s+dir="auto"[^>]*>\s*\{title\}/],
-    ["src/components/DictionaryView.tsx", /<span\s+dir="auto"[^>]*>\s*\{agentName\}/],
     [
       "src/components/notes/MeetingTranscriptChat.tsx",
       /<span\s+dir="auto"[^>]*>\s*\{speakerLabel\}/,

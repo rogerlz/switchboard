@@ -35,7 +35,7 @@ test("cleanup toast localizes AWS recovery guidance and keeps fallback status qu
     "/components/CleanupFailureToastListener.tsx"
   );
   const { default: i18n } = await vite.ssrLoadModule("/i18n.ts");
-  await i18n.changeLanguage("es");
+  await i18n.changeLanguage("pt");
   const { recordCleanupFailure, useCleanupFailureStore } = await vite.ssrLoadModule(
     "/stores/cleanupFailureStore.ts"
   );
@@ -63,9 +63,9 @@ test("cleanup toast localizes AWS recovery guidance and keeps fallback status qu
   assert.equal(globalThis.__cleanupFailureToasts.length, 1);
   assert.deepEqual(globalThis.__cleanupFailureToasts[0], {
     title:
-      "AWS Bedrock no está disponible temporalmente debido a una alta demanda. Este es un problema del servicio de AWS, no una interrupción de OpenWhispr. Vuelve a intentarlo en unos minutos.",
-    description: "Ejecuta el siguiente comando en tu terminal para volver a autenticarte:",
-    secondaryDescription: "Tu dictado se pegó sin limpieza con IA.",
+      "O AWS Bedrock está temporariamente indisponível devido à alta demanda. Este é um problema do serviço da AWS, não uma indisponibilidade do OpenWhispr. Tente novamente em alguns minutos.",
+    description: "Execute o comando abaixo no terminal para se autenticar novamente:",
+    secondaryDescription: "Seu ditado foi colado sem limpeza por IA.",
     copyCommand: "aws sso login --profile company-sso",
     technicalDetails: failure.technicalDetails,
     variant: "destructive",
@@ -82,7 +82,7 @@ test("technical AWS details use the selected UI language", async (t) => {
     "/components/ui/TechnicalErrorDetails.tsx"
   );
   const { default: i18n } = await vite.ssrLoadModule("/i18n.ts");
-  await i18n.changeLanguage("es");
+  await i18n.changeLanguage("pt");
 
   const markup = renderToStaticMarkup(
     React.createElement(TechnicalErrorDetails, {
@@ -95,10 +95,10 @@ test("technical AWS details use the selected UI language", async (t) => {
     })
   );
 
-  assert.match(markup, /Detalles técnicos/);
-  assert.match(markup, /Estado HTTP: 503/);
-  assert.match(markup, /Excepción de AWS: ServiceUnavailableException/);
-  assert.match(markup, /ID de solicitud de AWS: request-123/);
-  assert.match(markup, /Error subyacente: Bedrock overloaded/);
-  assert.match(markup, /aria-label="Copiar detalles técnicos"/);
+  assert.match(markup, /Detalhes técnicos/);
+  assert.match(markup, /Status HTTP: 503/);
+  assert.match(markup, /Exceção da AWS: ServiceUnavailableException/);
+  assert.match(markup, /ID da solicitação da AWS: request-123/);
+  assert.match(markup, /Erro subjacente: Bedrock overloaded/);
+  assert.match(markup, /aria-label="Copiar detalhes técnicos"/);
 });
