@@ -4182,5 +4182,8 @@
     },
     "start": "Fazer anotações",
     "join": "Entrar e transcrever"
+  },
+  "trayCalendar": {
+    "hideWeekends": "Ocultar fins de semana"
   }
 }

@@ -10,7 +10,8 @@ import {
   prepareAuthRequest,
 } from "./authRequestContext";
 
-export const AUTH_URL = import.meta.env.VITE_AUTH_URL || "https://auth.openwhispr.com";
+// fork: no default auth server, so nothing contacts auth.openwhispr.com
+export const AUTH_URL = import.meta.env.VITE_AUTH_URL || "";
 export const authClient = createAuthClient({
   baseURL: AUTH_URL,
   plugins: [ssoClient()],

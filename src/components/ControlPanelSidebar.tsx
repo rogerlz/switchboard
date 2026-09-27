@@ -66,7 +66,7 @@ export default function ControlPanelSidebar({
   );
 
   const showLimitBanner = upsell === "show" && Boolean(isSignedIn) && Boolean(isOverLimit);
-  const showUpgradeBanner = upsell === "show" && !showLimitBanner && !upgradeDismissed;
+  const showUpgradeBanner = false; // fork: no Pro upsell
 
   const navItems = useControlPanelNavItems();
 
@@ -229,7 +229,13 @@ export default function ControlPanelSidebar({
 
         <div className="mx-1 h-px bg-border/10 dark:bg-white/6 my-1.5!" />
 
-        <div className="flex items-center gap-2.5 px-2.5 py-1.5 rounded-md">
+        {/* fork: no "Not signed in" row */}
+        <div
+          className={cn(
+            "flex items-center gap-2.5 px-2.5 py-1.5 rounded-md",
+            !isSignedIn && "hidden"
+          )}
+        >
           {userImage ? (
             <img src={userImage} alt="" className="w-6 h-6 rounded-full shrink-0 object-cover" />
           ) : (

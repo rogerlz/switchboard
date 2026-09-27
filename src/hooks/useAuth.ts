@@ -1,5 +1,5 @@
 import { useEffect, useState, useSyncExternalStore } from "react";
-import { authClient, getGracePeriodRemainingMs, isWithinGracePeriod } from "../lib/auth";
+import { AUTH_URL, authClient, getGracePeriodRemainingMs, isWithinGracePeriod } from "../lib/auth";
 import {
   accountScopeHasMandatoryReconciliation,
   accountScopeRequiresPurge,
@@ -70,7 +70,8 @@ async function refreshManagedEnterpriseIdentity(accountId: string, authGeneratio
 }
 
 export function useAuth() {
-  const useSession = authClient?.useSession ?? useStaticSession;
+  // fork: without an auth server, never mount the session (it fetches on mount and focus)
+  const useSession = (AUTH_URL && authClient?.useSession) || useStaticSession;
   const { data: ambientSession, isPending, error: sessionError, refetch } = useSession();
   const accountRevision = useSyncExternalStore(
     subscribeAccountScope,

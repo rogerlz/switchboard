@@ -94,7 +94,8 @@ export default function OnboardingFlow({ onComplete }: OnboardingFlowProps) {
   const { t } = useTranslation();
   const platform = getPlatform();
   const { isSignedIn } = useAuth();
-  const agentAllowed = usePolicyStore(isAgentAllowed);
+  // fork: skip the voice assistant steps and their model download
+  const agentAllowed = usePolicyStore(isAgentAllowed) && false;
   const screenContextAllowed = usePolicyStore(isScreenContextAllowed);
   const settings = useSettings();
   const settingsStore = useSettingsStore();

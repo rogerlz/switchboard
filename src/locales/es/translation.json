@@ -4182,5 +4182,8 @@
     },
     "start": "Tomar notas",
     "join": "Unirse y transcribir"
+  },
+  "trayCalendar": {
+    "hideWeekends": "Ocultar fines de semana"
   }
 }

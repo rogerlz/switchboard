@@ -340,7 +340,8 @@ class TrayManager {
 
     const contextMenu = Menu.buildFromTemplate(this.buildContextMenuTemplate());
     this.tray.setToolTip(i18nMain.t("tray.tooltip"));
-    this.tray.setContextMenu(contextMenu);
+    this.contextMenu = contextMenu; // fork: TrayCalendar shows it on right click
+    if (!this.calendar) this.tray.setContextMenu(contextMenu);
   }
 
   setupTrayEventHandlers() {

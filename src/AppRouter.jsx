@@ -23,6 +23,7 @@ const isOnboardingInProgress = () =>
 
 const ControlPanel = React.lazy(() => import("./components/ControlPanel.tsx"));
 const OnboardingFlow = React.lazy(() => import("./components/OnboardingFlow.tsx"));
+const TrayCalendar = React.lazy(() => import("./components/TrayCalendar.tsx"));
 
 export default function AppRouter() {
   useTheme();
@@ -30,6 +31,14 @@ export default function AppRouter() {
 
   if (params.includes("meeting-notification=true")) {
     return <MeetingNotificationOverlay />;
+  }
+
+  if (params.includes("tray-calendar=true")) {
+    return (
+      <Suspense fallback={null}>
+        <TrayCalendar />
+      </Suspense>
+    );
   }
 
   if (params.includes("agent-dictation-pill=true")) {

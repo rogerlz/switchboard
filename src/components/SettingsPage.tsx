@@ -4166,8 +4166,8 @@ EOF`,
       case "privacyData":
         return (
           <div className="space-y-6">
-            {/* Privacy */}
-            <div>
+            {/* Privacy — fork: hidden (cloud backup, Insights sync, leaderboard, usage analytics) */}
+            <div className="hidden">
               <SectionHeader
                 title={t("settingsPage.privacy.title")}
                 description={t("settingsPage.privacy.description")}

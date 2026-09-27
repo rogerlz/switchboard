@@ -4182,5 +4182,8 @@
     },
     "start": "Prendi appunti",
     "join": "Partecipa e trascrivi"
+  },
+  "trayCalendar": {
+    "hideWeekends": "Nascondi weekend"
   }
 }

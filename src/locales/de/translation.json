@@ -4182,5 +4182,8 @@
     },
     "start": "Notizen aufnehmen",
     "join": "Beitreten & transkribieren"
+  },
+  "trayCalendar": {
+    "hideWeekends": "Wochenenden ausblenden"
   }
 }

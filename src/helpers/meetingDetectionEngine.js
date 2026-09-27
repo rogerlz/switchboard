@@ -1,6 +1,7 @@
 const debugLogger = require("./debugLogger");
 const { openExternalUrl } = require("./externalUrlOpener");
 const { getMeetingJoinUrl } = require("./meetingJoinUrl");
+const { meetingNoteTitle } = require("./trayCalendarModel");
 const createMeetingAutoEndController = require("./meetingAutoEndController");
 const { createMeetingAudioActivityMonitor } = require("./meetingAudioActivityMonitor");
 const { broadcastToWindows } = require("./windowBroadcast");
@@ -598,7 +599,7 @@ class MeetingDetectionEngine {
       return;
     }
 
-    const noteResult = this.databaseManager.saveNote(calEvent.summary || "New note", "", "meeting");
+    const noteResult = this.databaseManager.saveNote(meetingNoteTitle(calEvent), "", "meeting");
     const meetingsFolder = this.databaseManager.getMeetingsFolder();
 
     if (!noteResult?.note?.id || !meetingsFolder?.id) {

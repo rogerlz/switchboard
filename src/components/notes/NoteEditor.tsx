@@ -251,7 +251,12 @@ export default function NoteEditor({
 }: NoteEditorProps) {
   const { t } = useTranslation();
   const locale = useUiLocale();
-  const defaultViewMode: MeetingViewMode = enhancement ? "enhanced" : "raw";
+  // fork: meeting notes open on the transcript
+  const defaultViewMode: MeetingViewMode = enhancement
+    ? "enhanced"
+    : note.note_type === "meeting" || note.transcript
+      ? "transcript"
+      : "raw";
   const [selectedViewMode, setSelectedViewMode] = useState<MeetingViewMode>(defaultViewMode);
   // Stored as chosen, clamped on read: AI Summary is the only tab that can stop
   // rendering, and a tab that no longer renders can never be the current one.
@@ -415,7 +420,9 @@ export default function NoteEditor({
   }, [diarizedSegments, note.transcript]);
 
   const hasChatSegments = displaySegments.length > 0;
+  // fork: no "Generate AI Summary" callout
   const showSummaryCallout =
+    !onGenerateSummary &&
     !!onGenerateSummary &&
     shouldOfferMeetingSummary({
       isRecording,
@@ -1261,7 +1268,7 @@ export default function NoteEditor({
             isRecording={isRecording}
             onAskSubmit={handleAskSubmit}
             onInputFocus={handleChatInputFocus}
-            actionPicker={isRecording || !canEditNote ? undefined : actionPicker}
+            actionPicker={undefined} // fork: no AI action pill (follow-up email etc.)
             callout={
               showSummaryCallout && (
                 <Button className="h-9 gap-2 px-4 text-sm" onClick={onGenerateSummary}>

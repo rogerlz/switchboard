@@ -23,7 +23,7 @@ export function useControlPanelNavItems(): ControlPanelNavItem[] {
   const agentAllowed = usePolicyStore(isAgentAllowed);
   const policyActionsAllowed = usePolicyStore((state) => isPolicyActionAllowed(state));
 
-  return [
+  const items: ControlPanelNavItem[] = [
     { id: "home", label: t("sidebar.home"), icon: Home },
     { id: "insights", label: t("sidebar.insights"), icon: BarChart3 },
     ...(agentAllowed
@@ -36,4 +36,5 @@ export function useControlPanelNavItems(): ControlPanelNavItem[] {
     { id: "dictionary", label: t("sidebar.dictionary"), icon: BookOpen },
     { id: "integrations", label: t("sidebar.integrations"), icon: Blocks },
   ];
+  return items.filter((item) => item.id !== "chat" && item.id !== "upload"); // fork: no Chat/Upload rows
 }

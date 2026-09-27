@@ -4182,5 +4182,8 @@
     },
     "start": "開始記錄",
     "join": "加入並轉錄"
+  },
+  "trayCalendar": {
+    "hideWeekends": "隱藏週末"
   }
 }

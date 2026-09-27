@@ -37,7 +37,12 @@ const SECTION_ALIASES: Record<string, SettingsSectionType> = {
   privacy: "privacyData",
   permissions: "privacyData",
   developer: "system",
+  // fork: hidden sections redirect, so deep links (upgrade CTAs) land somewhere real
+  account: "general",
+  plansBilling: "general",
+  workspace: "general",
 };
+const FORK_HIDDEN_SECTIONS = new Set<string>(["account", "plansBilling", "workspace"]);
 
 const LEGACY_SUB_TAB: Record<string, string> = {
   transcription: "dictation",
@@ -127,11 +132,12 @@ export default function SettingsModal({ open, onOpenChange, initialSection }: Se
         group: t("settingsModal.groups.system"),
       },
     ];
-    return isSignedIn ? items : items.filter((item) => item.id !== "workspace");
+    // fork: no Profile, Plans & Billing or Workspace sections
+    return items.filter((item) => !FORK_HIDDEN_SECTIONS.has(item.id));
   }, [t, isSignedIn]);
 
   const resolveSection = (section: string | undefined): SettingsSectionType => {
-    if (!section) return "account";
+    if (!section) return "general"; // fork
     return (SECTION_ALIASES[section] ?? section) as SettingsSectionType;
   };
 

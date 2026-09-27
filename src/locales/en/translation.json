@@ -4182,5 +4182,8 @@
     },
     "start": "Take notes",
     "join": "Join & transcribe"
+  },
+  "trayCalendar": {
+    "hideWeekends": "Hide weekends"
   }
 }

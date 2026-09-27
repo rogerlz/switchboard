@@ -798,10 +798,7 @@ function resolveAuthUrl() {
     if (fs.existsSync(envPath)) runtimeEnv = JSON.parse(fs.readFileSync(envPath, "utf8"));
   } catch {}
   return (
-    process.env.AUTH_URL ||
-    process.env.VITE_AUTH_URL ||
-    runtimeEnv.VITE_AUTH_URL ||
-    "https://auth.openwhispr.com"
+    process.env.AUTH_URL || process.env.VITE_AUTH_URL || runtimeEnv.VITE_AUTH_URL || "" // fork: no default auth server
   );
 }
 
@@ -843,6 +840,7 @@ async function migrateCookieToBearerToken() {
 
   const cookieName = getOauthCookieName();
   const authUrl = resolveAuthUrl();
+  if (!authUrl) return; // fork
 
   try {
     const cookies = await session.defaultSession.cookies.get({ url: authUrl, name: cookieName });
@@ -1340,8 +1338,11 @@ async function startApp() {
   windowManager.onDictationStateChanged = () => trayManager.updateTrayMenu();
   trayManager.setCreateControlPanelCallback(() => windowManager.createControlPanelWindow());
   await trayManager.createTray();
+  // fork: menu-bar calendar popover on left click (macOS)
+  if (process.platform === "darwin") new (require("./src/helpers/trayCalendar"))(trayManager);
 
-  updateManager.checkForUpdatesOnStartup();
+  // fork: no update checks; upstream releases would replace this build
+  // updateManager.checkForUpdatesOnStartup();
 
   if (process.platform === "darwin") {
     const { isGlobeLikeHotkey, isMouseButtonHotkey } = require("./src/helpers/hotkeyManager");

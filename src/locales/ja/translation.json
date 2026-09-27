@@ -4182,5 +4182,8 @@
     },
     "start": "メモを取る",
     "join": "参加して文字起こし"
+  },
+  "trayCalendar": {
+    "hideWeekends": "週末を非表示"
   }
 }
