@@ -4,6 +4,8 @@ import { Plus } from "../icons";
 import { useToast } from "../ui/useToast";
 import NoteEditor from "./NoteEditor";
 import SpacesTree from "./SpacesTree";
+import UpcomingMeetings from "../UpcomingMeetings";
+import { useUpcomingEvents } from "../../hooks/useUpcomingEvents";
 import { ContainerOverview } from "./overview/ContainerOverview";
 import NotesStructureIntroDialog from "./NotesStructureIntroDialog";
 import AddNotesToFolderDialog from "./AddNotesToFolderDialog";
@@ -74,6 +76,7 @@ type PendingSaveReason = "switch" | "overview" | "unmount";
 
 interface PersonalNotesViewProps {
   onOpenSettings?: (section: string) => void;
+  onOpenIntegrations?: () => void;
   meetingRecordingRequest?: {
     noteId: number;
     folderId: number;
@@ -86,6 +89,7 @@ interface PersonalNotesViewProps {
 
 export default function PersonalNotesView({
   onOpenSettings,
+  onOpenIntegrations,
   meetingRecordingRequest,
   onMeetingRecordingRequestHandled,
   invitationEntry,
@@ -96,6 +100,7 @@ export default function PersonalNotesView({
   const { t } = useTranslation();
   const notes = useNotes();
   const activeNoteId = useActiveNoteId();
+  const upcoming = useUpcomingEvents();
   const isSidePanelLayout = isMeetingMode || (isNarrowWindow && activeNoteId != null);
   const activeFolderId = useActiveFolderId();
   const [isSaving, setIsSaving] = useState(false);
@@ -203,13 +208,7 @@ export default function PersonalNotesView({
     ) {
       setShowStructureIntro(true);
     }
-  }, [
-    structureIntroPending,
-    isSignedIn,
-    teamSpacesAvailable,
-    isTreeLoading,
-    isSidePanelLayout,
-  ]);
+  }, [structureIntroPending, isSignedIn, teamSpacesAvailable, isTreeLoading, isSidePanelLayout]);
 
   // Arriving via an accepted invitation reopens the structure intro even when
   // this device has already seen it.
@@ -339,7 +338,6 @@ export default function PersonalNotesView({
     pendingDocumentRef.current = pending;
   }, []);
 
-
   const handleTitleChange = useCallback(
     (sourceNoteId: number, title: string) => {
       const next = applyNoteDraftMutation(draftRef.current, {
@@ -367,7 +365,6 @@ export default function PersonalNotesView({
     },
     [commitDraft, scheduleDocumentSave]
   );
-
 
   useEffect(() => {
     return () => flushPendingSaves("unmount");
@@ -438,7 +435,6 @@ export default function PersonalNotesView({
     [privateSpaceId, handleMoveToFolder, toast, t]
   );
 
-
   const activeDraft = draft?.noteId === activeNote?.id ? draft : null;
   const editorNote = activeNote
     ? {
@@ -500,8 +496,6 @@ export default function PersonalNotesView({
   // the store — this view can be unmounted when an auto-end stop fires.
   const isActiveNoteRecording = isTranscribing && recordingNoteId === activeNote?.id;
 
-
-
   return (
     <div className="flex h-full">
       <div
@@ -509,7 +503,6 @@ export default function PersonalNotesView({
         style={{ width: isSidePanelLayout ? 0 : "13rem" }}
       >
         <div className="w-52 shrink-0 border-e border-border dark:border-white/10 flex flex-col h-full">
-
           <SpacesTree
             onDeleteNote={handleDelete}
             onMoveNote={handleMoveNote}
@@ -703,6 +696,17 @@ export default function PersonalNotesView({
           </div>
         )}
       </div>
+
+      {!editorNote && (
+        <aside className="hidden w-80 shrink-0 overflow-y-auto border-s border-border p-4 lg:block dark:border-white/10">
+          <UpcomingMeetings
+            events={upcoming.events}
+            isLoading={upcoming.isLoading}
+            isConnected={upcoming.isConnected}
+            onConnectCalendar={onOpenIntegrations ?? (() => {})}
+          />
+        </aside>
+      )}
 
       {activeFolderId && (
         <AddNotesToFolderDialog

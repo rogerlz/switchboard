@@ -533,6 +533,7 @@ export default function ControlPanel({ initialSettingsSection }: ControlPanelPro
                     }}
                     meetingRecordingRequest={meetingRecordingRequest}
                     onMeetingRecordingRequestHandled={handleMeetingRecordingRequestHandled}
+                    onOpenIntegrations={() => setActiveView("integrations")}
                     invitationEntry={invitationNotesEntry}
                     onInvitationEntryHandled={() => setInvitationNotesEntry(null)}
                   />
