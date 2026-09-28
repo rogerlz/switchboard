@@ -110,7 +110,7 @@
     ],
     "extendInfo": {
       "LSUIElement": false,
-      "CFBundleIconName": "openwhispr",
+      "CFBundleIconName": "switchboard",
       "NSMicrophoneUsageDescription": "Switchboard uses the microphone to capture your voice for transcription.",
       "NSAudioCaptureUsageDescription": "Switchboard uses system audio to capture other participants' audio from calls and meetings.",
       "NSCalendarsUsageDescription": "Switchboard reads your calendar to detect upcoming meetings and link meeting notes to events.",
