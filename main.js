@@ -76,7 +76,7 @@ function configureChannelUserDataPath() {
     return;
   }
 
-  const isolatedPath = path.join(app.getPath("appData"), `OpenWhispr-${APP_CHANNEL}`);
+  const isolatedPath = path.join(app.getPath("appData"), `Switchboard-${APP_CHANNEL}`);
   app.setPath("userData", isolatedPath);
 }
 
@@ -248,8 +248,8 @@ if (!gotSingleInstanceLock) {
 const isLiveWindow = (window) => window && !window.isDestroyed();
 
 // Ensure macOS menus use the proper casing for the app name
-if (process.platform === "darwin" && app.getName() !== "OpenWhispr") {
-  app.setName("OpenWhispr");
+if (process.platform === "darwin" && app.getName() !== "Switchboard") {
+  app.setName("Switchboard");
 }
 
 // Add global error handling for uncaught exceptions

@@ -1,10 +1,10 @@
 {
-  "appId": "com.gizmolabs.openwhispr",
+  "appId": "com.rogerlz.switchboard",
   "afterPack": "scripts/afterPack.js",
   "extraMetadata": {
     "windowsTrayIdentity": true
   },
-  "productName": "OpenWhispr",
+  "productName": "Switchboard",
   "protocols": {
     "name": "OpenWhispr Protocol",
     "schemes": ["openwhispr"]
@@ -167,11 +167,11 @@
     "extendInfo": {
       "LSUIElement": false,
       "CFBundleIconName": "openwhispr",
-      "NSMicrophoneUsageDescription": "OpenWhispr uses the microphone to capture your voice for transcription.",
-      "NSAudioCaptureUsageDescription": "OpenWhispr uses system audio to capture other participants' audio from calls and meetings.",
-      "NSAccessibilityUsageDescription": "OpenWhispr needs accessibility permissions to paste transcribed text into other applications.",
-      "NSCalendarsUsageDescription": "OpenWhispr reads your calendar to detect upcoming meetings and link meeting notes to events.",
-      "NSCalendarsFullAccessUsageDescription": "OpenWhispr reads your calendar to detect upcoming meetings and link meeting notes to events."
+      "NSMicrophoneUsageDescription": "Switchboard uses the microphone to capture your voice for transcription.",
+      "NSAudioCaptureUsageDescription": "Switchboard uses system audio to capture other participants' audio from calls and meetings.",
+      "NSAccessibilityUsageDescription": "Switchboard needs accessibility permissions to paste transcribed text into other applications.",
+      "NSCalendarsUsageDescription": "Switchboard reads your calendar to detect upcoming meetings and link meeting notes to events.",
+      "NSCalendarsFullAccessUsageDescription": "Switchboard reads your calendar to detect upcoming meetings and link meeting notes to events."
     }
   },
   "win": {
@@ -265,7 +265,7 @@
     "include": "resources/nsis/installer.nsh"
   },
   "dmg": {
-    "title": "OpenWhispr",
+    "title": "Switchboard",
     "icon": "src/assets/icon.icns",
     "window": {
       "width": 540,
@@ -274,7 +274,7 @@
   },
   "publish": {
     "provider": "github",
-    "owner": "OpenWhispr",
+    "owner": "rogerlz",
     "repo": "openwhispr",
     "private": false,
     "releaseType": "draft"

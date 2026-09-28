@@ -4,7 +4,7 @@
       "sectionTitle": "Language",
       "sectionDescription": "Set interface and transcription languages independently",
       "uiLabel": "Interface language",
-      "uiDescription": "Choose the language used throughout OpenWhispr's interface",
+      "uiDescription": "Choose the language used throughout Switchboard's interface",
       "transcriptionLabel": "Transcription language",
       "transcriptionDescription": "Choose the language you speak for more accurate transcription",
       "chineseScriptLabel": "Chinese script (dictation)",
@@ -64,12 +64,12 @@
     },
     "openControlPanel": "Open Control Panel",
     "hideControlPanel": "Hide Control Panel",
-    "quit": "Quit OpenWhispr",
-    "tooltip": "OpenWhispr - Voice Dictation"
+    "quit": "Quit Switchboard",
+    "tooltip": "Switchboard - Voice Dictation"
   },
   "menu": {
-    "appLabel": "OpenWhispr",
-    "quit": "Quit OpenWhispr",
+    "appLabel": "Switchboard",
+    "quit": "Quit Switchboard",
     "speech": "Speech",
     "settings": "Settings...",
     "help": "Help",
@@ -87,8 +87,8 @@
       "message": "Failed to open the link in your browser:\n{{url}}\n\nError: {{error}}"
     },
     "loadFailure": {
-      "title": "OpenWhispr failed to load",
-      "message": "OpenWhispr could not load its UI.",
+      "title": "Switchboard failed to load",
+      "message": "Switchboard could not load its UI.",
       "detail": {
         "window": "Window: {{windowName}}",
         "error": "Error {{errorCode}}: {{errorDescription}}",
@@ -99,17 +99,17 @@
   },
   "startup": {
     "error": {
-      "title": "OpenWhispr Startup Error",
+      "title": "Switchboard Startup Error",
       "message": "Failed to start the application:\n\n{{error}}\n\nPlease report this issue."
     },
     "globeHotkey": {
       "title": "Globe Hotkey Unavailable",
-      "message": "OpenWhispr could not activate the Globe key hotkey.",
+      "message": "Switchboard could not activate the Globe key hotkey.",
       "details": {
         "unknown": "Unknown error occurred while starting the Globe listener.",
         "fallback": "The Globe key shortcut will remain disabled; existing keyboard shortcuts continue to work.",
         "devHint": "Run `npm run compile:globe` and rebuild the app to regenerate the listener binary.",
-        "reinstallHint": "Try reinstalling OpenWhispr or contact support if the issue persists."
+        "reinstallHint": "Try reinstalling Switchboard or contact support if the issue persists."
       }
     }
   },
@@ -213,7 +213,7 @@
   "onboarding": {
     "rehaul": {
       "permissions": {
-        "title": "Set up OpenWhispr in 3 minutes",
+        "title": "Set up Switchboard in 3 minutes",
         "microphoneDescription": "Turns what you say into text. Only on while you’re recording.",
         "accessibilityDescription": "Pastes the text into the app you’re using.",
         "systemAudioTitle": "System Audio",
@@ -226,7 +226,7 @@
         "title": "Which languages do you speak?",
         "titleLineOne": "Which languages",
         "titleLineTwo": "do you speak?",
-        "description": "Select all that apply. This helps OpenWhispr recognize language switches more accurately."
+        "description": "Select all that apply. This helps Switchboard recognize language switches more accurately."
       },
       "dictationHotkey": {
         "title": "Choose your dictation shortcut",
@@ -236,10 +236,10 @@
         "activation": "Tap or hold?"
       },
       "assistantHotkey": {
-        "title": "Set up OpenWhispr Assistant",
+        "title": "Set up Switchboard Assistant",
         "titleLineOne": "Set up",
-        "titleLineTwo": "OpenWhispr Assistant",
-        "description": "Speak a request. OpenWhispr Assistant writes the result for you."
+        "titleLineTwo": "Switchboard Assistant",
+        "description": "Speak a request. Switchboard Assistant writes the result for you."
       },
       "hotkey": {
         "capture": "Press the key you want to use",
@@ -251,15 +251,15 @@
         "title": "Try your first dictation",
         "titleLineOne": "Try your",
         "titleLineTwo": "first dictation",
-        "description": "Press {{hotkey}} and start speaking. OpenWhispr will turn your voice into text.",
-        "founder": "Hey, I’m Gabe, the founder. Thanks for trying OpenWhispr!",
-        "prompt": "Click the box below, press your shortcut, and tell me: what would you love OpenWhispr to do for you?",
-        "placeholder": "Click here, then press your shortcut. OpenWhispr types into any text box."
+        "description": "Press {{hotkey}} and start speaking. Switchboard will turn your voice into text.",
+        "founder": "Hey, I’m Gabe, the founder. Thanks for trying Switchboard!",
+        "prompt": "Click the box below, press your shortcut, and tell me: what would you love Switchboard to do for you?",
+        "placeholder": "Click here, then press your shortcut. Switchboard types into any text box."
       },
       "assistantDemo": {
-        "title": "Meet OpenWhispr Assistant",
+        "title": "Meet Switchboard Assistant",
         "titleLineOne": "Meet",
-        "titleLineTwo": "OpenWhispr Assistant",
+        "titleLineTwo": "Switchboard Assistant",
         "email": {
           "subject": "Coffee next week?",
           "senderName": "Maria Alvarez",
@@ -293,13 +293,13 @@
         "typing": "Typing…"
       },
       "notes": {
-        "title": "Record meetings without a bot with OpenWhispr Notes",
+        "title": "Record meetings without a bot with Switchboard Notes",
         "titleLineOne": "Record meetings without a bot",
-        "titleLineTwoPrefix": "with OpenWhispr",
+        "titleLineTwoPrefix": "with Switchboard",
         "titleLineTwoBrand": "Notes",
-        "description": "OpenWhispr turns your conversation into clear notes. No meeting bot joins your call.",
+        "description": "Switchboard turns your conversation into clear notes. No meeting bot joins your call.",
         "hero": {
-          "description": "Record your meeting and let OpenWhispr turn the conversation into clear, organized notes.",
+          "description": "Record your meeting and let Switchboard turn the conversation into clear, organized notes.",
           "chat": "Chat with your meeting notes",
           "transcript": "Review the full transcript",
           "speakers": "See who said what"
@@ -315,9 +315,9 @@
         }
       },
       "setupChoice": {
-        "title": "Choose your OpenWhispr setup",
+        "title": "Choose your Switchboard setup",
         "titleLineOne": "Choose your",
-        "titleLineTwo": "OpenWhispr setup",
+        "titleLineTwo": "Switchboard setup",
         "description": "Pick the option that fits how you work.",
         "unavailable": {
           "title": "No setup option is available",
@@ -472,14 +472,14 @@
       "accessibilityTitle": "Accessibility",
       "accessibilityDescription": "Types the finished text straight into whatever app you're in — docs, email, chat.",
       "testAndGrant": "Test & Grant",
-      "requiredForApp": "Required for OpenWhispr to work",
+      "requiredForApp": "Required for Switchboard to work",
       "microphoneRequired": "Microphone access required",
       "openSystemSettings": "Open System Settings",
       "systemAudioTitle": "System Audio",
       "systemAudioDescription": "Lets the meeting recorder hear the other side of your calls — meetings, lectures, podcasts. You can turn this on later in Settings.",
       "optional": "Optional",
       "recommended": "Recommended",
-      "accessibilityTroubleshooting": "In System Settings → Accessibility, switch OpenWhispr's toggle off and back on. If OpenWhispr isn't in the list at all, click + and add it from your Applications folder. Still stuck? Email support@openwhispr.com."
+      "accessibilityTroubleshooting": "In System Settings → Accessibility, switch Switchboard's toggle off and back on. If Switchboard isn't in the list at all, click + and add it from your Applications folder. Still stuck? Email support@openwhispr.com."
     },
     "transcription": {
       "title": "Transcription Setup",
@@ -505,12 +505,12 @@
       "continue": "Continue anyway"
     },
     "useCase": {
-      "title": "How will you use OpenWhispr?",
+      "title": "How will you use Switchboard?",
       "titleLineOne": "How will you",
-      "titleLineTwo": "use OpenWhispr?",
+      "titleLineTwo": "use Switchboard?",
       "description": "Choose all that apply. We’ll tailor your setup.",
       "noteLabel": "Anything else you'd like us to know?",
-      "notePlaceholder": "Tell us how you plan to use OpenWhispr (Optional)",
+      "notePlaceholder": "Tell us how you plan to use Switchboard (Optional)",
       "proceedToSetup": "Proceed to setup",
       "options": {
         "dictation": {
@@ -543,7 +543,7 @@
     "meeting": {
       "title": "Meeting notes",
       "description": "Capture and summarize your meetings",
-      "autoDetect": "OpenWhispr automatically detects when you're in a meeting and offers to start notes — nothing is recorded without you.",
+      "autoDetect": "Switchboard automatically detects when you're in a meeting and offers to start notes — nothing is recorded without you.",
       "hotkeyLabel": "Meeting hotkey",
       "hotkeyHint": "Optional — press it in any meeting to start a note instantly."
     },
@@ -596,13 +596,13 @@
   "controlPanel": {
     "updateRequiredByOrg": {
       "title": "Update required",
-      "description": "Your organization requires OpenWhispr {{version}} or newer. Please update the app."
+      "description": "Your organization requires Switchboard {{version}} or newer. Please update the app."
     },
     "update": {
       "readyTitle": "Update ready to install",
       "readyDescription": "Click 'Install Update' to restart with the latest version.",
       "installTitle": "Install Update",
-      "installDescription": "OpenWhispr will restart to apply the update. Any in-progress work will be saved.",
+      "installDescription": "Switchboard will restart to apply the update. Any in-progress work will be saved.",
       "couldNotInstallTitle": "Couldn't install update",
       "couldNotInstallDescription": "Something went wrong. Please try again.",
       "couldNotDownloadTitle": "Couldn't download update",
@@ -617,7 +617,7 @@
     },
     "accessibilityMissing": {
       "title": "Accessibility permissions needed",
-      "description": "We've detected that OpenWhispr needs accessibility permissions to work properly. Please enable them below."
+      "description": "We've detected that Switchboard needs accessibility permissions to work properly. Please enable them below."
     },
     "billing": {
       "pastDueTitle": "We couldn't process your payment",
@@ -799,7 +799,7 @@
           "modelNotFound": "AWS Bedrock could not find the selected model in region {{region}}. Check the model ID and whether it is available in that region.",
           "configurationRejected": "AWS Bedrock rejected the model configuration for region {{region}}. Check the model ID, inference profile, and region.",
           "notConfigured": "AWS Bedrock is not configured correctly. Check the region and AWS credentials.",
-          "serviceUnavailable": "AWS Bedrock is temporarily unavailable due to high demand. This is an AWS service issue, not an OpenWhispr outage. Please try again in a few minutes.",
+          "serviceUnavailable": "AWS Bedrock is temporarily unavailable due to high demand. This is an AWS service issue, not an Switchboard outage. Please try again in a few minutes.",
           "throttled": "AWS Bedrock is temporarily limiting requests because it is receiving too many. Please wait a moment and try again. If this continues, ask your AWS administrator to check your Bedrock usage and quotas.",
           "timeout": "AWS Bedrock did not respond in time. Please try again. If this continues, check your internet connection and AWS Bedrock service status.",
           "network": "AWS Bedrock could not be reached. Check your internet connection and try again.",
@@ -936,17 +936,17 @@
       },
       "selectionEditing": {
         "notAppliedTitle": "Selection edit not applied",
-        "changed": "The selected text or target app changed while OpenWhispr was processing. Nothing was replaced.",
+        "changed": "The selected text or target app changed while Switchboard was processing. Nothing was replaced.",
         "expired": "The selection edit took too long and expired. Select the text and try again.",
-        "pasteFailed": "OpenWhispr generated the edit but could not replace the selected text.",
-        "unavailable": "OpenWhispr could not safely read the selected text. Check accessibility or input automation permissions and try again.",
+        "pasteFailed": "Switchboard generated the edit but could not replace the selected text.",
+        "unavailable": "Switchboard could not safely read the selected text. Check accessibility or input automation permissions and try again.",
         "tooLarge": "The selection is too large to edit safely. Select 6,000 characters or fewer.",
         "reasoningFailed": "The AI could not complete the selection edit. Your original text was not changed."
       },
       "pastePermission": {
         "title": "Allow automatic pasting",
-        "description": "Enable OpenWhispr in System Settings → Privacy & Security → Accessibility.",
-        "settingsFailed": "Couldn't open Settings. Open System Settings → Privacy & Security → Accessibility and enable OpenWhispr.",
+        "description": "Enable Switchboard in System Settings → Privacy & Security → Accessibility.",
+        "settingsFailed": "Couldn't open Settings. Open System Settings → Privacy & Security → Accessibility and enable Switchboard.",
         "manualPaste": "Copy your text below, then press {{shortcut}} to paste it.",
         "openSettings": "Open Settings",
         "copyToClipboard": "Copy to clipboard",
@@ -1026,7 +1026,7 @@
       "micErrors": {
         "accessFailed": "Microphone access failed. Please try again.",
         "noMicrophones": "No microphones were detected. Connect or select a microphone in {{settingsPath}}.",
-        "permissionDenied": "Permission was denied. Open {{privacyPath}} and allow OpenWhispr.",
+        "permissionDenied": "Permission was denied. Open {{privacyPath}} and allow Switchboard.",
         "couldNotStart": "Could not start the selected microphone. Choose an input device in {{settingsPath}}, then rerun the test.",
         "noActiveInput": "No active audio input was found. Pick a microphone in {{settingsPath}}.",
         "unknown": "Microphone access failed: {{error}}. Select a different input device and try again.",
@@ -1055,8 +1055,8 @@
         "accessibilityNeeded": "Please grant accessibility permissions in System Settings to enable automatic text pasting.",
         "windowsReady": "Windows does not require special permissions for automatic pasting. You're all set!",
         "linuxReadyWithMethod": "Automatic pasting is available using {{method}}. You are all set!",
-        "waylandClipboardMode": "Automatic pasting is not available on this Wayland session. OpenWhispr will copy text to your clipboard and you can paste with Ctrl+V.",
-        "optionalPasteTool": "For automatic pasting, install {{tool}}:\n\n{{installCmd}}{{waylandNote}}\n\nWithout this, you can still use OpenWhispr - text will be copied to your clipboard and you can paste with Ctrl+V."
+        "waylandClipboardMode": "Automatic pasting is not available on this Wayland session. Switchboard will copy text to your clipboard and you can paste with Ctrl+V.",
+        "optionalPasteTool": "For automatic pasting, install {{tool}}:\n\n{{installCmd}}{{waylandNote}}\n\nWithout this, you can still use Switchboard - text will be copied to your clipboard and you can paste with Ctrl+V."
       },
       "alerts": {
         "accessibilityNeeded": "Accessibility permissions needed! Please grant them in System Settings."
@@ -1069,7 +1069,7 @@
         "defaultPasteTool": "xdotool",
         "xdotoolXwayland": "xdotool (XWayland apps)"
       },
-      "accessibilityTestText": "OpenWhispr accessibility test",
+      "accessibilityTestText": "Switchboard accessibility test",
       "warning": {
         "messages": {
           "macos": "Check Sound settings to select your input device",
@@ -1145,7 +1145,7 @@
       "emailRequired": "Enter your work email to use SSO.",
       "failed": "Single sign-on failed. Please try again.",
       "companySignInTitle": "Use your company sign-in",
-      "requiredDescription": "{{domain}} requires SSO for OpenWhispr.",
+      "requiredDescription": "{{domain}} requires SSO for Switchboard.",
       "availableDescription": "Your {{domain}} account is ready for company SSO.",
       "useEmailInstead": "Use email and password instead"
     },
@@ -1157,7 +1157,7 @@
       "protocolUnavailable": "Browser sign-in unavailable — re-register the openwhispr:// protocol in your system's Default Apps settings."
     },
     "welcomeSubtitle": "The power of your voice. On your terms.",
-    "welcomeTitle": "Welcome to OpenWhispr",
+    "welcomeTitle": "Welcome to Switchboard",
     "sessionExpired": "Session expired. Please restart the sign-up process."
   },
   "calendar": {
@@ -1197,7 +1197,7 @@
     "systemAudioRequired": "System Audio permission is needed to capture other participants' audio.",
     "openSettings": "Open System Settings",
     "connectCalendar": "Connect your calendar",
-    "connectCalendarDescription": "See your meetings and join them without leaving OpenWhispr.",
+    "connectCalendarDescription": "See your meetings and join them without leaving Switchboard.",
     "connectCalendarButton": "Connect Calendar"
   },
   "cleanupPrompt": "Cleanup",
@@ -1268,7 +1268,7 @@
   },
   "apiKeysSection": {
     "title": "API Keys",
-    "description": "Create keys to access the OpenWhispr API programmatically.",
+    "description": "Create keys to access the Switchboard API programmatically.",
     "docsLink": "API Docs",
     "empty": "No API keys yet",
     "createButton": "Create API Key",
@@ -1474,10 +1474,10 @@
     "recheckChecking": "Checking...",
     "title": "Automatic Pasting",
     "usingMethodPrefix": "Using",
-    "waylandClipboardDescription": "Automatic pasting isn't available on this Wayland session. OpenWhispr will copy text to your clipboard so you can paste manually with Ctrl+V.",
+    "waylandClipboardDescription": "Automatic pasting isn't available on this Wayland session. Switchboard will copy text to your clipboard so you can paste manually with Ctrl+V.",
     "waylandClipboardTitle": "Clipboard Mode on Wayland",
     "windowsReady": "Windows supports automatic pasting out of the box. No setup required!",
-    "withoutToolPrefix": "Without this tool, OpenWhispr will copy text to your clipboard. You can then paste manually with Ctrl+V.",
+    "withoutToolPrefix": "Without this tool, Switchboard will copy text to your clipboard. You can then paste manually with Ctrl+V.",
     "wtypeFallbackDescription": "wtype is the preferred auto-paste method for this wlroots compositor. A fallback is available, but may be less reliable.",
     "xwaylandAppsOnly": "automatic pasting works for XWayland apps only"
   },
@@ -1991,7 +1991,7 @@
         "button": "Delete My Account",
         "deleting": "Deleting...",
         "title": "Delete Your Account?",
-        "description": "This permanently deletes your OpenWhispr account and personal data. Workspace-owned content and data belonging to other local users stay on this device.",
+        "description": "This permanently deletes your Switchboard account and personal data. Workspace-owned content and data belonging to other local users stay on this device.",
         "confirmText": "Delete Account",
         "eraseDeviceLabel": "Also erase all data from this device",
         "eraseDeviceDescription": "Deletes every local user's notes and workspace cache, downloaded models, settings, calendar connections, credentials, and recordings.",
@@ -2085,7 +2085,7 @@
       "title": "AI Text Enhancement",
       "toasts": {
         "switchedCloud": {
-          "description": "Text enhancement will use OpenWhispr's cloud service.",
+          "description": "Text enhancement will use Switchboard's cloud service.",
           "title": "Switched to OpenWhispr Cloud"
         },
         "switchedCustom": {
@@ -2174,7 +2174,7 @@
       "appearance": {
         "auto": "Auto",
         "dark": "Dark",
-        "description": "Control how OpenWhispr looks",
+        "description": "Control how Switchboard looks",
         "light": "Light",
         "theme": "Theme",
         "themeDescription": "Choose light, dark, or match your system",
@@ -2202,8 +2202,8 @@
         "linuxPttSetupDescription": "Your user needs access to keyboard input devices.",
         "linuxPttSetupNote": "After running the command, log out and log back in.",
         "hyprlandConfigWriteWarningTitle": "Hyprland keybinds will not persist",
-        "hyprlandConfigWriteWarningDescription": "OpenWhispr cannot write to {{path}}, so keybinds will not survive a Hyprland config reload. Make sure the file exists and is writable.",
-        "hyprlandUnbindDescription": "On Hyprland, OpenWhispr claims the selected shortcut. Any existing Hyprland bind that uses the same key combination will be unbound when OpenWhispr registers its shortcut."
+        "hyprlandConfigWriteWarningDescription": "Switchboard cannot write to {{path}}, so keybinds will not survive a Hyprland config reload. Make sure the file exists and is writable.",
+        "hyprlandUnbindDescription": "On Hyprland, Switchboard claims the selected shortcut. Any existing Hyprland bind that uses the same key combination will be unbound when Switchboard registers its shortcut."
       },
       "meetingHotkey": {
         "title": "Meeting Mode Hotkey",
@@ -2229,7 +2229,7 @@
       },
       "notifications": {
         "title": "Notifications",
-        "description": "Control which notifications OpenWhispr can show",
+        "description": "Control which notifications Switchboard can show",
         "disableAll": "Disable all notifications",
         "disableAllDescription": "Silence everything except error messages",
         "meetingDetection": "Meeting detection",
@@ -2246,14 +2246,14 @@
       },
       "startup": {
         "launchAtLogin": "Launch at login",
-        "launchAtLoginDescription": "Start OpenWhispr in the background when you log in",
+        "launchAtLoginDescription": "Start Switchboard in the background when you log in",
         "title": "Startup",
-        "description": "Control how OpenWhispr behaves when it launches",
+        "description": "Control how Switchboard behaves when it launches",
         "startMinimized": "Start minimized",
         "startMinimizedDescription": "Launch without showing the control panel window",
         "needsApproval": {
           "title": "Approval needed in System Settings",
-          "description": "macOS registered OpenWhispr as a login item but is waiting for you to allow it under Login Items.",
+          "description": "macOS registered Switchboard as a login item but is waiting for you to allow it under Login Items.",
           "action": "Open Login Items"
         }
       },
@@ -2305,7 +2305,7 @@
           "group": {
             "step1Title": "Add your user to the input group",
             "step2Title": "Log out and back in",
-            "step2Desc": "Group changes only take effect after a new login session. Log out of your desktop and log back in, then reopen OpenWhispr."
+            "step2Desc": "Group changes only take effect after a new login session. Log out of your desktop and log back in, then reopen Switchboard."
           },
           "service": {
             "step1Title": "Create the service directory",
@@ -2329,7 +2329,7 @@
           "manualTitle": "Add this to your configuration",
           "manualDesc": "Configure it yourself, then rebuild.",
           "flakeTitle": "Installing via our flake?",
-          "flakeDesc": "If you install OpenWhispr from the flake, programs.openwhispr.enable turns on ydotool, the uinput module and the group memberships for you.",
+          "flakeDesc": "If you install Switchboard from the flake, programs.openwhispr.enable turns on ydotool, the uinput module and the group memberships for you.",
           "rebuildNote": "Run sudo nixos-rebuild switch, then log out and back in so the group change and the /dev/uinput rule take effect. Replace <you> with your username."
         }
       },
@@ -2364,7 +2364,7 @@
           },
           "installUpdate": {
             "confirmText": "Install & Restart",
-            "description": "OpenWhispr will restart to apply the update.",
+            "description": "Switchboard will restart to apply the update.",
             "title": "Install Update"
           },
           "noUpdates": {
@@ -2396,13 +2396,13 @@
     "permissions": {
       "accessibilityDescription": "Required for auto-paste to work after transcription",
       "accessibilityTitle": "Accessibility",
-      "description": "Test and manage system permissions required for OpenWhispr to function correctly",
+      "description": "Test and manage system permissions required for Switchboard to function correctly",
       "microphoneDescription": "Captures your voice for dictation and transcription",
       "microphoneTitle": "Microphone",
       "resetAccessibility": {
-        "description": "This will remove OpenWhispr from accessibility permissions. You'll need to re-grant access in System Settings > Privacy & Security > Accessibility.",
+        "description": "This will remove Switchboard from accessibility permissions. You'll need to re-grant access in System Settings > Privacy & Security > Accessibility.",
         "label": "Reset accessibility permissions",
-        "rowDescription": "Fix issues after reinstalling or rebuilding the app by removing and re-adding OpenWhispr in System Settings",
+        "rowDescription": "Fix issues after reinstalling or rebuilding the app by removing and re-adding Switchboard in System Settings",
         "title": "Reset Accessibility Permissions"
       },
       "optional": "Optional",
@@ -2424,7 +2424,7 @@
       "description": "Control what data leaves your device. Everything is off by default.",
       "title": "Privacy",
       "usageAnalytics": "Usage analytics",
-      "usageAnalyticsDescription": "Help us improve OpenWhispr by sharing anonymous performance metrics. We never send transcription content — only timing and error data.",
+      "usageAnalyticsDescription": "Help us improve Switchboard by sharing anonymous performance metrics. We never send transcription content — only timing and error data.",
       "insightsSync": "Sync personal Insights",
       "insightsSyncDescription": "Sync word counts, the date and exact time of each dictation, durations, and model types across your devices. Transcript content is never included. When you're signed in, clearing history also removes these counters from this device and your account.",
       "insightsSyncRequiresAccount": "Sign in to sync content-free Insights data across your devices.",
@@ -2487,7 +2487,7 @@
     "transcription": {
       "customSetup": "Custom Setup",
       "customSetupDescription": "Use your own provider and API key.",
-      "description": "Choose how OpenWhispr transcribes your voice",
+      "description": "Choose how Switchboard transcribes your voice",
       "modes": {
         "openwhispr": "OpenWhispr Cloud",
         "providers": "Cloud Providers",
@@ -2505,7 +2505,7 @@
       "title": "Speech to Text",
       "toasts": {
         "switchedCloud": {
-          "description": "Transcription will use OpenWhispr's cloud service.",
+          "description": "Transcription will use Switchboard's cloud service.",
           "title": "Switched to OpenWhispr Cloud"
         },
         "switchedCustom": {
@@ -2874,7 +2874,7 @@
       "emptyStrip_one": "{{count}} teammate hasn't joined the leaderboard yet. Rankings start when they do.",
       "emptyStrip_other": "{{count}} teammates haven't joined the leaderboard yet. Rankings start when they do.",
       "copyNudge": "Copy a nudge",
-      "nudgeText": "Join the leaderboard in OpenWhispr → Insights so we can see the team board.",
+      "nudgeText": "Join the leaderboard in Switchboard → Insights so we can see the team board.",
       "nudgeCopied": "Nudge copied",
       "nudgeCopyError": "Couldn't copy the nudge",
       "joinTitle": "See where you rank in {{scope}}",
@@ -2910,7 +2910,7 @@
         "desktop_words": "Desktop words",
         "mobile_words": "Mobile words"
       },
-      "shareText": "See where I rank on OpenWhispr.",
+      "shareText": "See where I rank on Switchboard.",
       "shareTitle": "Share leaderboard",
       "shareDescription": "Copy or download this card, or copy it before opening a social composer.",
       "copyImage": "Copy image",
@@ -2967,7 +2967,7 @@
     },
     "join": {
       "title": "Join your team",
-      "domainTitle": "Your team is on OpenWhispr",
+      "domainTitle": "Your team is on Switchboard",
       "description": "These workspaces have someone from your email domain.",
       "invitedDescription": "You've been invited to a workspace.",
       "invitedBy": "Invited by {{inviter}} as {{role}}",
@@ -3086,7 +3086,7 @@
     },
     "tryAgain": "Try Again",
     "card": {
-      "brand": "OpenWhispr",
+      "brand": "Switchboard",
       "signalId": "Signal ID",
       "audioSignature": "Your audio signature",
       "stop": "Stop",
@@ -3232,7 +3232,7 @@
     },
     "structureIntro": {
       "title": "Where your notes live",
-      "description": "OpenWhispr separates private thoughts from shared work so the right people see the right notes.",
+      "description": "Switchboard separates private thoughts from shared work so the right people see the right notes.",
       "personal": {
         "title": "Personal space",
         "description": "Only you can see the folders and notes here."
@@ -3451,7 +3451,7 @@
       },
       "systemAudioStopped": {
         "title": "Meeting audio stopped",
-        "description": "OpenWhispr is no longer capturing the other participants. Stop and start the recording again, or check your sound output device."
+        "description": "Switchboard is no longer capturing the other participants. Stop and start the recording again, or check your sound output device."
       },
       "systemAudioQuiet": {
         "title": "Meeting audio has gone quiet",
@@ -3645,7 +3645,7 @@
     "clearTitle": "Clear dictionary?",
     "clearDescription": "This will remove all words from your custom dictionary. This action cannot be undone.",
     "addWord": "Add word",
-    "addPlaceholder": "Add words separated by commas — OpenWhispr, Supabase, John Snow, ARR",
+    "addPlaceholder": "Add words separated by commas — Switchboard, Supabase, John Snow, ARR",
     "removeWord": "Remove {{word}}",
     "clearAll": "Clear all",
     "add": "Add",
@@ -3677,7 +3677,7 @@
       "duplicate": "A snippet with this trigger already exists",
       "emptyTitle": "The stuff you shouldn't have to say",
       "emptyTitleAccent": "twice",
-      "emptyDescription": "Speak a trigger word and OpenWhispr replaces it with whatever you saved — URLs, intros, sign-offs, prompts.",
+      "emptyDescription": "Speak a trigger word and Switchboard replaces it with whatever you saved — URLs, intros, sign-offs, prompts.",
       "new": "New snippet",
       "examples": {
         "linkedinTrigger": "My LinkedIn",
@@ -3692,7 +3692,7 @@
       "addPlaceholder": "Add a trigger phrase — \"investor ask\", \"cal link\""
     },
     "emptyTitle": "Your dictionary is empty",
-    "emptyDescription": "Add words for OpenWhispr to always get right: names, tools, acronyms.",
+    "emptyDescription": "Add words for Switchboard to always get right: names, tools, acronyms.",
     "addFirstWord": "Add your first word",
     "importList": "Import a list",
     "agentDefault": "Added by default"
@@ -3704,7 +3704,7 @@
     "submitBug": "Submit Bug"
   },
   "postMigration": {
-    "title": "Welcome back to OpenWhispr",
+    "title": "Welcome back to Switchboard",
     "description": "Your notes and settings carried over from the previous version. macOS treats this as a new app though, so a few permissions need to be granted again.",
     "done": "Done",
     "remindLater": "Remind Me Later"
@@ -3727,8 +3727,8 @@
     "ready": "GPU acceleration ready",
     "activating": "Activating GPU...",
     "activationFailed": "GPU acceleration unavailable",
-    "activationFailedDescription": "OpenWhispr switched to CPU transcription.",
-    "reasoningActivationFailedDescription": "OpenWhispr switched to CPU processing.",
+    "activationFailedDescription": "Switchboard switched to CPU transcription.",
+    "reasoningActivationFailedDescription": "Switchboard switched to CPU processing.",
     "retryActivation": "Retry GPU acceleration",
     "remove": "Remove",
     "dismiss": "Not now",
@@ -3748,11 +3748,11 @@
       "undo": "Undo",
       "accessibilityMissing": {
         "title": "Accessibility permissions required",
-        "description": "OpenWhispr needs accessibility permissions to detect your hotkey and paste text. Please enable them in the Control Panel."
+        "description": "Switchboard needs accessibility permissions to detect your hotkey and paste text. Please enable them in the Control Panel."
       },
       "gpuFallback": {
         "title": "GPU acceleration unavailable",
-        "description": "OpenWhispr switched to CPU transcription.",
+        "description": "Switchboard switched to CPU transcription.",
         "retry": "Retry GPU"
       },
       "gpuPackMigration": {
@@ -3797,11 +3797,11 @@
       "visionModelDescription": "Route commands that include a screenshot to a different, vision-capable model.",
       "permissionTitle": "Screen Recording",
       "permissionDescription": "macOS requires Screen Recording permission to capture your screen.",
-      "relaunchHint": "Screen Recording was granted while OpenWhispr was running. Quit and reopen OpenWhispr to start capturing screenshots."
+      "relaunchHint": "Screen Recording was granted while Switchboard was running. Quit and reopen Switchboard to start capturing screenshots."
     },
     "modes": {
       "openwhispr": "OpenWhispr Cloud",
-      "openwhisprDesc": "Use the OpenWhispr-managed assistant — no API key needed.",
+      "openwhisprDesc": "Use the Switchboard-managed assistant — no API key needed.",
       "providers": "Bring your own key",
       "providersDesc": "Connect to OpenAI, Anthropic, Gemini, or Groq with your own API key.",
       "local": "Local",
@@ -3915,7 +3915,7 @@
       "disconnectConfirm": "Disconnect {{email}}?",
       "disconnectDescription": "Meeting notes will no longer be recorded from this calendar.",
       "systemAudioRequired": "System Audio Permission Required",
-      "systemAudioDescription": "To transcribe meetings, OpenWhispr needs the System Audio permission to capture other participants' audio. We never record your screen. You'll be taken to System Settings to enable it.",
+      "systemAudioDescription": "To transcribe meetings, Switchboard needs the System Audio permission to capture other participants' audio. We never record your screen. You'll be taken to System Settings to enable it.",
       "openSettings": "Open System Settings",
       "connectFailed": "Connection Failed",
       "connectFailedDescription": "Something went wrong while connecting Google Calendar. Please try again."
@@ -3945,10 +3945,10 @@
       "disconnectConfirm": "Disconnect Apple Calendar?",
       "disconnectDescription": "Meeting notes will no longer be recorded from your Apple Calendar.",
       "permissionDenied": "Calendar Access Required",
-      "permissionDeniedDescription": "OpenWhispr needs calendar access to detect meetings. Enable OpenWhispr in System Settings under Privacy & Security → Calendars.",
+      "permissionDeniedDescription": "Switchboard needs calendar access to detect meetings. Enable Switchboard in System Settings under Privacy & Security → Calendars.",
       "openSettings": "Open System Settings",
       "connectFailed": "Connection Failed",
-      "connectFailedDescription": "Something went wrong while connecting to Calendar.app. Please restart OpenWhispr and try again."
+      "connectFailedDescription": "Something went wrong while connecting to Calendar.app. Please restart Switchboard and try again."
     },
     "sections": {
       "calendar": "Calendar",
@@ -3967,13 +3967,13 @@
     "mcp": {
       "title": "Bring your notes to your AI tools",
       "description": "Chat, search, and work with your notes inside Claude, ChatGPT, and Cursor.",
-      "step1": "In your AI tool, add OpenWhispr MCP using the public URL",
+      "step1": "In your AI tool, add Switchboard MCP using the public URL",
       "step2": "Create an API key above with the scopes you need.",
       "step3": "Paste the key as the Authorization header to connect.",
       "learnMore": "Learn more",
       "viewPlans": "View Plans",
       "copyUrl": "Copy MCP URL",
-      "proRequired": "Upgrade to a paid plan to connect OpenWhispr to Claude, ChatGPT, and Cursor.",
+      "proRequired": "Upgrade to a paid plan to connect Switchboard to Claude, ChatGPT, and Cursor.",
       "copied": "Copied"
     },
     "cli": {
@@ -3987,7 +3987,7 @@
       "local": {
         "label": "Local",
         "freeBadge": "Free",
-        "description": "Read your local notes directly. No login or API key — works while OpenWhispr is running."
+        "description": "Read your local notes directly. No login or API key — works while Switchboard is running."
       },
       "cloud": {
         "label": "Cloud",
@@ -4007,8 +4007,8 @@
       "upgrade": "Upgrade"
     },
     "notABot": {
-      "title": "OpenWhispr is a meeting recorder, not a bot",
-      "description": "OpenWhispr captures audio directly from your system — it never joins your meetings as a participant. Just connect your calendar and take notes as normal."
+      "title": "Switchboard is a meeting recorder, not a bot",
+      "description": "Switchboard captures audio directly from your system — it never joins your meetings as a participant. Just connect your calendar and take notes as normal."
     }
   },
   "notesView": {
@@ -4058,7 +4058,7 @@
         "invitationActions": "Invitation actions",
         "resendSent": "Invitation sent",
         "resendThrottled": "Invitation sent recently. Try again in a minute.",
-        "syncPrompt": "Sharing keeps a copy of this note in your OpenWhispr cloud. Only you can see it until you choose who to share it with.",
+        "syncPrompt": "Sharing keeps a copy of this note in your Switchboard cloud. Only you can see it until you choose who to share it with.",
         "syncAndShare": "Sync note",
         "visibility": {
           "label": "Visibility",
@@ -4120,7 +4120,7 @@
   },
   "permissionsGate": {
     "title": "Permissions Required",
-    "description": "OpenWhispr needs a few permissions to work on this computer.",
+    "description": "Switchboard needs a few permissions to work on this computer.",
     "continue": "Continue"
   },
   "embeddedChat": {

@@ -1,7 +1,7 @@
 {
-  "name": "open-whispr",
+  "name": "switchboard",
   "version": "1.10.2",
-  "description": "A desktop dictation application using whisper.cpp for speech-to-text transcription",
+  "description": "Personal macOS app for meeting transcription and a menu-bar calendar",
   "main": "main.js",
   "private": true,
   "engines": {
