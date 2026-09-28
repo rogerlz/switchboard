@@ -1,7 +1,6 @@
 import { getCleanupSystemPrompt } from "../config/prompts";
 import { getSettings } from "../stores/settingsStore";
 import { resolveCleanupLanguage } from "../utils/chineseScript";
-import { getDictionaryHintWords } from "../utils/snippets";
 import type { InferenceScope } from "../config/inferenceScopes";
 import type { ScreenContextImage } from "../types/electron";
 
@@ -36,8 +35,9 @@ export interface ReasoningConfig {
 export abstract class BaseReasoningService {
   protected isProcessing = false;
 
+  // The custom dictionary was removed with dictation; prompts get no hint words.
   protected getCustomDictionary(): string[] {
-    return getDictionaryHintWords(getSettings());
+    return [];
   }
 
   // Auto must remain auto here: zh-CN/zh-TW instructions make cleanup write its

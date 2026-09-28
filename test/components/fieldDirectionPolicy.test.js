@@ -59,14 +59,11 @@ const EXPECTED_SHARED_FIELD_DIRECTIONS = {
   "src/components/ApiKeysSection.tsx": ["auto"],
   "src/components/CreateTeamDialog.tsx": ["auto"],
   "src/components/CreateWorkspaceDialog.tsx": ["auto"],
-  "src/components/DictionaryView.tsx": ["auto", "auto", "auto"],
   "src/components/EnterpriseProviderConfig.tsx": ["ltr", "ltr", "ltr", "ltr", "ltr", "ltr"],
   "src/components/InviteTeammateDialog.tsx": ["ltr"],
-  "src/components/LeaderboardSection.tsx": ["ltr"],
   "src/components/OpenAICompatiblePanel.tsx": ["ltr"],
   "src/components/SelfHostedPanel.tsx": ["ltr", "ltr"],
   "src/components/SettingsPage.tsx": ["ltr", "ltr", "ltr", "ltr", "ltr", "ltr"],
-  "src/components/SnippetsView.tsx": ["auto", "auto", "auto", "auto"],
   "src/components/TranscriptionModelPicker.tsx": ["ltr", "ltr", "ltr"],
   "src/components/notes/DeleteSpaceDialog.tsx": ["auto"],
   "src/components/notes/UploadAudioView.tsx": ["auto"],
@@ -145,10 +142,6 @@ test("native text fields use the same reviewed direction policy", () => {
 });
 
 test("representative prose, identity, secret, and rich-editor surfaces keep their policy", () => {
-  assert.match(
-    source("src/components/DictionaryView.tsx"),
-    /<Input\s+dir="auto"\s+ref=\{addInputRef\}/
-  );
   assert.match(
     source("src/components/notes/UploadAudioView.tsx"),
     /<input\s+dir="ltr"\s+type="url"/

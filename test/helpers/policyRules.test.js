@@ -776,14 +776,6 @@ test("a browsed provider resolves for display without leaking the committed mode
   );
 });
 
-test("active control-panel views reroute on their specific policy capability", async () => {
-  const { isControlPanelViewAllowed } = await load();
-
-  assert.equal(isControlPanelViewAllowed("upload", false), false);
-  assert.equal(isControlPanelViewAllowed("upload", true), true);
-  assert.equal(isControlPanelViewAllowed("home", false), true);
-});
-
 test("screen context is allowed unless a managed policy turns it off", async () => {
   const { isScreenContextAllowed } = await load();
 

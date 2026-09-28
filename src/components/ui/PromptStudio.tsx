@@ -18,7 +18,6 @@ import {
 } from "../../stores/settingsStore";
 import { usePolicySnapshot } from "../../hooks/usePolicy";
 import { getLanguageLabel } from "../../utils/languageSupport";
-import { getDictionaryHintWords } from "../../utils/snippets";
 import { resolveDictationTranslationInference } from "../../helpers/dictationTranslationInference";
 
 interface PromptStudioProps {
@@ -145,26 +144,19 @@ export default function PromptStudio({ className = "", kind = "cleanup" }: Promp
         const previous = customPrompt;
         setCustomPrompt(kind, editedPrompt);
         try {
-          const result = await ReasoningService.processText(
-            testText,
-            translation.model,
-            null,
-            {
-              ...translation.config,
-              systemPrompt: resolvePrompt("translate", {
-                targetLanguageLabel: getLanguageLabel(translationTargetLanguage),
-                customDictionary: getDictionaryHintWords(effectiveSettings),
-                uiLanguage,
-              }),
-            }
-          );
+          const result = await ReasoningService.processText(testText, translation.model, null, {
+            ...translation.config,
+            systemPrompt: resolvePrompt("translate", {
+              targetLanguageLabel: getLanguageLabel(translationTargetLanguage),
+              uiLanguage,
+            }),
+          });
           setTestResult(result);
         } finally {
           setCustomPrompt(kind, previous);
         }
         return;
       }
-
 
       const cleanupProvider = isCloudMode
         ? "openwhispr"
@@ -385,9 +377,9 @@ export default function PromptStudio({ className = "", kind = "cleanup" }: Promp
             const scopeProvider = isTranslate ? translationDisplayProvider : "";
             const testProvider = isTranslate
               ? scopeProvider
-                : testIsCloud
-                  ? "openwhispr"
-                  : scopeProvider || (testModel && getModelProvider(testModel)) || "openai";
+              : testIsCloud
+                ? "openwhispr"
+                : scopeProvider || (testModel && getModelProvider(testModel)) || "openai";
             const providerConfig = PROVIDER_CONFIG[testProvider] || {
               label: testProvider.charAt(0).toUpperCase() + testProvider.slice(1),
             };
@@ -480,11 +472,7 @@ export default function PromptStudio({ className = "", kind = "cleanup" }: Promp
                 <div className="px-5 py-4">
                   <Button
                     onClick={testPrompt}
-                    disabled={
-                      !testText.trim() ||
-                      isLoading ||
-                      (!isTranslate && !useCleanupModel)
-                    }
+                    disabled={!testText.trim() || isLoading || (!isTranslate && !useCleanupModel)}
                     size="sm"
                     className="w-full"
                   >

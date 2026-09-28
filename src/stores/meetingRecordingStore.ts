@@ -171,7 +171,6 @@ const getMeetingTranscriptionOptions = () => {
     managedProviders: useStreamingProvidersStore.getState().providers,
     cortiEnvironment: state.cortiEnvironment,
     cortiTenant: state.cortiTenant,
-    keyterms: (state.customDictionary ?? []).filter(Boolean),
   });
 };
 

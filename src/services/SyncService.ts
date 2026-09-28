@@ -1,21 +1,10 @@
-import type {
-  NoteItem,
-  FolderItem,
-  SpaceItem,
-  TranscriptionItem,
-} from "../types/electron";
+import type { NoteItem, FolderItem, SpaceItem } from "../types/electron";
 import { NotesService, type CloudNote } from "./NotesService.js";
 import { FoldersService } from "./FoldersService.js";
 import { SpacesService, type MySpace } from "./SpacesService.js";
-import { TranscriptionsService } from "./TranscriptionsService.js";
-import { syncPendingAnalytics } from "./AnalyticsService.js";
-import { DictionaryService } from "./DictionaryService.js";
-import { SnippetService, type CloudSnippetEntry } from "./SnippetService.js";
 import { CloudApiError, isAuthContextError } from "./cloudApi.js";
-import { LeaderboardService } from "./LeaderboardService";
 import {
   assertAuthGenerationCurrent,
-  getAuthRequestContextSnapshot,
   getValidatedAuthGeneration,
   hasValidatedAuthContext,
 } from "../lib/authRequestContext";
@@ -27,7 +16,6 @@ import {
 } from "../lib/teamSpacesCapability";
 import { readIsSubscribed, subscribeIsSubscribed } from "../lib/subscriptionFlag";
 import { readNoteConflictIds } from "../lib/noteConflictRegistry";
-import { pendingLeaderboardLeaveDeservesPriority } from "../lib/pendingLeaderboardLeave";
 import {
   cloudBackupResumed,
   effectiveLocalHistoryEnabled,
@@ -38,7 +26,6 @@ import {
   buildNoteCreatePayload,
   buildNoteUpdatePayload,
   isCloudEntryNewer,
-  normalizeTimestamp,
 } from "../helpers/cloudSyncGuards.js";
 import { resolveRendererCloudNoteCreate, type CloudNoteCreateResult } from "./noteCreateAck";
 import {
@@ -114,9 +101,6 @@ interface SpaceSyncContext {
 
 const PUSH_DEBOUNCE_MS = 2000;
 const BATCH_SIZE = 50;
-const TRANSCRIPTION_BATCH_SIZE = 100;
-const DICTIONARY_BATCH_SIZE = 200;
-const SNIPPET_BATCH_SIZE = 200;
 // Minimum gap between auto syncs, measured from the last completed pass in
 // any window (the stamp lives in shared localStorage).
 const AUTO_SYNC_THROTTLE_MS = 20000;
@@ -226,8 +210,6 @@ export class SyncService {
   private syncing = false;
   private syncAllPending = false;
   private autoSyncStarted = false;
-  private dictionaryDirty = false;
-  private snippetsDirty = false;
   // One owner_user_id backfill probe per session (see backfillNoteOwners).
   private ownerBackfillChecked = false;
   private pushTimers = new Map<string, ReturnType<typeof setTimeout>>();
@@ -237,9 +219,6 @@ export class SyncService {
   // Set by any pass that actually moves team or shared content; drives the
   // ambient team-only backoff (see shouldRunAmbientTeamOnlyPass).
   private teamPassMovedWork = false;
-  // The same, for Insights counters. Kept separate so neither kind of work is
-  // ever inferred from the other (see nextAmbientEmptyStreak).
-  private analyticsPassMovedWork = false;
 
   private consent(): SyncConsent {
     const policyState = usePolicyStore.getState();
@@ -294,7 +273,7 @@ export class SyncService {
       String(
         nextAmbientEmptyStreak(streak, {
           team: this.teamPassMovedWork,
-          analytics: this.analyticsPassMovedWork,
+          analytics: false,
         })
       )
     );
@@ -469,7 +448,6 @@ export class SyncService {
     }
     this.syncing = true;
     this.teamPassMovedWork = false;
-    this.analyticsPassMovedWork = false;
     let teamSpacesReady = false;
     try {
       // Ambient passes skip when another window holds the lock — that pass
@@ -483,19 +461,6 @@ export class SyncService {
           await this.syncFolders();
           if (!hasValidatedAuthContext()) return;
           await this.syncNotes();
-          if (!hasValidatedAuthContext()) return;
-          await this.syncTranscriptions();
-          if (!hasValidatedAuthContext()) return;
-          // Edits during the awaits above set dictionaryDirty (syncing is already
-          // true), so re-run until clean rather than stalling until the next trigger.
-          do {
-            this.dictionaryDirty = false;
-            await this.syncDictionary();
-          } while (this.dictionaryDirty);
-          do {
-            this.snippetsDirty = false;
-            await this.syncSnippets();
-          } while (this.snippetsDirty);
         } else {
           // Backup is off: team-space content still syncs (membership is
           // consent, D7) and note deletes still propagate so revoked/deleted
@@ -505,14 +470,6 @@ export class SyncService {
           await this.syncNotes(true);
         }
         if (!hasValidatedAuthContext()) return;
-        // Outside the branch above: Insights uploads ride their own opt-in,
-        // while queued erasures run for every authenticated account.
-        await this.syncAnalytics();
-        // Stamped after the push, so a pass that moved counters is recorded as
-        // work rather than as another empty one. A pass that loses auth before
-        // reaching here now leaves the streak unstamped where it used to stamp
-        // it, which only makes the next pass due immediately -- the right answer
-        // after an interruption.
         if (!full) this.recordTeamOnlyPass();
         if (!hasValidatedAuthContext()) return;
         if (teamSpacesReady) {
@@ -557,16 +514,7 @@ export class SyncService {
       reason === "start" &&
       this.canSyncTeamSpaces() &&
       localStorage.getItem("teamSpacesCapability.probedAt") == null;
-    // A leaderboard opt-out is a user-requested account mutation, not ambient
-    // sync work. Retry it on the next trigger even when an otherwise idle
-    // collaboration-only pass has backed off. That priority is spent after a
-    // few undelivered attempts: an opt-out that can never land keeps being
-    // retried, but stops disabling the throttle, the in-flight guard and the
-    // ambient backoff for the life of the install.
-    const sessionUserId = getAuthRequestContextSnapshot().sessionUserId;
-    const pendingLeaderboardLeave =
-      sessionUserId != null && pendingLeaderboardLeaveDeservesPriority(sessionUserId);
-    const bypassThrottle = waitForLock || firstTeamSpacesProbe || pendingLeaderboardLeave;
+    const bypassThrottle = waitForLock || firstTeamSpacesProbe;
     if (
       !bypassThrottle &&
       (this.syncing || Date.now() - this.lastCompletedSyncAt() < AUTO_SYNC_THROTTLE_MS)
@@ -584,46 +532,6 @@ export class SyncService {
       return;
     }
     void this.syncAll(waitForLock);
-  }
-
-  async syncDictionaryNow(): Promise<void> {
-    if (!this.canSync()) return;
-    // A sync already running will drain dictionaryDirty before it finishes, so
-    // flag a re-run instead of dropping this request.
-    if (this.syncing) {
-      this.dictionaryDirty = true;
-      return;
-    }
-    this.syncing = true;
-    try {
-      do {
-        this.dictionaryDirty = false;
-        await this.syncDictionary();
-      } while (this.dictionaryDirty);
-    } catch (err) {
-      console.error("Dictionary sync failed:", err);
-    } finally {
-      this.syncing = false;
-    }
-  }
-
-  async syncSnippetsNow(): Promise<void> {
-    if (!this.canSync()) return;
-    if (this.syncing) {
-      this.snippetsDirty = true;
-      return;
-    }
-    this.syncing = true;
-    try {
-      do {
-        this.snippetsDirty = false;
-        await this.syncSnippets();
-      } while (this.snippetsDirty);
-    } catch (err) {
-      console.error("Snippets sync failed:", err);
-    } finally {
-      this.syncing = false;
-    }
   }
 
   debouncedPush(entityType: string, entityId: number): void {
@@ -680,8 +588,6 @@ export class SyncService {
         return this.pushFolder(entityId);
       case "note":
         return this.pushNote(entityId);
-      case "transcription":
-        return this.pushTranscription(entityId);
     }
   }
 
@@ -895,23 +801,6 @@ export class SyncService {
     await this.pushNote(localId);
     const synced = await window.electronAPI.getNote?.(localId);
     return synced?.cloud_id ?? null;
-  }
-
-  private async pushTranscription(id: number): Promise<void> {
-    const t = await window.electronAPI.getTranscriptionById?.(id);
-    if (!t || t.cloud_id) return;
-
-    const cloud = await TranscriptionsService.create({
-      client_transcription_id: t.client_transcription_id,
-      text: t.text,
-      raw_text: t.raw_text,
-      provider: t.provider,
-      model: t.model,
-      audio_duration_ms: t.audio_duration_ms,
-      status: t.status,
-      created_at: t.created_at,
-    });
-    await window.electronAPI.markTranscriptionSynced?.(t.id, cloud.id);
   }
 
   // Runs first in every pass: probes spaces availability, mirrors the caller's
@@ -2011,552 +1900,6 @@ export class SyncService {
     } catch (err) {
       console.error("Note pull failed:", err);
       return false;
-    }
-  }
-
-  async syncAnalyticsNow(): Promise<boolean> {
-    return this.syncAnalytics();
-  }
-
-  // Push-only: the account summary is read live by the Insights view, so there
-  // is nothing to pull back into the device's own counters.
-  private async syncAnalytics(): Promise<boolean> {
-    const consent = this.consent();
-    if (!consent.shared) return false;
-    const accountId = getAuthRequestContextSnapshot().sessionUserId;
-    const authGeneration = getValidatedAuthGeneration();
-    if (!accountId || authGeneration == null) return false;
-    const participationContext = { userId: accountId, authGeneration };
-    // A leaderboard opt-out outlives the window that made it, so every pass
-    // retries the one this account is still waiting for. It only ever leaves,
-    // and nothing below depends on whether it has landed, so it runs beside
-    // the pass rather than ahead of it: this method executes under
-    // SYNC_ALL_LOCK and cloud requests carry no timeout, so awaiting it here
-    // let one hung PATCH hold every window's sync behind the lock.
-    void LeaderboardService.flushPendingLeave(participationContext).catch((error: unknown) => {
-      // The account changing mid-queue is expected; the gate below sees it too.
-      if (!isAuthContextError(error)) {
-        console.error("Retrying the leaderboard leave failed:", error);
-      }
-    });
-    // Participation controls roster visibility, not analytics consent. A
-    // missing or failed participation route must never interrupt Insights Sync.
-    const uploadRequested = consent.analytics;
-    let uploadAllowed = false;
-    const verifyUploadAllowed = async (): Promise<boolean> => {
-      await assertAuthGenerationCurrent(authGeneration);
-      const current = getAuthRequestContextSnapshot();
-      if (
-        current.sessionUserId !== accountId ||
-        current.sessionGeneration !== authGeneration ||
-        current.validatedGeneration !== authGeneration
-      ) {
-        throw Object.assign(new Error("Authentication context changed during analytics sync"), {
-          code: "AUTH_CONTEXT_CHANGED",
-        });
-      }
-      // A pass requested while local sync was off may run erasures, but must
-      // never gain upload authority merely because a later setting changed.
-      uploadAllowed = uploadRequested && this.consent().analytics;
-      return uploadAllowed;
-    };
-    try {
-      // Revoking retention/Insights consent blocks new uploads, never deletion
-      // of rows that may already exist in the account. The gate itself reaches
-      // the head of AnalyticsService's queue before it resolves, so a local
-      // opt-out while another pass runs still wins before rows are read.
-      if (
-        (await syncPendingAnalytics({
-          uploadAllowed: verifyUploadAllowed,
-          context: { accountId, authGeneration },
-        })) > 0
-      ) {
-        this.analyticsPassMovedWork = true;
-      }
-    } catch (err) {
-      if (isAuthContextError(err)) throw err;
-      // A rejected batch stays pending for the next pass; the rest of this one
-      // still has folders, notes, and transcriptions to finish.
-      console.error("Analytics sync failed:", err);
-      return false;
-    }
-    return uploadAllowed && this.consent().analytics;
-  }
-
-  private async syncTranscriptions(): Promise<void> {
-    await this.pushPendingTranscriptions();
-    await this.pushTranscriptionDeletes();
-    await this.pullTranscriptions();
-  }
-
-  private async pushTranscriptionDeletes(): Promise<void> {
-    const deletes = (await window.electronAPI.getPendingTranscriptionDeletes?.()) ?? [];
-    const withCloudId = deletes.filter((t) => t.cloud_id);
-    if (withCloudId.length === 0) return;
-
-    for (let i = 0; i < withCloudId.length; i += TRANSCRIPTION_BATCH_SIZE) {
-      const chunk = withCloudId.slice(i, i + TRANSCRIPTION_BATCH_SIZE);
-      try {
-        const { deleted } = await TranscriptionsService.batchDelete(chunk.map((t) => t.cloud_id!));
-        for (const cloudId of deleted) {
-          const local = chunk.find((t) => t.cloud_id === cloudId);
-          if (local) await window.electronAPI.hardDeleteTranscription?.(local.id);
-        }
-      } catch (err) {
-        console.error("Transcription batch delete failed:", err);
-      }
-    }
-  }
-
-  private async pushPendingTranscriptions(): Promise<void> {
-    const pending = ((await window.electronAPI.getPendingTranscriptions?.()) ?? []).filter(
-      (t) => !!t.text?.trim()
-    );
-    if (pending.length === 0) return;
-
-    for (let i = 0; i < pending.length; i += TRANSCRIPTION_BATCH_SIZE) {
-      const chunk = pending.slice(i, i + TRANSCRIPTION_BATCH_SIZE);
-      try {
-        const { created } = await TranscriptionsService.batchCreate(
-          chunk.map((t) => ({
-            client_transcription_id: t.client_transcription_id,
-            text: t.text,
-            raw_text: t.raw_text,
-            provider: t.provider,
-            model: t.model,
-            audio_duration_ms: t.audio_duration_ms,
-            status: t.status,
-            created_at: t.created_at,
-          }))
-        );
-        for (const cloudT of created) {
-          const local = chunk.find(
-            (t) => t.client_transcription_id === cloudT.client_transcription_id
-          );
-          if (local) await window.electronAPI.markTranscriptionSynced?.(local.id, cloudT.id);
-        }
-      } catch (err) {
-        console.error("Transcription batch create failed:", err);
-      }
-    }
-  }
-
-  private async pullTranscriptions(): Promise<void> {
-    try {
-      const since = localStorage.getItem("lastSyncedAt.transcriptions") ?? undefined;
-      const syncStartedAt = new Date().toISOString();
-
-      let cursor: string | undefined = since;
-      while (true) {
-        const { transcriptions: cloudTs } = since
-          ? await TranscriptionsService.list(TRANSCRIPTION_BATCH_SIZE, undefined, cursor)
-          : await TranscriptionsService.list(TRANSCRIPTION_BATCH_SIZE, cursor);
-        if (cloudTs.length === 0) break;
-
-        for (const cloudT of cloudTs) {
-          const local = await window.electronAPI.getTranscriptionByClientId?.(
-            cloudT.client_transcription_id ?? ""
-          );
-
-          if (cloudT.deleted_at) {
-            if (local) await window.electronAPI.hardDeleteTranscription?.(local.id);
-            continue;
-          }
-
-          if (!cloudT.text) continue;
-
-          if (!local) {
-            await window.electronAPI.upsertTranscriptionFromCloud?.(
-              cloudT as unknown as Record<string, unknown>
-            );
-          }
-        }
-
-        if (cloudTs.length < TRANSCRIPTION_BATCH_SIZE) break;
-        const last = cloudTs[cloudTs.length - 1];
-        const next = since ? last.updated_at : last.created_at;
-        if (next === cursor) break;
-        cursor = next;
-      }
-
-      localStorage.setItem("lastSyncedAt.transcriptions", syncStartedAt);
-    } catch (err) {
-      console.error("Transcription pull failed:", err);
-    }
-  }
-
-  private async syncDictionary(): Promise<void> {
-    // Fail loud on preload skew: a missing binding silently optional-chained to
-    // a no-op would lose user data, so assert the whole surface up front.
-    const api = window.electronAPI;
-    const required = [
-      "getPendingDictionary",
-      "getPendingDictionaryDeletes",
-      "getDictionaryByClientId",
-      "upsertDictionaryFromCloud",
-      "markDictionarySynced",
-      "hardDeleteDictionary",
-      "clearDictionaryCloudId",
-      "broadcastDictionaryUpdated",
-    ] as const;
-    const missing = required.filter((name) => typeof api[name] !== "function");
-    if (missing.length > 0) {
-      throw new Error(
-        `Dictionary IPC bindings missing — preload out of date: ${missing.join(", ")}`
-      );
-    }
-
-    await this.pushPendingDictionary();
-    await this.pushDictionaryDeletes();
-    await this.pullDictionary();
-  }
-
-  private async pushPendingDictionary(): Promise<void> {
-    const pending = (await window.electronAPI.getPendingDictionary?.()) ?? [];
-    if (pending.length === 0) return;
-
-    const updates = pending.filter((e) => e.cloud_id);
-    const creates = pending.filter((e) => !e.cloud_id);
-
-    for (const entry of updates) {
-      try {
-        await DictionaryService.update(entry.cloud_id!, {
-          word: entry.word,
-          source: entry.source,
-        });
-        await window.electronAPI.markDictionarySynced?.(entry.id, entry.cloud_id!);
-      } catch (err) {
-        // 404: another device purged the cloud row. Clear the stale cloud_id so
-        // the next push re-creates it via batchCreate instead of retrying PATCH.
-        if (isHttpStatus(err, 404)) {
-          await window.electronAPI.clearDictionaryCloudId?.(entry.id);
-        } else {
-          console.error("Dictionary update sync failed:", err);
-        }
-      }
-    }
-
-    for (let i = 0; i < creates.length; i += DICTIONARY_BATCH_SIZE) {
-      const chunk = creates.slice(i, i + DICTIONARY_BATCH_SIZE);
-      try {
-        const { created } = await DictionaryService.batchCreate(
-          chunk.map((e) => ({
-            client_dict_id: e.client_dict_id,
-            word: e.word,
-            source: e.source,
-            created_at: e.created_at,
-            updated_at: e.updated_at,
-          }))
-        );
-        const byClientId = new Map(created.map((c) => [c.client_dict_id, c]));
-        let unmatched = 0;
-        for (const local of chunk) {
-          const server = byClientId.get(local.client_dict_id);
-          if (!server) {
-            unmatched += 1;
-            continue;
-          }
-          // 0 changes means the local row was deleted between snapshot and ack —
-          // delete the freshly-created server row so we don't orphan it.
-          const result = await window.electronAPI.markDictionarySynced?.(local.id, server.id);
-          if (result && result.changes === 0) {
-            try {
-              await DictionaryService.delete(server.id);
-            } catch (deleteErr) {
-              console.error("Dictionary orphan cleanup failed:", deleteErr);
-            }
-          }
-        }
-        if (unmatched > 0) {
-          console.warn(
-            `Dictionary batch-create: ${unmatched}/${chunk.length} rows had no matching server response`
-          );
-        }
-      } catch (err) {
-        console.error("Dictionary batch create failed:", err);
-      }
-    }
-  }
-
-  private async pushDictionaryDeletes(): Promise<void> {
-    const deletes = (await window.electronAPI.getPendingDictionaryDeletes?.()) ?? [];
-    for (const entry of deletes) {
-      if (!entry.cloud_id) continue;
-      try {
-        await DictionaryService.delete(entry.cloud_id);
-        await window.electronAPI.hardDeleteDictionary?.(entry.id);
-      } catch (err) {
-        // 404 means the row is already gone server-side — treat as success.
-        if (isHttpStatus(err, 404)) {
-          await window.electronAPI.hardDeleteDictionary?.(entry.id);
-        } else {
-          console.error("Dictionary delete sync failed:", err);
-        }
-      }
-    }
-  }
-
-  private async pullDictionary(): Promise<void> {
-    try {
-      const since = localStorage.getItem("lastSyncedAt.dictionary") ?? undefined;
-      const sinceId = localStorage.getItem("lastSyncedAt.dictionary.id") ?? undefined;
-      let changed = false;
-
-      let cursor: string | undefined = since;
-      let cursorId: string | undefined = sinceId;
-      let maxUpdatedAt = normalizeTimestamp(since);
-      let maxId = sinceId ?? "";
-
-      while (true) {
-        const { entries, hasMore } = await DictionaryService.list(
-          cursor,
-          DICTIONARY_BATCH_SIZE,
-          cursorId
-        );
-        if (entries.length === 0) break;
-
-        for (const cloudEntry of entries) {
-          const local = await window.electronAPI.getDictionaryByClientId?.(
-            cloudEntry.client_dict_id ?? ""
-          );
-
-          if (cloudEntry.deleted_at) {
-            if (local) {
-              await window.electronAPI.hardDeleteDictionary?.(local.id);
-              changed = true;
-            }
-            continue;
-          }
-
-          // Last-writer-wins on normalized timestamps (see normalizeTimestamp).
-          const cloudTs = normalizeTimestamp(cloudEntry.updated_at);
-          const localTs = local ? normalizeTimestamp(local.updated_at) : "";
-          if (!local || cloudTs > localTs) {
-            await window.electronAPI.upsertDictionaryFromCloud?.(
-              cloudEntry as unknown as Record<string, unknown>
-            );
-            changed = true;
-          }
-
-          if (cloudTs > maxUpdatedAt) {
-            maxUpdatedAt = cloudTs;
-            maxId = cloudEntry.id;
-          } else if (cloudTs === maxUpdatedAt && cloudEntry.id > maxId) {
-            maxId = cloudEntry.id;
-          }
-        }
-
-        if (!hasMore) break;
-        const last = entries[entries.length - 1];
-        // Stall guard: if the (updated_at, id) cursor didn't advance after a
-        // full page, bail rather than loop forever.
-        if (last.updated_at === cursor && last.id === cursorId) break;
-        cursor = last.updated_at;
-        cursorId = last.id;
-      }
-
-      if (maxUpdatedAt) localStorage.setItem("lastSyncedAt.dictionary", maxUpdatedAt);
-      if (maxId) localStorage.setItem("lastSyncedAt.dictionary.id", maxId);
-      if (changed) await window.electronAPI.broadcastDictionaryUpdated?.();
-    } catch (err) {
-      console.error("Dictionary pull failed:", err);
-    }
-  }
-
-  private async syncSnippets(): Promise<void> {
-    const api = window.electronAPI;
-    const required = [
-      "getPendingSnippets",
-      "getPendingSnippetDeletes",
-      "getSnippetForCloudMerge",
-      "upsertSnippetFromCloud",
-      "markSnippetSynced",
-      "hardDeleteSnippet",
-      "clearSnippetCloudId",
-      "broadcastSnippetsUpdated",
-    ] as const;
-    const missing = required.filter((name) => typeof api[name] !== "function");
-    if (missing.length > 0) {
-      throw new Error(`Snippet IPC bindings missing — preload out of date: ${missing.join(", ")}`);
-    }
-
-    await this.pushPendingSnippets();
-    await this.pushSnippetDeletes();
-    await this.pullSnippets();
-  }
-
-  private async pushPendingSnippets(): Promise<void> {
-    const pending = (await window.electronAPI.getPendingSnippets?.()) ?? [];
-    if (pending.length === 0) return;
-
-    const updates = pending.filter((e) => e.cloud_id);
-    const creates = pending.filter((e) => !e.cloud_id);
-
-    for (const entry of updates) {
-      try {
-        const server = await SnippetService.update(entry.cloud_id!, {
-          trigger: entry.trigger,
-          replacement: entry.replacement,
-        });
-        await window.electronAPI.markSnippetSynced?.(
-          entry.id,
-          server.id,
-          server.updated_at,
-          entry.trigger,
-          entry.replacement
-        );
-      } catch (err) {
-        if (isHttpStatus(err, 404)) {
-          // Cloud row purged elsewhere — drop the stale cloud_id so the next push
-          // re-creates it via batchCreate.
-          await window.electronAPI.clearSnippetCloudId?.(entry.id);
-        } else if (isHttpStatus(err, 409)) {
-          // Another snippet already holds this trigger, so the server keeps
-          // rejecting the rename. Mark synced to stop re-pushing the doomed PATCH.
-          await window.electronAPI.markSnippetSynced?.(
-            entry.id,
-            entry.cloud_id!,
-            undefined,
-            entry.trigger,
-            entry.replacement
-          );
-        } else {
-          console.error("Snippet update sync failed:", err);
-        }
-      }
-    }
-
-    for (let i = 0; i < creates.length; i += SNIPPET_BATCH_SIZE) {
-      const chunk = creates.slice(i, i + SNIPPET_BATCH_SIZE);
-      try {
-        const { created } = await SnippetService.batchCreate(
-          chunk.map((e) => ({
-            client_snippet_id: e.client_snippet_id,
-            trigger: e.trigger,
-            replacement: e.replacement,
-            created_at: e.created_at,
-            updated_at: e.updated_at,
-          }))
-        );
-        const byClientId = new Map(created.map((c) => [c.client_snippet_id, c]));
-        let unmatched = 0;
-        for (const local of chunk) {
-          const server = byClientId.get(local.client_snippet_id);
-          if (!server) {
-            unmatched += 1;
-            continue;
-          }
-          const result = await window.electronAPI.markSnippetSynced?.(
-            local.id,
-            server.id,
-            server.updated_at,
-            local.trigger,
-            local.replacement
-          );
-          if (result && result.changes === 0) {
-            try {
-              await SnippetService.delete(server.id);
-            } catch (deleteErr) {
-              console.error("Snippet orphan cleanup failed:", deleteErr);
-            }
-          }
-        }
-        if (unmatched > 0) {
-          console.warn(
-            `Snippet batch-create: ${unmatched}/${chunk.length} rows had no matching server response`
-          );
-        }
-      } catch (err) {
-        console.error("Snippet batch create failed:", err);
-      }
-    }
-  }
-
-  private async pushSnippetDeletes(): Promise<void> {
-    const deletes = (await window.electronAPI.getPendingSnippetDeletes?.()) ?? [];
-    for (const entry of deletes) {
-      if (!entry.cloud_id) continue;
-      try {
-        await SnippetService.delete(entry.cloud_id);
-        await window.electronAPI.hardDeleteSnippet?.(entry.id);
-      } catch (err) {
-        if (isHttpStatus(err, 404)) {
-          await window.electronAPI.hardDeleteSnippet?.(entry.id);
-        } else {
-          console.error("Snippet delete sync failed:", err);
-        }
-      }
-    }
-  }
-
-  private async pullSnippets(): Promise<void> {
-    try {
-      const since = localStorage.getItem("lastSyncedAt.snippets") ?? undefined;
-      const sinceId = localStorage.getItem("lastSyncedAt.snippets.id") ?? undefined;
-      let changed = false;
-
-      let cursor: string | undefined = since;
-      let cursorId: string | undefined = sinceId;
-      let maxUpdatedAt = normalizeTimestamp(since);
-      let maxId = sinceId ?? "";
-      const cursorField: keyof Pick<CloudSnippetEntry, "created_at" | "updated_at"> = since
-        ? "updated_at"
-        : "created_at";
-
-      while (true) {
-        const { entries, hasMore } = since
-          ? await SnippetService.listDelta(cursor, SNIPPET_BATCH_SIZE, cursorId)
-          : await SnippetService.listSnapshot(cursor, SNIPPET_BATCH_SIZE, cursorId);
-        if (entries.length === 0) break;
-
-        for (const cloudEntry of entries) {
-          const cloudTs = normalizeTimestamp(cloudEntry.updated_at);
-          const local = await window.electronAPI.getSnippetForCloudMerge?.(
-            cloudEntry as unknown as Record<string, unknown>
-          );
-
-          if (cloudTs > maxUpdatedAt) {
-            maxUpdatedAt = cloudTs;
-            maxId = cloudEntry.id;
-          } else if (cloudTs === maxUpdatedAt && cloudEntry.id > maxId) {
-            maxId = cloudEntry.id;
-          }
-
-          if (cloudEntry.deleted_at) {
-            if (local && !(local.sync_status === "pending" && !local.cloud_id)) {
-              await window.electronAPI.hardDeleteSnippet?.(local.id);
-              changed = true;
-            }
-            continue;
-          }
-
-          const localTs = local ? normalizeTimestamp(local.updated_at) : "";
-          const shouldApply =
-            !local ||
-            cloudTs > localTs ||
-            (local.sync_status !== "pending" &&
-              (!local.cloud_id || local.cloud_id !== cloudEntry.id));
-          if (shouldApply) {
-            await window.electronAPI.upsertSnippetFromCloud?.(
-              cloudEntry as unknown as Record<string, unknown>
-            );
-            changed = true;
-          }
-        }
-
-        if (!hasMore) break;
-        const last = entries[entries.length - 1];
-        const nextCursor = last[cursorField];
-        if (nextCursor === cursor && last.id === cursorId) break;
-        cursor = nextCursor;
-        cursorId = last.id;
-      }
-
-      if (maxUpdatedAt) localStorage.setItem("lastSyncedAt.snippets", maxUpdatedAt);
-      if (maxId) localStorage.setItem("lastSyncedAt.snippets.id", maxId);
-      if (changed) await window.electronAPI.broadcastSnippetsUpdated?.();
-    } catch (err) {
-      console.error("Snippet pull failed:", err);
     }
   }
 

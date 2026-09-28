@@ -79,49 +79,6 @@ test("consent: disabling local history stops pending Insights uploads", async ()
   assert.equal(resolveSyncConsent({ ...SIGNED_IN, dataRetentionEnabled: false }).analytics, false);
 });
 
-// --- canOfferAnalyticsClaim -------------------------------------------------
-// Account-scope bootstrap can leave rows unattributed while the local setting
-// is on, so those counters can still need a claim after sign-in.
-
-const OFFER = {
-  signedIn: true,
-  syncAllowedByPolicy: true,
-  dataRetentionEnabled: true,
-  insightsSyncEnabled: false,
-  unclaimedCount: 0,
-};
-
-test("claim offer: counters stay offerable once sync is already on", async () => {
-  const { canOfferAnalyticsClaim } = await load();
-  // The bug: signed out, dictated, signed back in. Those rows are excluded
-  // from the account summary the view then shows, so hiding the offer behind
-  // the toggle dropped the visible totals with no way to get them back.
-  assert.equal(
-    canOfferAnalyticsClaim({ ...OFFER, insightsSyncEnabled: true, unclaimedCount: 2 }),
-    true
-  );
-  // Sync on and nothing left behind: there is nothing to ask about.
-  assert.equal(canOfferAnalyticsClaim({ ...OFFER, insightsSyncEnabled: true }), false);
-});
-
-test("claim offer: the opt-in prompt still shows before sync is turned on", async () => {
-  const { canOfferAnalyticsClaim } = await load();
-  assert.equal(canOfferAnalyticsClaim(OFFER), true);
-  for (const off of ["signedIn", "syncAllowedByPolicy", "dataRetentionEnabled"]) {
-    assert.equal(canOfferAnalyticsClaim({ ...OFFER, [off]: false }), false, `${off} off`);
-    assert.equal(
-      canOfferAnalyticsClaim({
-        ...OFFER,
-        [off]: false,
-        insightsSyncEnabled: true,
-        unclaimedCount: 2,
-      }),
-      false,
-      `${off} off must hide the claim offer too`
-    );
-  }
-});
-
 // --- ambient team-only pass backoff ----------------------------------------
 // Most signed-in accounts have no shared notes and no team spaces; before the
 // backoff they spent three requests every five minutes confirming that.

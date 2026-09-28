@@ -54,7 +54,6 @@ function createEngine() {
   audioDetector.resetPrompt = () => {};
   audioDetector.getExternalMicState = () => ({ reliable: true, externalMicActive: true });
   audioDetector.setUserRecording = () => {};
-  audioDetector.setMicWarmHold = () => {};
   audioDetector.meetingAppNotifications = 0;
   audioDetector.notifyMeetingAppsChanged = () => audioDetector.meetingAppNotifications++;
   audioDetector.running = false;

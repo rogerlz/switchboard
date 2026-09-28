@@ -720,13 +720,6 @@ class MeetingDetectionEngine {
     }
   }
 
-  // Forward-only: unlike setUserRecording there is no cooldown or queue flush —
-  // that machinery exists for real recordings, while a warm-hold merely means
-  // our own renderer still has the device open.
-  setMicWarmHold(active) {
-    this.audioActivityDetector.setMicWarmHold(active);
-  }
-
   setPreferences(prefs) {
     debugLogger.info("Updating detection preferences", prefs, "meeting");
     if (typeof prefs?.processDetection === "boolean") {

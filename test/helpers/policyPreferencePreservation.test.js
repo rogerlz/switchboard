@@ -26,7 +26,6 @@ test("managed policy gates preserve the user's raw preferences", async (t) => {
       useLocalWhisper: "true",
       cloudBackupEnabled: "true",
       dataRetentionEnabled: "true",
-      audioRetentionDays: "90",
     },
     window: {
       electronAPI: {
@@ -65,7 +64,6 @@ test("managed policy gates preserve the user's raw preferences", async (t) => {
   assert.equal(after.transcriptionMode, "local");
   assert.equal(after.cloudBackupEnabled, true);
   assert.equal(after.dataRetentionEnabled, true);
-  assert.equal(after.audioRetentionDays, 90);
   assert.equal(isCloudBackupAllowed(usePolicyStore.getState()), false);
   assert.equal(lockedLocalHistoryValue(usePolicyStore.getState()), false);
 });

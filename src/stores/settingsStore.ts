@@ -1,7 +1,6 @@
 import { create } from "zustand";
 import { API_ENDPOINTS } from "../config/constants";
 import i18n, { normalizeUiLanguage } from "../i18n";
-import { chooseDictionaryStartupAction } from "../helpers/dictionaryStartup";
 import logger from "../utils/logger";
 import whisperVadConstants from "../constants/whisperVad.json";
 import type {
@@ -56,7 +55,6 @@ import type {
   ThemeSettings,
   ChatAgentSettings,
 } from "../hooks/useSettings";
-import type { Snippet } from "../utils/snippets";
 import type { EnterpriseSetupMode } from "../types/enterpriseIdentity";
 import { getManagedScopeResolution } from "./enterpriseIdentityStore";
 
@@ -203,20 +201,6 @@ function readBoolean(key: string, fallback: boolean): boolean {
   return stored === "true";
 }
 
-function readNumber(key: string, fallback: number): number {
-  if (!isBrowser) return fallback;
-  const parsed = parseInt(localStorage.getItem(key) ?? "", 10);
-  return isNaN(parsed) ? fallback : parsed;
-}
-
-// Durations offered by the mic warm-hold select; unknown values snap to 0 (off)
-// so a hand-edited localStorage entry can never hold the mic open indefinitely.
-export const MIC_WARM_HOLD_CHOICES = [0, 10, 60, 900] as const;
-
-function snapMicWarmHold(value: number): number {
-  return (MIC_WARM_HOLD_CHOICES as readonly number[]).includes(value) ? value : 0;
-}
-
 function readStringArray(key: string, fallback: string[]): string[] {
   if (!isBrowser) return fallback;
   const stored = localStorage.getItem(key);
@@ -278,8 +262,6 @@ const BOOLEAN_SETTINGS = new Set([
   "cloudBackupEnabled",
   "insightsSyncEnabled",
   "telemetryEnabled",
-  "audioCuesEnabled",
-  "pauseMediaOnDictation",
   "startMinimized",
   "meetingProcessDetection",
   "speakerDiarizationEnabled",
@@ -287,12 +269,8 @@ const BOOLEAN_SETTINGS = new Set([
   "noteRecordingSileroEnabled",
   "meetingSileroEnabled",
   "isSignedIn",
-  "autoPasteEnabled",
-  "keepTranscriptionInClipboard",
   "dataRetentionEnabled",
-  "saveDiscardedTranscriptions",
   "noteFilesEnabled",
-  "showTranscriptionPreview",
   "cleanupDisableThinking",
   "dictationAgentDisableThinking",
   "dictationAgentVisionDisableThinking",
@@ -308,8 +286,6 @@ const BOOLEAN_SETTINGS = new Set([
 ]);
 
 const ARRAY_SETTINGS = new Set([
-  "customDictionary",
-  "snippets",
   "gcalAccounts",
   "mcalAccounts",
   "onboardingUseCases",
@@ -318,9 +294,6 @@ const ARRAY_SETTINGS = new Set([
 ]);
 
 const NUMERIC_SETTINGS = new Set([
-  "micWarmHoldSeconds",
-  "audioRetentionDays",
-  "transcriptRetentionDays",
   "whisperVadThreshold",
   "whisperVadMinSpeechDurationMs",
   "whisperVadMinSilenceDurationMs",
@@ -879,8 +852,6 @@ export interface SettingsState
     ThemeSettings,
     ChatAgentSettings {
   isSignedIn: boolean;
-  audioCuesEnabled: boolean;
-  pauseMediaOnDictation: boolean;
   startMinimized: boolean;
   gcalAccounts: CalendarAccount[];
   gcalConnected: boolean;
@@ -905,9 +876,6 @@ export interface SettingsState
   whisperVadMaxSpeechDurationS: number;
   whisperVadSpeechPadMs: number;
   whisperVadSamplesOverlap: number;
-  showTranscriptionPreview: boolean;
-  autoPasteEnabled: boolean;
-  keepTranscriptionInClipboard: boolean;
   noteFilesEnabled: boolean;
   noteFilesPath: string;
 
@@ -1100,11 +1068,6 @@ export interface SettingsState
   ) => void;
   setCleanupCloudMode: (value: string) => void;
   setCleanupCloudBaseUrl: (value: string) => void;
-  setCustomDictionary: (words: string[]) => void;
-  updateCustomDictionary: (changes: { add?: string[]; remove?: string[] }) => void;
-  applyCustomDictionaryFromExternal: (words: string[]) => void;
-  setSnippets: (snippets: Snippet[]) => void;
-  applySnippetsFromExternal: (snippets: Snippet[]) => void;
   setAssemblyAiStreaming: (value: boolean) => void;
   setAutoGenerateNoteTitle: (value: boolean) => void;
   setUseCleanupModel: (value: boolean) => void;
@@ -1177,18 +1140,12 @@ export interface SettingsState
   setPreferBuiltInMic: (value: boolean) => void;
   setMicrophoneSelectionMode: (mode: MicrophoneSelectionMode) => void;
   setSelectedMicDevice: (deviceId: string, label: string) => void;
-  setMicWarmHoldSeconds: (seconds: number) => void;
 
   setTheme: (value: "light" | "dark" | "auto") => void;
   setCloudBackupEnabled: (value: boolean) => void;
   setInsightsSyncEnabled: (value: boolean) => void;
   setTelemetryEnabled: (value: boolean) => void;
-  setAudioRetentionDays: (days: number) => void;
-  setTranscriptRetentionDays: (days: number) => void;
   setDataRetentionEnabled: (value: boolean) => void;
-  setSaveDiscardedTranscriptions: (value: boolean) => void;
-  setAudioCuesEnabled: (value: boolean) => void;
-  setPauseMediaOnDictation: (value: boolean) => void;
   setStartMinimized: (enabled: boolean) => void;
   setGcalAccounts: (accounts: CalendarAccount[]) => void;
   setMcalAccounts: (accounts: CalendarAccount[]) => void;
@@ -1210,9 +1167,6 @@ export interface SettingsState
   setWhisperVadMaxSpeechDurationS: (value: number) => void;
   setWhisperVadSpeechPadMs: (value: number) => void;
   setWhisperVadSamplesOverlap: (value: number) => void;
-  setShowTranscriptionPreview: (value: boolean) => void;
-  setAutoPasteEnabled: (value: boolean) => void;
-  setKeepTranscriptionInClipboard: (value: boolean) => void;
   setNoteFilesEnabled: (value: boolean) => void;
   setNoteFilesPath: (value: string) => void;
   setIsSignedIn: (value: boolean) => void;
@@ -1270,13 +1224,6 @@ export function setStringSetting(key: keyof SettingsState, value: string): void 
 
 function createBooleanSetter(key: string) {
   return (value: boolean) => {
-    if (isBrowser) localStorage.setItem(key, String(value));
-    useSettingsStore.setState({ [key]: value });
-  };
-}
-
-function createNumberSetter(key: string) {
-  return (value: number) => {
     if (isBrowser) localStorage.setItem(key, String(value));
     useSettingsStore.setState({ [key]: value });
   };
@@ -1420,13 +1367,6 @@ function createSecretSetter(
 
 export const MAX_TRANSLATION_TARGETS = 5;
 
-// Kick the matching cloud push once a local write has landed in SQLite.
-function syncAfterLocalWrite(method: "syncDictionaryNow" | "syncSnippetsNow"): void {
-  void import("../services/SyncService.js").then(({ syncService }) => {
-    if (syncService.canSync()) void syncService[method]();
-  });
-}
-
 export const useSettingsStore = create<SettingsState>()((set, get) => ({
   uiLanguage: normalizeUiLanguage(
     isBrowser ? localStorage.getItem("uiLanguage") || i18n.language : null
@@ -1461,15 +1401,6 @@ export const useSettingsStore = create<SettingsState>()((set, get) => ({
   cleanupCloudBaseUrl: readString("cleanupCloudBaseUrl", API_ENDPOINTS.OPENAI_BASE),
   cortiEnvironment: readString("cortiEnvironment", "us"),
   cortiTenant: readString("cortiTenant", "base"),
-  customDictionary: readStringArray("customDictionary", []),
-  snippets: (() => {
-    try {
-      const parsed = JSON.parse(readString("snippets", "[]"));
-      return Array.isArray(parsed) ? (parsed as Snippet[]) : [];
-    } catch {
-      return [];
-    }
-  })(),
   assemblyAiStreaming: readBoolean("assemblyAiStreaming", true),
 
   autoGenerateNoteTitle: readBoolean("autoGenerateNoteTitle", true),
@@ -1537,7 +1468,6 @@ export const useSettingsStore = create<SettingsState>()((set, get) => ({
   preferBuiltInMic: readBoolean("preferBuiltInMic", false),
   selectedMicDeviceId: readString("selectedMicDeviceId", ""),
   selectedMicDeviceLabel: readString("selectedMicDeviceLabel", ""),
-  micWarmHoldSeconds: snapMicWarmHold(readNumber("micWarmHoldSeconds", 0)),
 
   theme: (() => {
     const v = readString("theme", "auto");
@@ -1547,12 +1477,7 @@ export const useSettingsStore = create<SettingsState>()((set, get) => ({
   cloudBackupEnabled: readBoolean("cloudBackupEnabled", false),
   insightsSyncEnabled: readBoolean("insightsSyncEnabled", false),
   telemetryEnabled: readBoolean("telemetryEnabled", false),
-  audioRetentionDays: readNumber("audioRetentionDays", 30),
-  transcriptRetentionDays: readNumber("transcriptRetentionDays", 0),
   dataRetentionEnabled: readBoolean("dataRetentionEnabled", true),
-  saveDiscardedTranscriptions: readBoolean("saveDiscardedTranscriptions", false),
-  audioCuesEnabled: readBoolean("audioCuesEnabled", true),
-  pauseMediaOnDictation: readBoolean("pauseMediaOnDictation", false),
   startMinimized: readBoolean("startMinimized", false),
   notificationsEnabled: readBoolean("notificationsEnabled", true),
   notifyMeetingDetection: readBoolean("notifyMeetingDetection", true),
@@ -1613,9 +1538,6 @@ export const useSettingsStore = create<SettingsState>()((set, get) => ({
     "samplesOverlap",
     readString("whisperVadSamplesOverlap", "0.5")
   ),
-  showTranscriptionPreview: readBoolean("showTranscriptionPreview", false),
-  autoPasteEnabled: readBoolean("autoPasteEnabled", true),
-  keepTranscriptionInClipboard: readBoolean("keepTranscriptionInClipboard", false),
   noteFilesEnabled: readBoolean("noteFilesEnabled", false),
   noteFilesPath: readString("noteFilesPath", ""),
   isSignedIn: readBoolean("isSignedIn", false),
@@ -1961,90 +1883,6 @@ export const useSettingsStore = create<SettingsState>()((set, get) => ({
   setCleanupProvider: createStringSetter("cleanupProvider"),
   setCleanupModel: createStringSetter("cleanupModel"),
 
-  // Replaces the whole dictionary: anything absent from `words` is deleted.
-  // Editing specific words wants updateCustomDictionary instead (#1295).
-  setCustomDictionary: (words: string[]) => {
-    if (isBrowser) localStorage.setItem("customDictionary", JSON.stringify(words));
-    set({ customDictionary: words });
-    window.electronAPI
-      ?.setDictionary(words)
-      .then(() => syncAfterLocalWrite("syncDictionaryNow"))
-      .catch((err) => {
-        logger.warn(
-          "Failed to sync dictionary to SQLite",
-          { error: (err as Error).message },
-          "settings"
-        );
-      });
-  },
-
-  updateCustomDictionary: ({ add = [], remove = [] }) => {
-    const removeLower = new Set(remove.map((w) => w.toLowerCase()));
-    const addLower = new Set(add.map((w) => w.toLowerCase()));
-    // Optimistic so the UI updates immediately; the stored list replaces it below.
-    const optimistic = [
-      ...get().customDictionary.filter((w) => {
-        const lower = w.toLowerCase();
-        return !removeLower.has(lower) && !addLower.has(lower);
-      }),
-      ...add,
-    ];
-    if (isBrowser) localStorage.setItem("customDictionary", JSON.stringify(optimistic));
-    set({ customDictionary: optimistic });
-
-    const api = window.electronAPI;
-    if (!api) return;
-    // Older preloads have no delta channel; fall back rather than drop the edit.
-    const written = api.applyDictionaryChanges
-      ? api.applyDictionaryChanges({ add, remove })
-      : api.setDictionary(optimistic);
-
-    written
-      .then(async () => {
-        // SQLite owns ordering, casing and dedupe — adopt what it stored.
-        const stored = await api.getDictionary?.();
-        if (stored) {
-          if (isBrowser) localStorage.setItem("customDictionary", JSON.stringify(stored));
-          set({ customDictionary: stored });
-        }
-        syncAfterLocalWrite("syncDictionaryNow");
-      })
-      .catch((err) => {
-        logger.warn(
-          "Failed to apply dictionary changes to SQLite",
-          { error: (err as Error).message },
-          "settings"
-        );
-      });
-  },
-
-  // For broadcasts from main process — DB is already authoritative, only update UI.
-  applyCustomDictionaryFromExternal: (words: string[]) => {
-    if (isBrowser) localStorage.setItem("customDictionary", JSON.stringify(words));
-    set({ customDictionary: words });
-  },
-
-  setSnippets: (snippets: Snippet[]) => {
-    if (isBrowser) localStorage.setItem("snippets", JSON.stringify(snippets));
-    set({ snippets });
-    window.electronAPI
-      ?.setSnippets?.(snippets)
-      .then(() => syncAfterLocalWrite("syncSnippetsNow"))
-      .catch((err) => {
-        logger.warn(
-          "Failed to sync snippets to SQLite",
-          { error: (err as Error).message },
-          "settings"
-        );
-      });
-  },
-
-  // For broadcasts from main process — DB is already authoritative, only update UI.
-  applySnippetsFromExternal: (snippets: Snippet[]) => {
-    if (isBrowser) localStorage.setItem("snippets", JSON.stringify(snippets));
-    set({ snippets });
-  },
-
   setUiLanguage: (language: string) => {
     const normalized = normalizeUiLanguage(language);
     if (isBrowser) localStorage.setItem("uiLanguage", normalized);
@@ -2230,13 +2068,6 @@ export const useSettingsStore = create<SettingsState>()((set, get) => ({
   setCloudBackupEnabled: createBooleanSetter("cloudBackupEnabled"),
   setInsightsSyncEnabled: createBooleanSetter("insightsSyncEnabled"),
   setTelemetryEnabled: createBooleanSetter("telemetryEnabled"),
-  setMicWarmHoldSeconds: (value: number) => {
-    const snapped = snapMicWarmHold(value);
-    if (isBrowser) localStorage.setItem("micWarmHoldSeconds", String(snapped));
-    set({ micWarmHoldSeconds: snapped });
-  },
-  setAudioRetentionDays: createNumberSetter("audioRetentionDays"),
-  setTranscriptRetentionDays: createNumberSetter("transcriptRetentionDays"),
   setDataRetentionEnabled: (value: boolean) => {
     if (isBrowser) localStorage.setItem("dataRetentionEnabled", String(value));
     set({ dataRetentionEnabled: value });
@@ -2248,9 +2079,6 @@ export const useSettingsStore = create<SettingsState>()((set, get) => ({
       "settings"
     );
   },
-  setSaveDiscardedTranscriptions: createBooleanSetter("saveDiscardedTranscriptions"),
-  setAudioCuesEnabled: createBooleanSetter("audioCuesEnabled"),
-  setPauseMediaOnDictation: createBooleanSetter("pauseMediaOnDictation"),
 
   setStartMinimized: (enabled: boolean) => {
     if (get().startMinimized === enabled) return;
@@ -2372,9 +2200,6 @@ export const useSettingsStore = create<SettingsState>()((set, get) => ({
       window.electronAPI?.setWhisperVadConfig?.({ samplesOverlap: next });
     }
   },
-  setShowTranscriptionPreview: createBooleanSetter("showTranscriptionPreview"),
-  setAutoPasteEnabled: createBooleanSetter("autoPasteEnabled"),
-  setKeepTranscriptionInClipboard: createBooleanSetter("keepTranscriptionInClipboard"),
   setNoteFilesEnabled: createBooleanSetter("noteFilesEnabled"),
   setNoteFilesPath: createStringSetter("noteFilesPath"),
 
@@ -2422,12 +2247,8 @@ export const useSettingsStore = create<SettingsState>()((set, get) => ({
       s.setCloudTranscriptionBaseUrl(settings.cloudTranscriptionBaseUrl);
     if (settings.cloudTranscriptionMode !== undefined)
       s.setCloudTranscriptionMode(settings.cloudTranscriptionMode);
-    if (settings.customDictionary !== undefined) s.setCustomDictionary(settings.customDictionary);
-    if (settings.snippets !== undefined) s.setSnippets(settings.snippets);
     if (settings.assemblyAiStreaming !== undefined)
       s.setAssemblyAiStreaming(settings.assemblyAiStreaming);
-    if (settings.showTranscriptionPreview !== undefined)
-      s.setShowTranscriptionPreview(settings.showTranscriptionPreview);
   },
 
   // Apply a transcription config to dictation, then mirror its cloud routing to
@@ -3279,55 +3100,6 @@ export async function initializeSettings(): Promise<void> {
       useSettingsStore.setState({ preferredLanguage: migratedLang });
     }
 
-    // Sync dictionary from SQLite <-> localStorage.
-    // Prefer SQLite whenever it has entries (same policy as snippets). A stale
-    // cache used to win when both sides were non-empty; ensureAgentNameInDictionary
-    // then wrote that cache through setDictionary and wiped newer DB words (#1295).
-    let dictionarySyncSucceeded = !window.electronAPI?.getDictionary;
-    try {
-      if (window.electronAPI.getDictionary) {
-        const currentDictionary = useSettingsStore.getState().customDictionary;
-        const dbWords = await window.electronAPI.getDictionary();
-        const decision = chooseDictionaryStartupAction(dbWords, currentDictionary);
-        if (decision.action === "push-local-to-db") {
-          await window.electronAPI.setDictionary(decision.words);
-        } else if (decision.action === "pull-db-to-local") {
-          if (isBrowser) localStorage.setItem("customDictionary", JSON.stringify(decision.words));
-          useSettingsStore.setState({ customDictionary: decision.words });
-        }
-        dictionarySyncSucceeded = true;
-      }
-    } catch (err) {
-      logger.warn(
-        "Failed to sync dictionary on startup",
-        { error: (err as Error).message },
-        "settings"
-      );
-    }
-
-    // Sync snippets from SQLite <-> localStorage
-    try {
-      if (window.electronAPI.getSnippets) {
-        const currentSnippets = useSettingsStore.getState().snippets;
-        const dbSnippets = await window.electronAPI.getSnippets();
-        if (dbSnippets.length === 0 && currentSnippets.length > 0) {
-          await window.electronAPI.setSnippets?.(currentSnippets);
-          const normalizedSnippets = await window.electronAPI.getSnippets();
-          if (isBrowser) localStorage.setItem("snippets", JSON.stringify(normalizedSnippets));
-          useSettingsStore.setState({ snippets: normalizedSnippets });
-        } else if (dbSnippets.length > 0) {
-          if (isBrowser) localStorage.setItem("snippets", JSON.stringify(dbSnippets));
-          useSettingsStore.setState({ snippets: dbSnippets });
-        }
-      }
-    } catch (err) {
-      logger.warn(
-        "Failed to sync snippets on startup",
-        { error: (err as Error).message },
-        "settings"
-      );
-    }
-
     try {
       await window.electronAPI.setAutoUpdatesEnabled?.(
         useSettingsStore.getState().autoUpdatesEnabled
@@ -3421,9 +3193,6 @@ export async function initializeSettings(): Promise<void> {
         "settings"
       );
     }
-
-    // Only after a successful DB↔cache reconcile. If the read failed, the cache
-    // may still be stale — writing it via setCustomDictionary would wipe SQLite.
   }
 
   // Sync Zustand store when another window writes to localStorage
@@ -3457,18 +3226,7 @@ export async function initializeSettings(): Promise<void> {
       }
     } else if (NUMERIC_SETTINGS.has(key)) {
       const parsed = Number(newValue);
-      if (Number.isNaN(parsed)) {
-        value =
-          key === "audioRetentionDays" ? 30 : (state as unknown as Record<string, unknown>)[key];
-      } else if (key === "audioRetentionDays") {
-        value = Math.round(parsed);
-      } else if (key === "micWarmHoldSeconds") {
-        // Same whitelist as the setter — a hand-edited localStorage value
-        // synced from another window must not exceed the offered durations.
-        value = snapMicWarmHold(parsed);
-      } else {
-        value = parsed;
-      }
+      value = Number.isNaN(parsed) ? (state as unknown as Record<string, unknown>)[key] : parsed;
     } else {
       value = newValue;
     }

@@ -1,4 +1,4 @@
-import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
+import React, { createContext, useContext, useEffect, useRef, useState } from "react";
 import { useShallow } from "zustand/react/shallow";
 import {
   useSettingsStore,
@@ -6,21 +6,13 @@ import {
   selectLocalServerPrefs,
 } from "../stores/settingsStore";
 import logger from "../utils/logger";
-import { useLocalStorage } from "./useLocalStorage";
 import type {
   ChineseScriptPreference,
   LocalTranscriptionProvider,
   InferenceMode,
   SelfHostedType,
 } from "../types/electron";
-import type { Snippet } from "../utils/snippets";
-import {
-  effectiveAudioRetentionDays,
-  effectiveLocalHistoryEnabled,
-  isLocalHistoryPolicyResolved,
-  isPolicySettled,
-} from "../stores/policyRules";
-import { usePolicyStore } from "../stores/policyStore";
+import { isPolicySettled } from "../stores/policyRules";
 import { usePolicySnapshot } from "./usePolicy";
 
 export interface TranscriptionSettings {
@@ -44,10 +36,7 @@ export interface TranscriptionSettings {
   remoteTranscriptionType: SelfHostedType;
   remoteTranscriptionUrl: string;
   remoteTranscriptionModel: string;
-  customDictionary: string[];
-  snippets: Snippet[];
   assemblyAiStreaming: boolean;
-  showTranscriptionPreview: boolean;
 }
 
 export interface CleanupSettings {
@@ -77,7 +66,6 @@ export interface MicrophoneSettings {
   preferBuiltInMic: boolean;
   selectedMicDeviceId: string;
   selectedMicDeviceLabel: string;
-  micWarmHoldSeconds: number;
 }
 
 export interface ApiKeySettings {
@@ -102,10 +90,7 @@ export interface PrivacySettings {
   cloudBackupEnabled: boolean;
   insightsSyncEnabled: boolean;
   telemetryEnabled: boolean;
-  audioRetentionDays: number;
-  transcriptRetentionDays: number;
   dataRetentionEnabled: boolean;
-  saveDiscardedTranscriptions: boolean;
 }
 
 export interface ThemeSettings {
@@ -124,7 +109,6 @@ export interface ChatAgentSettings {
 
 function useSettingsInternal() {
   const store = useSettingsStore();
-  const { applyCustomDictionaryFromExternal, applySnippetsFromExternal } = store;
 
   // One-time initialization: sync API keys, dictation key, activation mode,
   // UI language, and dictionary from the main process / SQLite.
@@ -140,80 +124,6 @@ function useSettingsInternal() {
       );
     });
   }, []);
-
-  // Refresh the in-memory store from main-process broadcasts (auto-learn, sync
-  // pulls) without re-triggering a sync — that would loop, since pulls emit the
-  // broadcast. Writes that must sync go through setCustomDictionary instead.
-  useEffect(() => {
-    if (typeof window === "undefined" || !window.electronAPI?.onDictionaryUpdated) return;
-    const unsubscribe = window.electronAPI.onDictionaryUpdated((words: string[]) => {
-      if (Array.isArray(words)) {
-        applyCustomDictionaryFromExternal(words);
-      }
-    });
-    return unsubscribe;
-  }, [applyCustomDictionaryFromExternal]);
-
-  useEffect(() => {
-    if (typeof window === "undefined" || !window.electronAPI?.onSnippetsUpdated) return;
-    const unsubscribe = window.electronAPI.onSnippetsUpdated((snippets: Snippet[]) => {
-      if (Array.isArray(snippets)) {
-        applySnippetsFromExternal(snippets);
-      }
-    });
-    return unsubscribe;
-  }, [applySnippetsFromExternal]);
-
-  // Auto-learn corrections from user edits in external apps
-  const [autoLearnCorrections, setAutoLearnCorrectionsRaw] = useLocalStorage(
-    "autoLearnCorrections",
-    true,
-    {
-      serialize: String,
-      deserialize: (value: string) => value !== "false",
-    }
-  );
-
-  const setAutoLearnCorrections = useCallback(
-    (enabled: boolean) => {
-      setAutoLearnCorrectionsRaw(enabled);
-      window.electronAPI?.setAutoLearnEnabled?.(enabled);
-    },
-    [setAutoLearnCorrectionsRaw]
-  );
-
-  // Sync auto-learn state to main process on mount
-  useEffect(() => {
-    window.electronAPI?.setAutoLearnEnabled?.(autoLearnCorrections);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  // Retention periods are enforced by the main process cleanup sweep
-  const { audioRetentionDays, transcriptRetentionDays, dataRetentionEnabled } = store;
-  const enforcedAudioRetentionDays = usePolicyStore((policyState) =>
-    effectiveAudioRetentionDays(policyState, audioRetentionDays)
-  );
-  // Sent alongside the periods because the main process reconstructs Insights
-  // history from stored transcripts, and that must answer to the same switch.
-  const enforcedDataRetentionEnabled = usePolicyStore((policyState) =>
-    effectiveLocalHistoryEnabled(policyState, dataRetentionEnabled)
-  );
-  // Reported alongside the value because history reconstruction reads that
-  // switch as consent, and until the policy settles it is only a default.
-  const localHistoryPolicyResolved = usePolicyStore(isLocalHistoryPolicyResolved);
-  useEffect(() => {
-    window.electronAPI?.syncRetentionSettings?.({
-      audioRetentionDays: enforcedAudioRetentionDays,
-      transcriptRetentionDays,
-      dataRetentionEnabled: enforcedDataRetentionEnabled,
-      localHistoryPolicyResolved,
-    });
-  }, [
-    enforcedAudioRetentionDays,
-    transcriptRetentionDays,
-    enforcedDataRetentionEnabled,
-    localHistoryPolicyResolved,
-  ]);
 
   // Sync startup pre-warming preferences to main process
   const {
@@ -303,9 +213,6 @@ function useSettingsInternal() {
     remoteTranscriptionModel: store.remoteTranscriptionModel,
     cleanupMode: store.cleanupMode,
     cleanupRemoteUrl: store.cleanupRemoteUrl,
-    customDictionary: store.customDictionary,
-    snippets: store.snippets,
-    setSnippets: store.setSnippets,
     assemblyAiStreaming: store.assemblyAiStreaming,
     setAssemblyAiStreaming: store.setAssemblyAiStreaming,
     autoGenerateNoteTitle: store.autoGenerateNoteTitle,
@@ -350,8 +257,6 @@ function useSettingsInternal() {
     setRemoteTranscriptionModel: store.setRemoteTranscriptionModel,
     setCleanupMode: store.setCleanupMode,
     setCleanupRemoteUrl: store.setCleanupRemoteUrl,
-    setCustomDictionary: store.setCustomDictionary,
-    updateCustomDictionary: store.updateCustomDictionary,
     setUseCleanupModel: store.setUseCleanupModel,
     setUseDictationAgent: store.setUseDictationAgent,
     setCleanupModel: store.setCleanupModel,
@@ -380,29 +285,15 @@ function useSettingsInternal() {
     setNotifyCalendarReminders: store.setNotifyCalendarReminders,
     autoUpdatesEnabled: store.autoUpdatesEnabled,
     setAutoUpdatesEnabled: store.setAutoUpdatesEnabled,
-    audioCuesEnabled: store.audioCuesEnabled,
-    setAudioCuesEnabled: store.setAudioCuesEnabled,
-    pauseMediaOnDictation: store.pauseMediaOnDictation,
-    setPauseMediaOnDictation: store.setPauseMediaOnDictation,
     startMinimized: store.startMinimized,
     setStartMinimized: store.setStartMinimized,
     microphoneSelectionMode: store.microphoneSelectionMode,
     preferBuiltInMic: store.preferBuiltInMic,
     selectedMicDeviceId: store.selectedMicDeviceId,
     selectedMicDeviceLabel: store.selectedMicDeviceLabel,
-    micWarmHoldSeconds: store.micWarmHoldSeconds,
     setMicrophoneSelectionMode: store.setMicrophoneSelectionMode,
     setPreferBuiltInMic: store.setPreferBuiltInMic,
     setSelectedMicDevice: store.setSelectedMicDevice,
-    setMicWarmHoldSeconds: store.setMicWarmHoldSeconds,
-    autoLearnCorrections,
-    setAutoLearnCorrections,
-    showTranscriptionPreview: store.showTranscriptionPreview,
-    setShowTranscriptionPreview: store.setShowTranscriptionPreview,
-    autoPasteEnabled: store.autoPasteEnabled,
-    setAutoPasteEnabled: store.setAutoPasteEnabled,
-    keepTranscriptionInClipboard: store.keepTranscriptionInClipboard,
-    setKeepTranscriptionInClipboard: store.setKeepTranscriptionInClipboard,
     noteFilesEnabled: store.noteFilesEnabled,
     setNoteFilesEnabled: store.setNoteFilesEnabled,
     noteFilesPath: store.noteFilesPath,
@@ -431,14 +322,8 @@ function useSettingsInternal() {
     setInsightsSyncEnabled: store.setInsightsSyncEnabled,
     telemetryEnabled: store.telemetryEnabled,
     setTelemetryEnabled: store.setTelemetryEnabled,
-    audioRetentionDays: store.audioRetentionDays,
-    setAudioRetentionDays: store.setAudioRetentionDays,
-    transcriptRetentionDays: store.transcriptRetentionDays,
-    setTranscriptRetentionDays: store.setTranscriptRetentionDays,
     dataRetentionEnabled: store.dataRetentionEnabled,
     setDataRetentionEnabled: store.setDataRetentionEnabled,
-    saveDiscardedTranscriptions: store.saveDiscardedTranscriptions,
-    setSaveDiscardedTranscriptions: store.setSaveDiscardedTranscriptions,
     updateTranscriptionSettings: store.updateTranscriptionSettings,
     updateCleanupSettings: store.updateCleanupSettings,
     updateApiKeys: store.updateApiKeys,

@@ -46,7 +46,6 @@ const baseOptions = {
   ],
   cortiEnvironment: "us",
   cortiTenant: "tenant",
-  keyterms: ["OpenWhispr"],
 };
 
 test("providers mode routes Tinfoil through its realtime client", async () => {
@@ -175,7 +174,6 @@ test("Corti keeps the meeting-specific connection settings", async () => {
       language: "en",
       environment: "us",
       tenant: "tenant",
-      keyterms: ["OpenWhispr"],
     }
   );
 });

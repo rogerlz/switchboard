@@ -127,22 +127,8 @@ function anything() {
 }
 
 function buildFakeThis() {
-  const dbRows = new Map([
-    [7, { id: 7, audio_duration_ms: 1200 }],
-    [8, { id: 8, audio_duration_ms: 1200 }],
-  ]);
   const target = {
     sessionId: "test-session",
-    audioStorageManager: {
-      // 7 is a stored WebM recording, 8 one already in WAV.
-      getAudioBuffer: (id) => (id === 7 ? Buffer.from([1, 2, 3]) : id === 8 ? WAV_BUFFER : null),
-    },
-    databaseManager: {
-      updateTranscriptionText: () => {},
-      updateTranscriptionStatus: () => {},
-      updateTranscriptionAudio: () => {},
-      getTranscriptionById: (id) => dbRows.get(id),
-    },
     environmentManager: {
       getOpenAIKey: () => "sk-openai",
       getGroqKey: () => "gk-groq",
@@ -159,220 +145,15 @@ function buildFakeThis() {
   });
 }
 
-let retryHandler;
 test.before(() => {
   delete require.cache[handlersModulePath];
   const IPCHandlers = require(handlersModulePath);
   const Ctor = IPCHandlers.default || IPCHandlers;
   Ctor.prototype.setupHandlers.call(buildFakeThis());
-  retryHandler = handlers.get("retry-transcription");
-  assert.ok(retryHandler, "retry-transcription must be registered");
 });
 
 test.after(() => {
   Module._load = originalLoad;
-});
-
-const invoke = (settings, id = 7) => retryHandler({ sender: {} }, id, settings);
-
-test("retry: corti routes to the corti client, never OpenAI", async () => {
-  fetches.length = 0;
-  const result = await invoke({
-    cloudTranscriptionProvider: "corti",
-    cloudTranscriptionMode: "byok",
-    transcriptionMode: "providers",
-    cortiEnvironment: "eu",
-    cortiTenant: "acme",
-    preferredLanguage: "auto",
-  });
-  assert.equal(result.success, true);
-  assert.equal(cortiCalls.length, 1);
-  assert.equal(cortiCalls[0].environment, "eu");
-  assert.equal(cortiCalls[0].tenant, "acme");
-  assert.equal(cortiCalls[0].language, "en");
-  assert.equal(fetches.length, 0, "corti retry must not touch HTTP endpoints");
-});
-
-test("retry: custom misconfiguration fails closed with a coded error", async () => {
-  fetches.length = 0;
-  for (const cloudTranscriptionBaseUrl of ["", "https://api.openai.com/v1", "not a url"]) {
-    const result = await invoke({
-      cloudTranscriptionProvider: "custom",
-      cloudTranscriptionMode: "byok",
-      transcriptionMode: "providers",
-      cloudTranscriptionBaseUrl,
-    });
-    assert.equal(result.success, false, cloudTranscriptionBaseUrl);
-    assert.equal(result.code, "CUSTOM_ENDPOINT_INVALID", cloudTranscriptionBaseUrl);
-  }
-  assert.equal(fetches.length, 0);
-});
-
-test("retry: openwhispr cloud masks a leftover BYOK misconfiguration", async () => {
-  fetches.length = 0;
-  const result = await invoke({
-    cloudTranscriptionProvider: "custom",
-    cloudTranscriptionMode: "openwhispr",
-    transcriptionMode: "providers",
-    cloudTranscriptionBaseUrl: "",
-  });
-  // BrowserWindow.fromWebContents is stubbed to null, so the cloud branch
-  // produces no result — but the route error must NOT surface.
-  assert.equal(result.success, false);
-  assert.notEqual(result.code, "CUSTOM_ENDPOINT_INVALID");
-  assert.match(result.error, /No transcription engine available/);
-  assert.equal(fetches.length, 0);
-});
-
-test("retry: Azure custom endpoints get deployment URLs and api-key auth", async () => {
-  fetches.length = 0;
-  const result = await invoke({
-    cloudTranscriptionProvider: "custom",
-    cloudTranscriptionMode: "byok",
-    transcriptionMode: "providers",
-    cloudTranscriptionBaseUrl: "https://myres.openai.azure.com",
-    cloudTranscriptionModel: "my-deployment",
-  });
-  assert.equal(result.success, true);
-  assert.equal(fetches.length, 1);
-  assert.match(fetches[0].url, /myres\.openai\.azure\.com\/openai\/deployments\/my-deployment/);
-  assert.equal(fetches[0].init.headers["api-key"], "ck-custom");
-  assert.equal(fetches[0].init.headers.Authorization, undefined);
-});
-
-test("retry: plain custom endpoints use Bearer auth at the configured URL", async () => {
-  fetches.length = 0;
-  const result = await invoke({
-    cloudTranscriptionProvider: "custom",
-    cloudTranscriptionMode: "byok",
-    transcriptionMode: "providers",
-    cloudTranscriptionBaseUrl: "https://stt.parasail.example.com/v1",
-    cloudTranscriptionModel: "parasail-model",
-  });
-  assert.equal(result.success, true);
-  assert.equal(fetches[0].url, "https://stt.parasail.example.com/v1/audio/transcriptions");
-  assert.equal(fetches[0].init.headers.Authorization, "Bearer ck-custom");
-});
-
-const CUSTOM_SETTINGS = {
-  cloudTranscriptionProvider: "custom",
-  cloudTranscriptionMode: "byok",
-  transcriptionMode: "providers",
-  cloudTranscriptionBaseUrl: "https://stt.parasail.example.com/v1",
-  cloudTranscriptionModel: "parasail-model",
-};
-
-const uploadedPart = () => fetches[0].init.body.get("file");
-
-test("retry: a stored WebM is re-encoded before reaching a custom endpoint", async () => {
-  // Without this the renderer-side fix covers fresh dictations only, and every
-  // retry of a recording that failed for the container reason fails again.
-  fetches.length = 0;
-  wavConversions.length = 0;
-
-  const result = await invoke(CUSTOM_SETTINGS);
-
-  assert.equal(result.success, true);
-  assert.equal(wavConversions.length, 1, "the stored container must be converted");
-  const part = uploadedPart();
-  assert.equal(part.name, "audio.wav");
-  assert.equal(part.type, "audio/wav");
-  assert.equal(part.size, CONVERTED_WAV.length, "the converted bytes are what gets uploaded");
-});
-
-test("retry: audio already in WAV is uploaded untouched", async () => {
-  fetches.length = 0;
-  wavConversions.length = 0;
-
-  const result = await invoke(CUSTOM_SETTINGS, 8);
-
-  assert.equal(result.success, true);
-  assert.equal(wavConversions.length, 0, "re-encoding WAV would only cost time");
-  assert.equal(uploadedPart().size, WAV_BUFFER.length);
-});
-
-test("retry: WAV expansion preserves uploads that fit the provider limit", async (t) => {
-  for (const wavSize of [25 * 1024 * 1024, 25 * 1024 * 1024 + 1]) {
-    await t.test(`${wavSize} converted bytes`, async () => {
-      fetches.length = 0;
-      const converted = Buffer.alloc(wavSize);
-      WAV_BUFFER.copy(converted);
-      convertBehavior = async () => converted;
-      try {
-        const result = await invoke(CUSTOM_SETTINGS);
-        assert.equal(result.success, true);
-        const part = uploadedPart();
-        const fits = wavSize === 25 * 1024 * 1024;
-        assert.equal(part.type, fits ? "audio/wav" : "audio/webm");
-        assert.equal(part.name, fits ? "audio.wav" : "audio.webm");
-        assert.deepEqual(
-          Buffer.from(await part.arrayBuffer()),
-          fits ? converted : Buffer.from([1, 2, 3])
-        );
-      } finally {
-        convertBehavior = async () => CONVERTED_WAV;
-      }
-    });
-  }
-});
-
-test("retry: built-in providers keep sending the stored container", async () => {
-  fetches.length = 0;
-  wavConversions.length = 0;
-
-  await invoke({
-    cloudTranscriptionProvider: "openai",
-    cloudTranscriptionMode: "byok",
-    transcriptionMode: "providers",
-    cloudTranscriptionModel: "whisper-1",
-  });
-
-  assert.equal(wavConversions.length, 0, "only custom endpoints need the re-encode");
-  assert.equal(uploadedPart().name, "audio.webm");
-});
-
-test("retry: a conversion failure falls open to the stored container", async () => {
-  fetches.length = 0;
-  wavConversions.length = 0;
-  convertBehavior = async () => {
-    throw new Error("ffmpeg missing");
-  };
-
-  try {
-    const result = await invoke(CUSTOM_SETTINGS);
-    assert.equal(result.success, true, "a failed re-encode must not fail the retry");
-    const part = uploadedPart();
-    assert.equal(part.name, "audio.webm");
-    assert.equal(part.type, "audio/webm");
-  } finally {
-    convertBehavior = async () => CONVERTED_WAV;
-  }
-});
-
-test("retry: a custom URL on Tinfoil's host is refused in the main process", async () => {
-  fetches.length = 0;
-  const result = await invoke({
-    cloudTranscriptionProvider: "custom",
-    cloudTranscriptionMode: "byok",
-    transcriptionMode: "providers",
-    cloudTranscriptionBaseUrl: "https://inference.tinfoil.sh/v1",
-  });
-  assert.equal(result.success, false);
-  assert.match(result.error, /attested main-process proxy/);
-  assert.equal(fetches.length, 0);
-  assert.equal(tinfoilCalls.length, 0);
-});
-
-test("retry: mistral goes to Mistral with x-api-key", async () => {
-  fetches.length = 0;
-  const result = await invoke({
-    cloudTranscriptionProvider: "mistral",
-    cloudTranscriptionMode: "byok",
-    transcriptionMode: "providers",
-  });
-  assert.equal(result.success, true);
-  assert.match(fetches[0].url, /api\.mistral\.ai/);
-  assert.equal(fetches[0].init.headers["x-api-key"], "mk-mistral");
 });
 
 test("proxy transcription handlers resolve to structured errors instead of rejecting", async () => {

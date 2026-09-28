@@ -115,22 +115,12 @@
         "sherpa-onnx-*",
         "yt-dlp-*",
         "macos-audio-tap",
-        "macos-fast-paste",
         "macos-mic-listener",
         "macos-calendar-listener",
-        "macos-text-monitor",
-        "macos-media-remote",
-        "MediaRemoteAdapter.framework/**",
-        "linux-fast-paste",
         "linux-system-audio-helper",
-        "linux-text-monitor",
-        "linux-key-listener*",
         "meeting-aec-helper-*",
-        "windows-key-listener*",
         "windows-mic-listener*",
         "windows-system-audio-helper*",
-        "windows-text-monitor*",
-        "windows-fast-paste*",
         "all-MiniLM-L6-v2/**/*",
         "diarization-models/**/*",
         "whisper-vad/**/*",
@@ -138,14 +128,6 @@
         "*.dll",
         "*.so*"
       ]
-    },
-    {
-      "from": "resources/mediaremote-adapter/bin/mediaremote-adapter.pl",
-      "to": "bin/mediaremote-adapter.pl"
-    },
-    {
-      "from": "resources/mediaremote-adapter/LICENSE",
-      "to": "bin/mediaremote-adapter.LICENSE"
     }
   ],
   "mac": {
@@ -169,7 +151,6 @@
       "CFBundleIconName": "openwhispr",
       "NSMicrophoneUsageDescription": "Switchboard uses the microphone to capture your voice for transcription.",
       "NSAudioCaptureUsageDescription": "Switchboard uses system audio to capture other participants' audio from calls and meetings.",
-      "NSAccessibilityUsageDescription": "Switchboard needs accessibility permissions to paste transcribed text into other applications.",
       "NSCalendarsUsageDescription": "Switchboard reads your calendar to detect upcoming meetings and link meeting notes to events.",
       "NSCalendarsFullAccessUsageDescription": "Switchboard reads your calendar to detect upcoming meetings and link meeting notes to events."
     }
@@ -183,13 +164,7 @@
       "certificateProfileName": "openwhispr-release",
       "codeSigningAccountName": "OpenWhispr",
       "publisherName": "CN=Gizmo Labs Inc., O=Gizmo Labs Inc., L=Wilmington, S=Delaware, C=US"
-    },
-    "extraResources": [
-      {
-        "from": "resources/bin/nircmd.exe",
-        "to": "bin/nircmd.exe"
-      }
-    ]
+    }
   },
   "linux": {
     "target": ["AppImage", "deb", "rpm", "tar.gz"],

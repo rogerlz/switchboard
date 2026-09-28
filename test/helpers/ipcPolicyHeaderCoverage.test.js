@@ -32,7 +32,7 @@ test("all OpenWhispr multipart transcription transports use policy headers", () 
       source.match(
         /postMultipart\(\s*url,\s*body,\s*boundary,\s*(?:policyHeaders|withPolicyHeaders\(authHeader\))/g
       ) ?? []
-    ).length >= 4
+    ).length >= 3
   );
 });
 

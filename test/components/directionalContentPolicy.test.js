@@ -11,12 +11,6 @@ function source(relativePath) {
 
 test("dynamic prose and identity values keep their own direction", () => {
   const expectations = [
-    ["src/components/ui/TranscriptionItem.tsx", /<p\s+dir="auto"[\s\S]*?\{item\.text\}/],
-    ["src/components/ui/TranscriptionItem.tsx", /<p\s+dir="auto"[^>]*>\s*\{rawText\}/],
-    ["src/components/CommandSearch.tsx", /<p\s+dir="auto"[^>]*>\s*\{transcript\.text\}/],
-    ["src/components/DictionaryView.tsx", /<span\s+dir="auto"[^>]*>\s*\{word\}/],
-    ["src/components/SnippetsView.tsx", /<span\s+dir="auto"[^>]*>\s*\{snippet\.trigger\}/],
-    ["src/components/SnippetsView.tsx", /<span\s+dir="auto"[^>]*>\s*\{snippet\.replacement\}/],
     [
       "src/components/notes/SpacesTree.tsx",
       /<span\s+dir="auto"[^>]*>\s*\{displayName\}\s*<\/span>/,
@@ -69,7 +63,6 @@ test("technical output values remain LTR inside an Arabic document", () => {
       /<code\s+dir="ltr"[^>]*>\s*\{errorInfo\.copyCommand\}/,
     ],
     ["src/components/ui/TechnicalErrorDetails.tsx", /<pre\s+dir="ltr"[\s\S]*?\{text\}/],
-    ["src/components/ui/NixOsPasteInfo.tsx", /<div\s+dir="ltr"[\s\S]*?<pre/],
     [
       "src/components/settings/WorkspaceBillingCard.tsx",
       /<span\s+dir="ltr"[^>]*>\s*\{seatsUsed\} \/ \{seatsTotal\}/,

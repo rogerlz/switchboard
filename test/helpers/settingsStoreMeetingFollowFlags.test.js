@@ -56,7 +56,6 @@ const meetingRoute = (mod, state) => {
     selectedModel: resolved.cloudTranscriptionModel,
     byokProviders: [],
     managedProviders: [],
-    keyterms: [],
   });
 };
 

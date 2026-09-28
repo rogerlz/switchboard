@@ -2,16 +2,7 @@ import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { useUiLocale } from "../hooks/useUiLocale";
 import * as DialogPrimitive from "@radix-ui/react-dialog";
-import {
-  Search,
-  FileText,
-  Mic,
-  Folder,
-  Lock,
-  Users,
-  Upload,
-  ChevronDown,
-} from "./icons";
+import { Search, FileText, Folder, Lock, Users, Upload, ChevronDown } from "./icons";
 import { cn } from "./lib/utils";
 import { useDismissGuard } from "./ui/useDismissGuard";
 import {
@@ -21,7 +12,7 @@ import {
   DropdownMenuItem,
   DropdownMenuSeparator,
 } from "./ui/dropdown-menu";
-import type { NoteItem, FolderItem, SpaceItem, TranscriptionItem } from "../types/electron.js";
+import type { NoteItem, FolderItem, SpaceItem } from "../types/electron.js";
 import { formatRelativeTime } from "../utils/dateFormatting";
 import { defaultFolderDisplayName, folderMatchesQuery } from "./notes/shared";
 
@@ -36,16 +27,11 @@ interface JumpTarget {
 export interface CommandSearchProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  transcriptions?: TranscriptionItem[];
   onNoteSelect?: (noteId: number, folderId: number | null, spaceId?: number) => void;
   onContainerSelect?: (spaceId: number, folderId: number | null) => void;
-  onTranscriptSelect?: (transcriptId: number) => void;
 }
 
-type FlatItem =
-  | { kind: "container"; target: JumpTarget }
-  | { kind: "note"; note: NoteItem }
-  | { kind: "transcript"; transcript: TranscriptionItem };
+type FlatItem = { kind: "container"; target: JumpTarget } | { kind: "note"; note: NoteItem };
 
 function stripMarkdownPreview(text: string): string {
   return (
@@ -64,10 +50,8 @@ function stripMarkdownPreview(text: string): string {
 export default function CommandSearch({
   open,
   onOpenChange,
-  transcriptions = [],
   onNoteSelect,
   onContainerSelect,
-  onTranscriptSelect,
 }: CommandSearchProps) {
   const { t } = useTranslation();
   const locale = useUiLocale();
@@ -203,30 +187,21 @@ export default function CommandSearch({
     return targets.slice(0, 5);
   }, [query, spaces, folders, spaceMap, spaceLabel, t]);
 
-  const filteredTranscripts = useMemo(() => {
-    const slice = query.trim()
-      ? transcriptions.filter((tr) => tr.text.toLowerCase().includes(query.toLowerCase()))
-      : transcriptions;
-    return slice.slice(0, 5);
-  }, [transcriptions, query]);
-
   const flatItems = useMemo<FlatItem[]>(() => {
     const items: FlatItem[] = [];
     for (const target of jumpTargets) items.push({ kind: "container", target });
     for (const note of scopedNotes) items.push({ kind: "note", note });
-    for (const transcript of filteredTranscripts) items.push({ kind: "transcript", transcript });
     return items;
-  }, [jumpTargets, scopedNotes, filteredTranscripts]);
+  }, [jumpTargets, scopedNotes]);
 
   const selectItem = useCallback(
     (item: FlatItem) => {
       if (item.kind === "container") onContainerSelect?.(item.target.spaceId, item.target.folderId);
       else if (item.kind === "note")
         onNoteSelect?.(item.note.id, item.note.folder_id ?? null, item.note.space_id);
-      else if (item.kind === "transcript") onTranscriptSelect?.(item.transcript.id);
       onOpenChange(false);
     },
-    [onNoteSelect, onContainerSelect, onTranscriptSelect, onOpenChange]
+    [onNoteSelect, onContainerSelect, onOpenChange]
   );
 
   const handleKeyDown = useCallback(
@@ -415,32 +390,6 @@ export default function CommandSearch({
                     })}
                   </div>
                 )}
-
-                {filteredTranscripts.length > 0 && (
-                  <div className={jumpTargets.length > 0 || scopedNotes.length > 0 ? "mt-0.5" : ""}>
-                    <SectionHeader
-                      icon={<Mic size={11} />}
-                      label={t("commandSearch.sections.transcripts")}
-                    />
-                    {filteredTranscripts.map((transcript) => {
-                      const idx = flatItems.findIndex(
-                        (fi) => fi.kind === "transcript" && fi.transcript.id === transcript.id
-                      );
-                      return (
-                        <TranscriptRow
-                          key={transcript.id}
-                          transcript={transcript}
-                          idx={idx}
-                          isSelected={selectedIndex === idx}
-                          onSelect={() => selectItem({ kind: "transcript", transcript })}
-                          onHover={() => setSelectedIndex(idx)}
-                          t={t}
-                          locale={locale}
-                        />
-                      );
-                    })}
-                  </div>
-                )}
               </>
             )}
           </div>
@@ -599,53 +548,6 @@ function NoteRow({
       </div>
       <span className="text-[10px] text-muted-foreground/70 tabular-nums shrink-0">
         {formatRelativeTime(note.updated_at, t, locale)}
-      </span>
-    </button>
-  );
-}
-
-function TranscriptRow({
-  transcript,
-  idx,
-  isSelected,
-  onSelect,
-  onHover,
-  t,
-  locale,
-}: {
-  transcript: TranscriptionItem;
-  idx: number;
-  isSelected: boolean;
-  onSelect: () => void;
-  onHover: () => void;
-  t: (key: string, opts?: Record<string, unknown>) => string;
-  locale?: string;
-}) {
-  return (
-    <button
-      type="button"
-      data-idx={idx}
-      onClick={onSelect}
-      onMouseEnter={onHover}
-      className={cn(
-        "group flex items-center gap-2.5 w-full px-2.5 py-2 rounded-lg text-start transition-colors duration-100 outline-none",
-        isSelected
-          ? "bg-primary/8 dark:bg-primary/10"
-          : "hover:bg-foreground/4 dark:hover:bg-white/4"
-      )}
-    >
-      <Mic
-        size={13}
-        className={cn(
-          "shrink-0 mt-px transition-colors",
-          isSelected ? "text-primary" : "text-muted-foreground/70"
-        )}
-      />
-      <p dir="auto" className="flex-1 text-xs text-foreground/75 truncate min-w-0">
-        {transcript.text}
-      </p>
-      <span className="text-[10px] text-muted-foreground/70 tabular-nums shrink-0">
-        {formatRelativeTime(transcript.created_at, t, locale)}
       </span>
     </button>
   );

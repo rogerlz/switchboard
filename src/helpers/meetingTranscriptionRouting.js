@@ -40,7 +40,6 @@ export function resolveMeetingTranscriptionOptions({
   managedProviders,
   cortiEnvironment,
   cortiTenant,
-  keyterms,
 }) {
   if (transcriptionMode === "local") {
     return {
@@ -97,7 +96,6 @@ export function resolveMeetingTranscriptionOptions({
       ...options,
       environment: cortiEnvironment,
       tenant: cortiTenant,
-      keyterms,
     };
   }
 

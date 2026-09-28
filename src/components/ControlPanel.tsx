@@ -1,18 +1,16 @@
 import React, { Suspense, useState, useEffect, useRef, useCallback } from "react";
 import { useTranslation } from "react-i18next";
-import { useShallow } from "zustand/react/shallow";
 import { Button } from "./ui/button";
 import { PAGE_CONTENT_WIDTH_CLASS } from "./ui/pageWidth";
 import { cn } from "./lib/utils";
 import { BIDI_VALUE_TOKEN, BidiInterpolatedText } from "./ui/BidiInterpolatedText";
-import { Download, RefreshCw, Loader2, AlertTriangle, Zap } from "./icons";
+import { Download, RefreshCw, Loader2, AlertTriangle } from "./icons";
 import PostMigrationOnboarding from "./PostMigrationOnboarding";
 import { RequiredModelsBanner } from "./RequiredModelsBanner";
 import { ConfirmDialog, AlertDialog } from "./ui/dialog";
 import { useDialogs } from "../hooks/useDialogs";
 import { useToast } from "./ui/useToast";
 import { useUpdater } from "../hooks/useUpdater";
-import { useSettings } from "../hooks/useSettings";
 import { useAuth } from "../hooks/useAuth";
 import { useJoinableWorkspaces } from "../hooks/useJoinableWorkspaces";
 import { useWorkspace } from "../hooks/useWorkspace";
@@ -20,28 +18,9 @@ import { manageableWorkspaces, selectWorkspaceForSpaceCreation } from "../lib/wo
 import { useUsage } from "../hooks/useUsage";
 import { decideUpsell } from "../lib/upsell";
 import { useCollapsibleSidebar } from "../hooks/useCollapsibleSidebar";
-import {
-  useTranscriptions,
-  useShowDiscarded,
-  initializeTranscriptions,
-  removeTranscription as removeFromStore,
-  updateTranscription as updateInStore,
-  clearTranscriptions as clearStore,
-} from "../stores/transcriptionStore";
-import {
-  getSettings,
-  selectPolicyEffectiveSettings,
-  useSettingsStore,
-} from "../stores/settingsStore";
+import { useSettingsStore } from "../stores/settingsStore";
 import { usePolicyStore } from "../stores/policyStore";
-import { usePolicySnapshot } from "../hooks/usePolicy";
-import {
-  isControlPanelViewAllowed,
-  isPolicyActionAllowed,
-  isTranscriptionContextAllowed,
-  isUpdateRequiredByOrg,
-} from "../stores/policyRules";
-import { getManagedTranscriptionResolution } from "../services/managedTranscription";
+import { isUpdateRequiredByOrg } from "../stores/policyRules";
 import {
   useIsMeetingMode,
   useIsNarrowWindow,
@@ -55,7 +34,6 @@ import MeetingRecordingPill from "./notes/MeetingRecordingPill";
 import NewNoteMenu from "./notes/NewNoteMenu";
 
 import { getCachedPlatform } from "../utils/platform";
-import { useGpuBannerAvailability } from "../hooks/useGpuBannerAvailability";
 import { useCreateNote } from "../hooks/useCreateNote";
 import {
   setActiveNoteId,
@@ -65,11 +43,7 @@ import {
   initializeNotes,
 } from "../stores/noteStore";
 import { fetchProviders as fetchStreamingProviders } from "../stores/streamingProvidersStore";
-import { applyChineseScript, resolveChineseScriptTarget } from "../utils/chineseScript";
-import HistoryView from "./HistoryView";
 import SpaceSyncToastListener from "./notes/SpaceSyncToastListener";
-import { syncService } from "../services/SyncService.js";
-import logger from "../utils/logger";
 import JoinYourTeamModal from "./JoinYourTeamModal";
 
 const platform = getCachedPlatform();
@@ -80,9 +54,6 @@ const SettingsModal = React.lazy(() => import("./SettingsModal"));
 const ReferralModal = React.lazy(() => import("./ReferralModal"));
 const InviteTeammateDialog = React.lazy(() => import("./InviteTeammateDialog"));
 const PersonalNotesView = React.lazy(() => import("./notes/PersonalNotesView"));
-const InsightsView = React.lazy(() => import("./InsightsView"));
-const DictionaryView = React.lazy(() => import("./DictionaryView"));
-const UploadAudioView = React.lazy(() => import("./notes/UploadAudioView"));
 const IntegrationsView = React.lazy(() => import("./IntegrationsView"));
 const CommandSearch = React.lazy(() => import("./CommandSearch"));
 
@@ -93,15 +64,10 @@ interface ControlPanelProps {
 
 export default function ControlPanel({ initialSettingsSection }: ControlPanelProps = {}) {
   const { t } = useTranslation();
-  const history = useTranscriptions();
-  const [isLoading, setIsLoading] = useState(true);
   const [showSettings, setShowSettings] = useState(!!initialSettingsSection);
   const [showPostMigration, setShowPostMigration] = useState(false);
   const [settingsSection, setSettingsSection] = useState<string | undefined>(
     initialSettingsSection
-  );
-  const [aiCTADismissed, setAiCTADismissed] = useState(
-    () => localStorage.getItem("aiCTADismissed") === "true"
   );
   const [showReferrals, setShowReferrals] = useState(false);
   const [showInviteTeam, setShowInviteTeam] = useState(false);
@@ -111,7 +77,6 @@ export default function ControlPanel({ initialSettingsSection }: ControlPanelPro
     spaceIds: string[];
   } | null>(null);
   const [showSearch, setShowSearch] = useState(false);
-  const showDiscarded = useShowDiscarded();
   const [activeView, setActiveView] = useState<ControlPanelView>("personal-notes");
   const navItems = useControlPanelNavItems();
   const {
@@ -134,12 +99,8 @@ export default function ControlPanel({ initialSettingsSection }: ControlPanelPro
     folderId: number;
     event: any;
   } | null>(null);
-  const [gpuBannerDismissed, setGpuBannerDismissed] = useState(
-    () => localStorage.getItem("gpuBannerDismissedUnified") === "true"
-  );
   const updateReadyToastShown = useRef(false);
   const { toast } = useToast();
-  const { useCleanupModel } = useSettings();
   const { isSignedIn, isLoaded: authLoaded, user } = useAuth();
   // Suppressed while a deep-linked invitation is open so the two never stack.
   const {
@@ -172,76 +133,17 @@ export default function ControlPanel({ initialSettingsSection }: ControlPanelPro
     installUpdate,
   } = useUpdater();
 
-  const openTranscriptionSettings = useCallback(() => {
-    setSettingsSection("transcription");
-    setShowSettings(true);
-  }, []);
-
   const { createNote } = useCreateNote();
   // The note is created before the view switches so Notes mounts with it already open.
   const handleNewNote = useCallback(async () => {
     await createNote();
     setActiveView("personal-notes");
   }, [createNote]);
-  const policyActionsAllowed = usePolicyStore((state) => isPolicyActionAllowed(state));
-  useEffect(() => {
-    if (!isControlPanelViewAllowed(activeView, policyActionsAllowed)) {
-      setActiveView("personal-notes");
-    }
-  }, [activeView, policyActionsAllowed]);
   const updateRequiredByOrg = usePolicyStore(isUpdateRequiredByOrg);
   const policyMinAppVersion = usePolicyStore((s) => s.policy?.minAppVersion ?? null);
 
-  // Policy-effective, because the settings pane the GPU banner links to renders
-  // the clamped mode — see eligibleGpuOffers.
-  const policySnapshot = usePolicySnapshot();
-  const gpuBannerSettings = useSettingsStore(
-    useShallow((settings) => {
-      const effective = selectPolicyEffectiveSettings(settings, policySnapshot);
-      return {
-        useLocalWhisper: effective.useLocalWhisper,
-        localTranscriptionProvider: effective.localTranscriptionProvider,
-        useCleanupModel: effective.useCleanupModel,
-        cleanupMode: effective.cleanupMode,
-      };
-    })
-  );
-  const gpuAccelAvailable = useGpuBannerAvailability({
-    settings: gpuBannerSettings,
-    dismissed: gpuBannerDismissed,
-    settingsOpen: showSettings,
-    platform,
-  });
-
-  const {
-    confirmDialog,
-    alertDialog,
-    showConfirmDialog,
-    showAlertDialog,
-    hideConfirmDialog,
-    hideAlertDialog,
-  } = useDialogs();
-
-  const loadTranscriptions = useCallback(
-    async (includeDiscarded?: boolean) => {
-      try {
-        setIsLoading(true);
-        await initializeTranscriptions(undefined, includeDiscarded);
-      } catch {
-        showAlertDialog({
-          title: t("controlPanel.history.couldNotLoadTitle"),
-          description: t("controlPanel.history.couldNotLoadDescription"),
-        });
-      } finally {
-        setIsLoading(false);
-      }
-    },
-    [showAlertDialog, t]
-  );
-
-  useEffect(() => {
-    loadTranscriptions();
-  }, [loadTranscriptions]);
+  const { confirmDialog, alertDialog, showConfirmDialog, hideConfirmDialog, hideAlertDialog } =
+    useDialogs();
 
   useEffect(() => {
     const { noteFilesEnabled, noteFilesPath } = useSettingsStore.getState();
@@ -368,252 +270,6 @@ export default function ControlPanel({ initialSettingsSection }: ControlPanelPro
     if (isMeetingMode) window.electronAPI?.restoreFromMeetingMode?.();
     else setActiveNoteId(null);
   }, [isMeetingMode]);
-
-  const copyToClipboard = useCallback(
-    async (text: string) => {
-      try {
-        await navigator.clipboard.writeText(text);
-        toast({
-          title: t("controlPanel.history.copiedTitle"),
-          description: t("controlPanel.history.copiedDescription"),
-          variant: "success",
-          duration: 2000,
-        });
-      } catch (err) {
-        toast({
-          title: t("controlPanel.history.couldNotCopyTitle"),
-          description: t("controlPanel.history.couldNotCopyDescription"),
-          variant: "destructive",
-        });
-      }
-    },
-    [toast, t]
-  );
-
-  const deleteTranscription = useCallback(
-    async (id: number) => {
-      showConfirmDialog({
-        title: t("controlPanel.history.deleteTitle"),
-        description: t("controlPanel.history.deleteDescription"),
-        onConfirm: async () => {
-          try {
-            const result = await window.electronAPI.deleteTranscription(id);
-            if (result.success) {
-              removeFromStore(id);
-              syncService.requestSyncAll("manual");
-            } else {
-              showAlertDialog({
-                title: t("controlPanel.history.couldNotDeleteTitle"),
-                description: t("controlPanel.history.couldNotDeleteDescription"),
-              });
-            }
-          } catch {
-            showAlertDialog({
-              title: t("controlPanel.history.couldNotDeleteTitle"),
-              description: t("controlPanel.history.couldNotDeleteDescriptionGeneric"),
-            });
-          }
-        },
-        variant: "destructive",
-      });
-    },
-    [showConfirmDialog, showAlertDialog, t]
-  );
-
-  const clearAllTranscriptions = useCallback(() => {
-    showConfirmDialog({
-      title: t("controlPanel.history.clearAllTitle"),
-      description: t(
-        isSignedIn
-          ? "controlPanel.history.clearAllDescription"
-          : "controlPanel.history.clearAllDescriptionDevice"
-      ),
-      onConfirm: async () => {
-        try {
-          const result = await window.electronAPI.clearTranscriptions();
-          if (result.success) {
-            clearStore();
-            syncService.requestSyncAll("manual");
-            toast({
-              title: t("controlPanel.history.clearAllSuccess"),
-              variant: "success",
-              duration: 2000,
-            });
-          } else {
-            showAlertDialog({
-              title: t("controlPanel.history.clearAllErrorTitle"),
-              description: t("controlPanel.history.clearAllErrorDescription"),
-            });
-          }
-        } catch {
-          showAlertDialog({
-            title: t("controlPanel.history.clearAllErrorTitle"),
-            description: t("controlPanel.history.clearAllErrorDescription"),
-          });
-        }
-      },
-      variant: "destructive",
-    });
-  }, [isSignedIn, showConfirmDialog, showAlertDialog, toast, t]);
-
-  const showAudioInFolder = useCallback(
-    async (id: number) => {
-      try {
-        const result = await window.electronAPI.showAudioInFolder(id);
-        if (!result?.success) {
-          toast({
-            title: t("controlPanel.history.audioNotFound"),
-            variant: "destructive",
-          });
-        }
-      } catch {
-        toast({
-          title: t("controlPanel.history.audioNotFound"),
-          variant: "destructive",
-        });
-      }
-    },
-    [toast, t]
-  );
-
-  const retryTranscription = useCallback(
-    async (id: number, options?: { isRecover?: boolean }) => {
-      try {
-        const s = getSettings();
-        const managed = getManagedTranscriptionResolution();
-        if (managed?.kind === "error") {
-          toast({
-            title: managed.messageKey ? t(managed.messageKey) : managed.message,
-            variant: "destructive",
-          });
-          return;
-        }
-        if (!managed && !isTranscriptionContextAllowed(usePolicyStore.getState(), s, "dictation")) {
-          toast({ title: t("common.managedByOrg"), variant: "default" });
-          return;
-        }
-        const result = await window.electronAPI.retryTranscription(id, {
-          managed,
-          useLocalWhisper: s.useLocalWhisper,
-          localTranscriptionProvider: s.localTranscriptionProvider,
-          cloudTranscriptionMode: s.cloudTranscriptionMode,
-          cloudTranscriptionProvider: s.cloudTranscriptionProvider,
-          cloudTranscriptionModel: s.cloudTranscriptionModel,
-          cloudTranscriptionBaseUrl: s.cloudTranscriptionBaseUrl,
-          cortiEnvironment: s.cortiEnvironment,
-          cortiTenant: s.cortiTenant,
-          parakeetModel: s.parakeetModel,
-          cohereModel: s.cohereModel,
-          whisperModel: s.whisperModel,
-          preferredLanguage: s.preferredLanguage,
-          transcriptionMode: s.transcriptionMode,
-          remoteTranscriptionType: s.remoteTranscriptionType,
-          remoteTranscriptionUrl: s.remoteTranscriptionUrl,
-          remoteTranscriptionModel: s.remoteTranscriptionModel,
-        });
-        if (result.success && result.transcription) {
-          const rawText = result.transcription.text;
-          let finalTranscription = result.transcription;
-
-          // Apply AI reasoning if enabled
-          if (useCleanupModel) {
-            try {
-              const [
-                { default: ReasoningService },
-                { getEffectiveCleanupModel, isCloudCleanupMode, getSettings },
-              ] = await Promise.all([
-                import("../services/ReasoningService"),
-                import("../stores/settingsStore"),
-              ]);
-              const model = getEffectiveCleanupModel();
-              const isCloud = isCloudCleanupMode();
-              if (model || isCloud) {
-                const reasonedText = await ReasoningService.processText(rawText, model, null, {
-                  disableThinking: getSettings().cleanupDisableThinking,
-                  requireCompleteOutput: true,
-                });
-                // A whitespace-only reply never replaces the transcript (#1616).
-                if (reasonedText?.trim() && reasonedText !== rawText) {
-                  const updated = await window.electronAPI.updateTranscriptionText(
-                    id,
-                    reasonedText,
-                    rawText
-                  );
-                  if (updated.success && updated.transcription) {
-                    finalTranscription = updated.transcription;
-                  }
-                }
-              }
-            } catch (cleanupError) {
-              // The row keeps its raw transcript, so the retry must not look like it
-              // cleaned anything — report why, the way dictation does (#2091).
-              const failure = cleanupError as Error & { messageKey?: string };
-              toast({
-                title: t("app.toasts.cleanupFailed.title"),
-                description: failure.messageKey ? t(failure.messageKey) : failure.message,
-                variant: "destructive",
-              });
-            }
-          }
-
-          // Deterministic Chinese script pass (#975). Runs last so it covers the
-          // cleaned text, or the raw transcript when cleanup did not run. A retry
-          // never translates, so a translation row stays in its source language.
-          try {
-            const outputLanguage =
-              result.transcription.route_kind === "translation"
-                ? s.translationSourceLanguage || "auto"
-                : s.preferredLanguage;
-            const scripted = await applyChineseScript(
-              finalTranscription.text,
-              resolveChineseScriptTarget(
-                outputLanguage,
-                s.chineseScriptPreference,
-                finalTranscription.text
-              )
-            );
-            if (scripted !== finalTranscription.text) {
-              const updated = await window.electronAPI.updateTranscriptionText(
-                id,
-                scripted,
-                rawText
-              );
-              if (updated.success && updated.transcription) {
-                finalTranscription = updated.transcription;
-              }
-            }
-          } catch {
-            // Conversion failed — keep the text as transcribed
-          }
-
-          updateInStore(finalTranscription);
-          toast({
-            title: t(
-              options?.isRecover
-                ? "controlPanel.history.discarded.recovered"
-                : "controlPanel.history.retrySuccess"
-            ),
-          });
-        } else {
-          toast({
-            title: t("controlPanel.history.retryError"),
-            description: result.messageKey ? t(result.messageKey) : result.error,
-            variant: "destructive",
-          });
-        }
-      } catch {
-        toast({
-          title: t("controlPanel.history.retryError"),
-          variant: "destructive",
-        });
-      }
-    },
-    [toast, t, useCleanupModel]
-  );
-
-  const toggleShowDiscarded = useCallback(() => {
-    loadTranscriptions(!showDiscarded);
-  }, [loadTranscriptions, showDiscarded]);
 
   const handleUpdateClick = async () => {
     if (updateStatus.updateDownloaded) {
@@ -759,7 +415,6 @@ export default function ControlPanel({ initialSettingsSection }: ControlPanelPro
         <CommandSearch
           open={showSearch}
           onOpenChange={setShowSearch}
-          transcriptions={history}
           onNoteSelect={(id, folderId, spaceId) => {
             if (folderId != null) setActiveFolderId(folderId);
             else if (spaceId != null) navigateToContainer(spaceId, null);
@@ -769,9 +424,6 @@ export default function ControlPanel({ initialSettingsSection }: ControlPanelPro
           onContainerSelect={(spaceId, folderId) => {
             navigateToContainer(spaceId, folderId);
             setActiveView("personal-notes");
-          }}
-          onTranscriptSelect={() => {
-            setActiveView("home");
           }}
         />
       </Suspense>
@@ -872,114 +524,6 @@ export default function ControlPanel({ initialSettingsSection }: ControlPanelPro
                 </div>
               )}
               <RequiredModelsBanner />
-              {usage?.isPastDue && activeView === "home" && (
-                <div className={cn(PAGE_CONTENT_WIDTH_CLASS, "px-6 mb-3")}>
-                  <div className="rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/50 p-3">
-                    <div className="flex items-start gap-3">
-                      <div className="shrink-0 w-8 h-8 rounded-md bg-amber-100 dark:bg-amber-900/50 flex items-center justify-center">
-                        <AlertTriangle size={16} className="text-amber-600 dark:text-amber-400" />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-xs font-medium text-amber-900 dark:text-amber-200 mb-0.5">
-                          {t("controlPanel.billing.pastDueTitle")}
-                        </p>
-                        <p className="text-xs text-amber-700 dark:text-amber-300/80 mb-2">
-                          {t("controlPanel.billing.bannerDescription", {
-                            limit: usage.limit.toLocaleString(),
-                          })}
-                        </p>
-                        <Button
-                          variant="default"
-                          size="sm"
-                          className="h-7 text-xs"
-                          onClick={() => {
-                            setSettingsSection("account");
-                            setShowSettings(true);
-                          }}
-                        >
-                          {t("controlPanel.billing.updatePayment")}
-                        </Button>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              )}
-              {(gpuAccelAvailable.transcription || gpuAccelAvailable.intelligence) &&
-                activeView === "home" &&
-                !gpuBannerDismissed && (
-                  <div className={cn(PAGE_CONTENT_WIDTH_CLASS, "px-6 mb-3")}>
-                    <div className="rounded-lg border border-primary/20 dark:border-primary/15 bg-primary/5 p-3">
-                      <div className="flex items-start gap-3">
-                        <div className="shrink-0 w-8 h-8 rounded-md bg-primary/10 dark:bg-primary/15 flex items-center justify-center">
-                          <Zap size={16} className="text-primary" />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-xs font-medium text-foreground mb-0.5">
-                            {t("controlPanel.gpu.bannerTitle")}
-                          </p>
-                          <p className="text-xs text-muted-foreground mb-2">
-                            {t("controlPanel.gpu.bannerDescription")}
-                          </p>
-                          <div className="flex items-center gap-3">
-                            <Button
-                              variant="default"
-                              size="sm"
-                              className="h-7 text-xs"
-                              onClick={() => {
-                                setSettingsSection(
-                                  gpuAccelAvailable.transcription ? "transcription" : "intelligence"
-                                );
-                                setShowSettings(true);
-                              }}
-                            >
-                              {t("controlPanel.gpu.enableButton")}
-                            </Button>
-                            <button
-                              onClick={() => {
-                                setGpuBannerDismissed(true);
-                                localStorage.setItem("gpuBannerDismissedUnified", "true");
-                              }}
-                              className="text-xs text-muted-foreground hover:text-foreground transition-colors"
-                            >
-                              {t("controlPanel.gpu.dismissButton")}
-                            </button>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                )}
-              {activeView === "home" && (
-                <HistoryView
-                  history={history}
-                  isLoading={isLoading}
-                  aiCTADismissed={aiCTADismissed}
-                  setAiCTADismissed={setAiCTADismissed}
-                  useCleanupModel={useCleanupModel}
-                  copyToClipboard={copyToClipboard}
-                  deleteTranscription={deleteTranscription}
-                  clearAllTranscriptions={clearAllTranscriptions}
-                  onShowAudioInFolder={showAudioInFolder}
-                  onRetryTranscription={retryTranscription}
-                  showDiscarded={showDiscarded}
-                  onToggleDiscarded={toggleShowDiscarded}
-                  onOpenSettings={(section) => {
-                    setSettingsSection(section);
-                    setShowSettings(true);
-                  }}
-                  onOpenIntegrations={() => setActiveView("integrations")}
-                />
-              )}
-              {activeView === "insights" && (
-                <Suspense fallback={null}>
-                  <InsightsView
-                    onSignIn={() => {
-                      setSettingsSection("account");
-                      setShowSettings(true);
-                    }}
-                  />
-                </Suspense>
-              )}
               {activeView === "personal-notes" && (
                 <Suspense fallback={null}>
                   <PersonalNotesView
@@ -991,26 +535,6 @@ export default function ControlPanel({ initialSettingsSection }: ControlPanelPro
                     onMeetingRecordingRequestHandled={handleMeetingRecordingRequestHandled}
                     invitationEntry={invitationNotesEntry}
                     onInvitationEntryHandled={() => setInvitationNotesEntry(null)}
-                  />
-                </Suspense>
-              )}
-              {activeView === "dictionary" && (
-                <Suspense fallback={null}>
-                  <DictionaryView />
-                </Suspense>
-              )}
-              {activeView === "upload" && policyActionsAllowed && (
-                <Suspense fallback={null}>
-                  <UploadAudioView
-                    onNoteCreated={(noteId, folderId) => {
-                      setActiveNoteId(noteId);
-                      if (folderId) setActiveFolderId(folderId);
-                      setActiveView("personal-notes");
-                    }}
-                    onOpenSettings={(section) => {
-                      setSettingsSection(section);
-                      setShowSettings(true);
-                    }}
                   />
                 </Suspense>
               )}

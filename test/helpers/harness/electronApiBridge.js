@@ -7,52 +7,6 @@
 const AUTH_TOKEN = "harness-token";
 const AUTH_GENERATION = 0;
 
-// syncAll() asserts the whole dictionary and snippet surface exists before doing
-// any work and aborts the pass if a name is missing, so both are present but
-// inert — this harness covers notes and folders.
-function inertDictionaryApi() {
-  return {
-    getPendingDictionary: async () => [],
-    getPendingDictionaryDeletes: async () => [],
-    getDictionaryByClientId: async () => null,
-    upsertDictionaryFromCloud: async () => undefined,
-    markDictionarySynced: async () => ({ success: true, changes: 1 }),
-    hardDeleteDictionary: async () => ({ success: true }),
-    clearDictionaryCloudId: async () => ({ success: true }),
-    broadcastDictionaryUpdated: async () => undefined,
-  };
-}
-
-function inertSnippetApi() {
-  return {
-    getPendingSnippets: async () => [],
-    getPendingSnippetDeletes: async () => [],
-    getSnippetForCloudMerge: async () => null,
-    upsertSnippetFromCloud: async () => undefined,
-    markSnippetSynced: async () => ({ success: true, changes: 1 }),
-    hardDeleteSnippet: async () => ({ success: true }),
-    clearSnippetCloudId: async () => ({ success: true }),
-    broadcastSnippetsUpdated: async () => undefined,
-  };
-}
-
-// Every analytics binding syncPendingAnalytics reaches for. A missing one does
-// not fail loudly here -- SyncService catches the TypeError and logs it -- so
-// the pass silently does nothing and the test that asserts it drained still
-// reads as a behaviour failure. Keep this in step with preload.js.
-function inertAnalyticsApi() {
-  return {
-    getPendingAnalyticsClear: async () => null,
-    completeAnalyticsClear: async () => ({ success: true, deleted: 0 }),
-    getPendingAnalyticsDeletes: async () => [],
-    hardDeleteAnalyticsEvents: async () => ({ success: true, deleted: 0 }),
-    getPendingAnalyticsEvents: async () => [],
-    markAnalyticsEventsSynced: async () => ({ success: true, updated: 0 }),
-    countUnclaimedAnalyticsEvents: async () => 0,
-    countAnalyticsEventsAwaitingUpload: async () => 0,
-  };
-}
-
 function createElectronApi(db, options = {}) {
   if (!db) throw new TypeError("createElectronApi requires a DatabaseManager");
   const cloud = options.cloud;
@@ -169,20 +123,6 @@ function createElectronApi(db, options = {}) {
       db.acknowledgeConversationCreate(id, snapshot, cloudId),
     markConversationSynced: async (id, cloudId) => db.markConversationSynced(id, cloudId),
     hardDeleteConversation: async (id) => db.hardDeleteConversation(id),
-
-    // Transcriptions
-    getTranscriptionById: async (id) => db.getTranscriptionById(id),
-    getPendingTranscriptions: async () => db.getPendingTranscriptions(),
-    getPendingTranscriptionDeletes: async () => db.getPendingTranscriptionDeletes(),
-    getTranscriptionByClientId: async (clientId) => db.getTranscriptionByClientId(clientId),
-    upsertTranscriptionFromCloud: async (cloudTranscription) =>
-      db.upsertTranscriptionFromCloud(cloudTranscription),
-    markTranscriptionSynced: async (id, cloudId) => db.markTranscriptionSynced(id, cloudId),
-    hardDeleteTranscription: async (id) => db.hardDeleteTranscription(id),
-
-    ...inertDictionaryApi(),
-    ...inertSnippetApi(),
-    ...inertAnalyticsApi(),
   };
 }
 

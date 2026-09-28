@@ -466,11 +466,6 @@ export function canChangeCloudBackupPreference(
   return policyAllowsBackup || backupCurrentlyEnabled;
 }
 
-export function isControlPanelViewAllowed(view: string, policyActionsAllowed: boolean): boolean {
-  if (view === "upload") return policyActionsAllowed;
-  return true;
-}
-
 function policyModeHasAvailableProvider(
   policy: OrgPolicy,
   scope: PolicyScope,

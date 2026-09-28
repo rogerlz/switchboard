@@ -1223,45 +1223,6 @@ test("darwin: a mic that went quiet while recording does not re-prompt when reco
   detector.stop();
 });
 
-test("darwin: a call that outlives the mic warm-hold is detected when the hold releases", async (t) => {
-  t.mock.timers.enable({ apis: ["setTimeout", "Date"], now: 10_000 });
-  const { detector, children } = createDetector("darwin");
-  const emitted = [];
-  detector.on("sustained-audio-detected", (data) => emitted.push(data));
-
-  await detector.start();
-  detector.setMicWarmHold(true);
-  children[0].stdout.emit("data", "CAPABILITY PID\nMIC_START 900\n");
-  assert.equal(
-    detector._sustainedTimer,
-    null,
-    "warm-hold evidence must not arm the sustained timer"
-  );
-
-  detector.setMicWarmHold(false);
-  t.mock.timers.tick(SUSTAINED_MS);
-
-  assert.equal(emitted.length, 1, "a call still holding the mic after our hold ends must prompt");
-  detector.stop();
-});
-
-test("darwin: a warm-hold that releases cleanly does not produce a stale prompt", async (t) => {
-  t.mock.timers.enable({ apis: ["setTimeout", "Date"], now: 10_000 });
-  const { detector, children } = createDetector("darwin");
-  const emitted = [];
-  detector.on("sustained-audio-detected", (data) => emitted.push(data));
-
-  await detector.start();
-  detector.setMicWarmHold(true);
-  children[0].stdout.emit("data", "CAPABILITY PID\nMIC_START 900\n");
-  detector.setMicWarmHold(false);
-  children[0].stdout.emit("data", "MIC_STOP 900\n");
-  t.mock.timers.tick(SUSTAINED_MS * 2);
-
-  assert.equal(emitted.length, 0, "the release edge must cancel the pending re-evaluation");
-  detector.stop();
-});
-
 test("win32: an unrelated app's mic session ending does not hide an ongoing dismissed call", async (t) => {
   t.mock.timers.enable({ apis: ["setTimeout", "Date"], now: 10_000 });
   const { detector, children } = createDetector("win32");

@@ -2,8 +2,7 @@ import type React from "react";
 import { useTranslation } from "react-i18next";
 import { NotebookPen, Blocks } from "./icons";
 
-export type ControlPanelView =
-  "home" | "insights" | "personal-notes" | "dictionary" | "upload" | "integrations";
+export type ControlPanelView = "personal-notes" | "integrations";
 
 export interface ControlPanelNavItem {
   id: ControlPanelView;

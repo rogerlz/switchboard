@@ -1,9 +1,7 @@
 import { useTranslation } from "react-i18next";
-import { Mic, Shield, Monitor } from "../icons";
+import { Mic, Monitor } from "../icons";
 import PermissionCard from "./PermissionCard";
 import MicPermissionWarning from "./MicPermissionWarning";
-import PasteToolsInfo from "./PasteToolsInfo";
-import { needsLinuxPasteToolGuidance } from "../../utils/linuxPasteTools";
 import type { UsePermissionsReturn } from "../../hooks/usePermissions";
 import type { SystemAudioAccessResult } from "../../types/electron";
 import { canManageSystemAudioInApp } from "../../utils/systemAudioAccess";
@@ -23,8 +21,6 @@ export default function PermissionsSection({
   systemAudioRecommended = false,
 }: PermissionsSectionProps) {
   const { t } = useTranslation();
-  const platform = permissions.pasteToolsInfo?.platform;
-  const isMacOS = platform === "darwin";
   const shouldShowSystemAudioPermission = canManageSystemAudioInApp(systemAudio);
 
   return (
@@ -38,23 +34,6 @@ export default function PermissionsSection({
           onRequest={permissions.requestMicPermission}
           buttonText={t("onboarding.permissions.grantAccess")}
         />
-
-        {isMacOS && (
-          <PermissionCard
-            icon={Shield}
-            title={t("onboarding.permissions.accessibilityTitle")}
-            description={t("onboarding.permissions.accessibilityDescription")}
-            granted={permissions.accessibilityPermissionGranted}
-            onRequest={permissions.requestAccessibilityPermission}
-            buttonText={t("onboarding.permissions.grantAccess")}
-            badge={t("onboarding.permissions.recommended")}
-            hint={
-              permissions.accessibilityTroubleshooting
-                ? t("onboarding.permissions.accessibilityTroubleshooting")
-                : undefined
-            }
-          />
-        )}
 
         {shouldShowSystemAudioPermission && (
           <PermissionCard
@@ -80,16 +59,6 @@ export default function PermissionsSection({
           onOpenPrivacySettings={permissions.openMicPrivacySettings}
         />
       )}
-
-      {platform === "linux" &&
-        permissions.pasteToolsInfo &&
-        needsLinuxPasteToolGuidance(permissions.pasteToolsInfo) && (
-          <PasteToolsInfo
-            pasteToolsInfo={permissions.pasteToolsInfo}
-            isChecking={permissions.isCheckingPasteTools}
-            onCheck={permissions.checkPasteToolsAvailability}
-          />
-        )}
     </>
   );
 }

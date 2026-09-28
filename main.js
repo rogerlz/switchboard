@@ -271,7 +271,6 @@ process.on("unhandledRejection", (reason, promise) => {
 const EnvironmentManager = require("./src/helpers/environment");
 const WindowManager = require("./src/helpers/windowManager");
 const DatabaseManager = require("./src/helpers/database");
-const ClipboardManager = require("./src/helpers/clipboard");
 const WhisperManager = require("./src/helpers/whisper");
 const ParakeetManager = require("./src/helpers/parakeet");
 const DiarizationManager = require("./src/helpers/diarization");
@@ -282,8 +281,6 @@ const autoStart = require("./src/helpers/autoStart");
 const IPCHandlers = require("./src/helpers/ipcHandlers");
 const UpdateManager = require("./src/updater");
 const DevServerManager = require("./src/helpers/devServerManager");
-const TextEditMonitor = require("./src/helpers/textEditMonitor");
-const SelectionManager = require("./src/helpers/selectionManager");
 const WhisperCudaManager = require("./src/helpers/whisperCudaManager");
 const WhisperVulkanManager = require("./src/helpers/whisperVulkanManager");
 const { migrateLegacyBinDir, detectOrphanedGpuPacks } = require("./src/helpers/gpuBinaryManager");
@@ -305,7 +302,6 @@ const MeetingAecManager = require("./src/helpers/meetingAecManager");
 const MeetingDetectionEngine = require("./src/helpers/meetingDetectionEngine");
 const { applyOpenWhisprOriginHeader } = require("./src/helpers/sessionHeaders");
 const { i18nMain, changeLanguage } = require("./src/helpers/i18nMain");
-const { ensureYdotool } = require("./src/helpers/ensureYdotool");
 const sidecarRegistry = require("./src/helpers/sidecarRegistry");
 const { reapStaleSidecars } = require("./src/helpers/sidecarReaper");
 
@@ -314,14 +310,11 @@ let debugLogger = null;
 let environmentManager = null;
 let windowManager = null;
 let databaseManager = null;
-let clipboardManager = null;
 let whisperManager = null;
 let parakeetManager = null;
 let diarizationManager = null;
 let trayManager = null;
 let updateManager = null;
-let textEditMonitor = null;
-let selectionManager = null;
 let whisperCudaManager = null;
 let whisperVulkanManager = null;
 let googleCalendarManager = null;
@@ -333,7 +326,6 @@ let audioTapManager = null;
 let linuxPortalAudioManager = null;
 let windowsLoopbackAudioManager = null;
 let meetingAecManager = null;
-let ipcHandlers = null;
 let authBridgeServer = null;
 let pendingNoteCloudId = null;
 let pendingNoteRetryTimer = null;
@@ -443,7 +435,6 @@ function initializeCoreManagers() {
     binding: accountScopeBinding.read(),
   });
   if (bootAccountId) databaseManager.setActiveAccountId(bootAccountId);
-  clipboardManager = new ClipboardManager();
   whisperManager = new WhisperManager();
   if (process.platform !== "darwin") {
     whisperCudaManager = new WhisperCudaManager();
@@ -513,8 +504,6 @@ function initializeCoreManagers() {
   calendarReminderScheduler.meetingDetectionEngine = meetingDetectionEngine;
   updateManager = new UpdateManager();
   updateManager.setWindowManager(windowManager);
-  textEditMonitor = new TextEditMonitor();
-  selectionManager = new SelectionManager({ clipboardManager, textEditMonitor });
   audioTapManager = new AudioTapManager();
   linuxPortalAudioManager = new LinuxPortalAudioManager();
   windowsLoopbackAudioManager = new WindowsLoopbackAudioManager();
@@ -526,17 +515,14 @@ function initializeCoreManagers() {
   meetingAecManager = new MeetingAecManager();
 
   // IPC handlers must be registered before window content loads
-  ipcHandlers = new IPCHandlers({
+  new IPCHandlers({
     environmentManager,
     databaseManager,
-    clipboardManager,
     whisperManager,
     parakeetManager,
     diarizationManager,
     windowManager,
     updateManager,
-    textEditMonitor,
-    selectionManager,
     whisperCudaManager,
     whisperVulkanManager,
     googleCalendarManager,
@@ -567,16 +553,6 @@ function registerSidecars() {
 
 // Phase 2: Non-critical setup after windows are visible
 function initializeDeferredManagers() {
-  ensureYdotool().catch((err) => {
-    require("./src/helpers/debugLogger").warn(
-      "ydotool setup error",
-      { error: err?.message },
-      "clipboard"
-    );
-  });
-  if (process.platform !== "darwin") {
-    clipboardManager.preWarmAccessibility();
-  }
   trayManager = new TrayManager();
 
   googleCalendarManager.start();
@@ -1058,11 +1034,6 @@ async function startApp() {
     });
   }
 
-  if (process.platform === "win32") {
-    const nircmdStatus = clipboardManager.getNircmdStatus();
-    debugLogger.debug("Windows paste tool status", nircmdStatus);
-  }
-
   trayManager.setControlPanelWindow(windowManager.controlPanelWindow);
   trayManager.setWindowManager(windowManager);
   trayManager.setCreateControlPanelCallback(() => windowManager.createControlPanelWindow());
@@ -1218,7 +1189,5 @@ function performSyncTeardown() {
   if (linuxPortalAudioManager) linuxPortalAudioManager.stop().catch(() => {});
   if (windowsLoopbackAudioManager) windowsLoopbackAudioManager.stop().catch(() => {});
   if (meetingAecManager) meetingAecManager.stop().catch(() => {});
-  if (ipcHandlers) ipcHandlers._cleanupTextEditMonitor();
-  if (textEditMonitor) textEditMonitor.stopMonitoring();
   if (updateManager) updateManager.cleanup();
 }
