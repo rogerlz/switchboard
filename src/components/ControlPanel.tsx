@@ -123,7 +123,7 @@ export default function ControlPanel({ initialSettingsSection }: ControlPanelPro
   } | null>(null);
   const [showSearch, setShowSearch] = useState(false);
   const showDiscarded = useShowDiscarded();
-  const [activeView, setActiveView] = useState<ControlPanelView>("home");
+  const [activeView, setActiveView] = useState<ControlPanelView>("personal-notes");
   const navItems = useControlPanelNavItems();
   const {
     collapsed: sidebarCollapsed,
@@ -198,7 +198,7 @@ export default function ControlPanel({ initialSettingsSection }: ControlPanelPro
   const policyActionsAllowed = usePolicyStore((state) => isPolicyActionAllowed(state));
   useEffect(() => {
     if (!isControlPanelViewAllowed(activeView, policyActionsAllowed)) {
-      setActiveView("home");
+      setActiveView("personal-notes");
     }
   }, [activeView, policyActionsAllowed]);
   const updateRequiredByOrg = usePolicyStore(isUpdateRequiredByOrg);

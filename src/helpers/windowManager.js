@@ -1078,7 +1078,10 @@ class WindowManager {
     });
   }
 
-  async createControlPanelWindow() {
+  // `hidden` creates the window without ever auto-showing it (start minimized,
+  // login launch): meeting detection and prompts need a live renderer even
+  // while the app sits in the tray.
+  async createControlPanelWindow({ hidden = false } = {}) {
     if (this.controlPanelWindow && !this.controlPanelWindow.isDestroyed()) {
       if (this.controlPanelWindow.isMinimized()) {
         this.controlPanelWindow.restore();
@@ -1132,9 +1135,12 @@ class WindowManager {
     // backstop if the renderer never gets that far — it loads but throws, a lazy
     // chunk fails, or auth/policy resolution never settles — so it must outlive
     // did-finish-load. Only a real show cancels it.
-    this._controlPanelVisibilityTimer = setTimeout(() => {
-      this._showControlPanel();
-    }, 10000);
+    this._startHidden = hidden;
+    if (!hidden) {
+      this._controlPanelVisibilityTimer = setTimeout(() => {
+        this._showControlPanel();
+      }, 10000);
+    }
 
     this.controlPanelWindow.on("close", (event) => {
       if (!this.isQuitting) {
@@ -1427,6 +1433,11 @@ class WindowManager {
     // Cancel the backstop either way: once the window has been shown on purpose,
     // a later timer firing could pull it back out of the tray.
     this._clearControlPanelVisibilityTimer();
+    // A hidden start swallows the renderer's first "restore" show.
+    if (this._startHidden) {
+      this._startHidden = false;
+      return;
+    }
     if (win.isVisible()) return;
     win.show();
     win.focus();

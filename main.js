@@ -1100,9 +1100,7 @@ async function startApp() {
       }
     }
   }
-  if (!startMinimized) {
-    await windowManager.createControlPanelWindow();
-  }
+  await windowManager.createControlPanelWindow({ hidden: startMinimized });
 
   // Windows/Linux cold start delivers protocol URLs via argv (macOS uses
   // open-url); without this scan a deep link that launches the app is lost.
