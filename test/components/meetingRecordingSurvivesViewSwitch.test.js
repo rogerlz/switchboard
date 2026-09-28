@@ -57,6 +57,10 @@ const MOCKS = {
       return null;
     }`,
   "./SpacesTree": `export default () => null;`,
+  "../UpcomingMeetings": `export default () => null;`,
+  "/hooks/useUpcomingEvents": `
+    export const useUpcomingEvents = () => ({ events: [], isLoading: false, isConnected: false });
+  `,
   "/overview/ContainerOverview": `export const ContainerOverview = () => null;`,
   "./NotesStructureIntroDialog": `export default () => null;`,
   "./ActionPicker": `export default () => null;`,
