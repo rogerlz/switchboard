@@ -59,13 +59,11 @@
      name and silently retimes every `ease-out` utility app-wide. */
   --onboarding-ease-out: cubic-bezier(0.23, 1, 0.32, 1);
 
-  /* Typography. Yowza is the brand face (Latin only, registered by brandFonts.ts
-     when the licensed files are in the build); Noto Sans carries CJK and
-     everything else, and is the fallback when Yowza is absent. */
+  /* Typography: the bundled Noto Sans, then the system face. */
   --font-family-sans:
-    "Yowza", "Noto Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue",
-    Arial, sans-serif;
-  --font-family-display: "Yowza Soft", var(--font-family-sans);
+    "Noto Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial,
+    sans-serif;
+  --font-family-display: var(--font-family-sans);
 
   /* Opacities */
   --opacity-subtle: 0.1;
@@ -288,11 +286,8 @@
    tokens are shared — the canvas keeps its own painted background below. */
 .onboarding-canvas,
 body:has(.onboarding-canvas) {
-  /* Inter sits behind Yowza as the onboarding fallback: both are Latin-only, so
-     zh-CN/zh-TW/ja glyphs must still fall through to Noto Sans. Overriding the
-     variable as well covers descendants that re-declare font-family from it. */
   --font-family-sans:
-    "Yowza", "Inter Variable", "Noto Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+    "Inter Variable", "Noto Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
     "Helvetica Neue", Arial, sans-serif;
   font-family: var(--font-family-sans);
   font-optical-sizing: auto;
@@ -832,7 +827,7 @@ h1 {
   font-size: 2rem; /* 32px */
   font-weight: 500;
   line-height: 1.2; /* 120% */
-  /* No letter-spacing on purpose: Yowza Soft is already tight at display
+  /* No letter-spacing on purpose: the display face is already tight at display
      sizes, and manual negative tracking on top read as cramped. */
 }
 

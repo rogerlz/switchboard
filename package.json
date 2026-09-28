@@ -1,6 +1,6 @@
 {
   "name": "switchboard",
-  "version": "1.10.2",
+  "version": "0.1.0",
   "description": "Personal macOS app for meeting transcription and a menu-bar calendar",
   "main": "main.js",
   "private": true,
@@ -15,14 +15,14 @@
     "prestart": "npm run compile:native && npm run download:meeting-aec-helper && npm run download:sherpa-onnx && npm run download:whisper-vad-model",
     "start": "electron .",
     "dev": "concurrently -k -r \"npm:dev:renderer\" \"npm:dev:main\"",
-    "predev:main": "npm run compile:native && npm run download:meeting-aec-helper && npm run download:sherpa-onnx && npm run download:whisper-vad-model && npm run download:brand-fonts",
+    "predev:main": "npm run compile:native && npm run download:whisper-cpp && npm run download:meeting-aec-helper && npm run download:sherpa-onnx && npm run download:whisper-vad-model",
     "dev:main": "cross-env NODE_ENV=development node scripts/run-electron.js --dev",
     "dev:renderer": "cd src && vite",
     "build": "npm run build:mac",
     "postinstall": "electron-builder install-app-deps",
     "build:renderer": "cd src && vite build",
     "compile:mac-icon": "node scripts/compile-macos-icon.js",
-    "prebuild:mac": "npm run compile:native && npm run compile:mac-icon && npm run download:whisper-cpp && npm run download:sherpa-onnx && npm run download:meeting-aec-helper && npm run download:whisper-vad-model && npm run download:diarization-models -- --output-dir resources/bin/diarization-models && npm run download:brand-fonts",
+    "prebuild:mac": "npm run compile:native && npm run compile:mac-icon && npm run download:whisper-cpp && npm run download:sherpa-onnx && npm run download:meeting-aec-helper && npm run download:whisper-vad-model && npm run download:diarization-models -- --output-dir resources/bin/diarization-models",
     "build:mac": "npm run build:renderer && electron-builder --mac",
     "build:mac:arm64": "npm run build:renderer && electron-builder --mac --arm64",
     "build:mac:x64": "npm run build:renderer && electron-builder --mac --x64",
@@ -33,7 +33,6 @@
     "download:meeting-aec-helper": "node scripts/download-meeting-aec-helper.js --current",
     "download:diarization-models": "node scripts/download-diarization-models.js",
     "download:whisper-vad-model": "node scripts/download-whisper-vad-model.js",
-    "download:brand-fonts": "node scripts/download-brand-fonts.js",
     "format:js": "eslint . --fix && cd src && eslint . --fix && prettier --write \"**/*.{js,jsx,ts,tsx,json,css,md}\"",
     "format": "npm run format:js",
     "format:check": "eslint . && cd src && eslint . && prettier --check \"**/*.{js,jsx,ts,tsx,json,css,md}\"",
@@ -155,5 +154,13 @@
     "ip-address": "10.2.0",
     "markdown-it": "14.2.0",
     "tmp": "0.2.7"
+  },
+  "allowScripts": {
+    "electron@41.10.5": true,
+    "esbuild@0.28.1": true,
+    "ffmpeg-static@5.3.0": true,
+    "onnxruntime-node@1.27.0": true,
+    "better-sqlite3@12.9.0": true,
+    "electron-winstaller": false
   }
 }
