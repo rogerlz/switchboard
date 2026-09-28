@@ -110,21 +110,28 @@ export default function TrayCalendar() {
   const shiftMonth = (delta: number) =>
     setMonth((m) => new Date(m.getFullYear(), m.getMonth() + delta, 1));
   const formatTime = (value: string) =>
-    new Date(value).toLocaleTimeString(locale, { hour: "2-digit", minute: "2-digit" });
+    new Date(value).toLocaleTimeString(locale, {
+      hour: "2-digit",
+      minute: "2-digit",
+      hourCycle: "h23",
+    });
 
   return (
     <div className="flex h-screen flex-col overflow-hidden bg-background text-foreground select-none">
-      <div className="px-4 pt-3 pb-2">
+      <div className="px-3 pt-2.5 pb-1.5">
         <div className="mb-2 flex items-center justify-between">
-          <span className="text-base font-semibold">
+          <span className="text-sm font-semibold">
             {month.toLocaleDateString(locale, { month: "long", year: "numeric" })}
           </span>
-          <div className="flex items-center gap-1 text-sm text-muted-foreground">
-            <button className="rounded p-1 hover:bg-surface-3" onClick={() => shiftMonth(-1)}>
+          <div className="flex items-center gap-0.5 text-xs text-muted-foreground">
+            <button
+              className="rounded p-1 outline-none hover:bg-surface-3 focus-visible:bg-surface-3"
+              onClick={() => shiftMonth(-1)}
+            >
               <ChevronLeft size={14} />
             </button>
             <button
-              className="rounded px-1.5 py-0.5 hover:bg-surface-3"
+              className="rounded px-1.5 py-0.5 outline-none hover:bg-surface-3 focus-visible:bg-surface-3"
               onClick={() => {
                 setMonth(today);
                 setSelectedDay(today);
@@ -132,18 +139,21 @@ export default function TrayCalendar() {
             >
               {t("calendar.today")}
             </button>
-            <button className="rounded p-1 hover:bg-surface-3" onClick={() => shiftMonth(1)}>
+            <button
+              className="rounded p-1 outline-none hover:bg-surface-3 focus-visible:bg-surface-3"
+              onClick={() => shiftMonth(1)}
+            >
               <ChevronRight size={14} />
             </button>
           </div>
         </div>
 
         <div
-          className="grid gap-y-0.5 text-center text-xs"
+          className="grid text-center text-[11px]"
           style={{ gridTemplateColumns: `repeat(${hideWeekends ? 5 : 7}, minmax(0, 1fr))` }}
         >
           {weeks[0].map((day) => (
-            <span key={`h-${day.getDay()}`} className="pb-1 text-muted-foreground">
+            <span key={`h-${day.getDay()}`} className="pb-0.5 text-muted-foreground">
               {day.toLocaleDateString(locale, { weekday: "short" })}
             </span>
           ))}
@@ -156,7 +166,7 @@ export default function TrayCalendar() {
                 key={key}
                 onClick={() => setSelectedDay(day)}
                 className={cn(
-                  "flex flex-col items-center rounded-md py-1 tabular-nums hover:bg-surface-3",
+                  "flex flex-col items-center rounded-md py-0.5 tabular-nums hover:bg-surface-3",
                   day.getMonth() !== month.getMonth() && "text-muted-foreground/50",
                   isSelected && "bg-surface-3",
                   isToday && "bg-primary text-primary-foreground hover:bg-primary"
@@ -189,7 +199,7 @@ export default function TrayCalendar() {
               else groupRefs.current.delete(group.key);
             }}
           >
-            <div className="sticky top-0 z-10 flex justify-between bg-surface-3 px-4 py-1.5 text-xs font-semibold">
+            <div className="sticky top-0 z-10 flex justify-between bg-surface-3 px-3 py-1 text-[11px] font-semibold">
               <span>{group.date.toLocaleDateString(locale, { weekday: "long" })}</span>
               <span className="font-normal text-muted-foreground">
                 {group.date.toLocaleDateString(locale, { day: "numeric", month: "short" })}
@@ -200,8 +210,8 @@ export default function TrayCalendar() {
               const tentative = event.self_response_status !== "accepted";
               const hasLink = !!getMeetingJoinUrl(event);
               return (
-                <div key={event.id} className="flex items-center gap-3 px-4 py-2">
-                  <div className="w-10 shrink-0 text-xs tabular-nums leading-tight">
+                <div key={event.id} className="flex items-center gap-2.5 px-3 py-1.5">
+                  <div className="w-8 shrink-0 text-[11px] tabular-nums leading-tight">
                     <div className={cn(ended && "text-muted-foreground")}>
                       {formatTime(event.start_time)}
                     </div>
@@ -216,7 +226,7 @@ export default function TrayCalendar() {
                   <span
                     dir="auto"
                     className={cn(
-                      "min-w-0 flex-1 truncate text-sm",
+                      "min-w-0 flex-1 truncate text-[13px]",
                       (ended || tentative) && "text-muted-foreground"
                     )}
                     title={event.summary ?? undefined}
@@ -244,7 +254,7 @@ export default function TrayCalendar() {
       <button
         onClick={toggleWeekends}
         aria-pressed={hideWeekends}
-        className="flex items-center gap-2 border-t border-border px-4 py-2 text-start text-xs text-muted-foreground hover:text-foreground"
+        className="flex items-center gap-2 border-t border-border px-3 py-1.5 text-start text-[11px] text-muted-foreground hover:text-foreground"
       >
         <span
           className={cn(

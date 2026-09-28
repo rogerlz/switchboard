@@ -33,7 +33,11 @@ const openJoinUrl = (url: string) => {
 
 function formatTimeRange(locale: string, startTime: string, endTime: string): string {
   const format = (value: string) =>
-    new Date(value).toLocaleTimeString(locale, { hour: "numeric", minute: "2-digit" });
+    new Date(value).toLocaleTimeString(locale, {
+      hour: "2-digit",
+      minute: "2-digit",
+      hourCycle: "h23",
+    });
   return `${format(startTime)} – ${format(endTime)}`;
 }
 
