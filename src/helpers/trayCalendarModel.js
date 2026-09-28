@@ -23,6 +23,14 @@ export function isWeekend(date) {
   return day === 0 || day === 6;
 }
 
+/** A Google invite that still awaits a firm answer gets Accept/Maybe/Decline. */
+export function needsRsvp(event) {
+  return (
+    event.provider === "google" &&
+    (event.self_response_status === "needsAction" || event.self_response_status === "tentative")
+  );
+}
+
 export function isVisibleEvent(event) {
   return !event.is_all_day && event.self_response_status !== "declined";
 }

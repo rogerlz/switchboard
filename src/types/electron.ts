@@ -444,6 +444,10 @@ declare global {
       gcalGetUpcomingEvents?: (
         windowMinutes?: number
       ) => Promise<{ success: boolean; events: any[] }>;
+      gcalRespondToEvent?: (
+        eventId: string,
+        response: "accepted" | "declined" | "tentative"
+      ) => Promise<{ success: boolean; error?: string }>;
       gcalGetEvent?: (eventId: string) => Promise<{
         success: boolean;
         event: {

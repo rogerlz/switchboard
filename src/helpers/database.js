@@ -2109,6 +2109,13 @@ class DatabaseManager {
     }
   }
 
+  updateCalendarEventSelfResponse(eventId, status) {
+    if (!this.db) throw new Error("Database not initialized");
+    this.db
+      .prepare("UPDATE calendar_events SET self_response_status = ? WHERE id = ?")
+      .run(status, eventId);
+  }
+
   getNoteByCalendarEventId(eventId, excludeNoteId = null) {
     try {
       if (!this.db) throw new Error("Database not initialized");

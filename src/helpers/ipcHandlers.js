@@ -3222,6 +3222,14 @@ class IPCHandlers {
       }
     });
 
+    ipcMain.handle("gcal-respond-to-event", async (_event, eventId, response) => {
+      try {
+        return await this.googleCalendarManager.respondToEvent(eventId, response);
+      } catch (error) {
+        return { success: false, error: error.message };
+      }
+    });
+
     ipcMain.handle("gcal-get-event", async (_event, eventId) => {
       try {
         const event = this.databaseManager.getCalendarEventById(eventId);

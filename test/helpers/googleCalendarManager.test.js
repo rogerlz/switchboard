@@ -287,3 +287,59 @@ test("_syncCalendar preserves meeting links from Google event location and descr
     ]
   );
 });
+
+test("respondToEvent changes only our own attendee status and notifies the organizer", async () => {
+  const GoogleCalendarManager = loadManagerModule();
+  const updates = [];
+  const databaseManager = {
+    getGoogleAccounts: () => [],
+    getCalendarEventById: (id) =>
+      id === "evt/1" ? { id, calendar_id: "work@example.com", provider: "google" } : null,
+    getGoogleCalendars: () => [{ id: "work@example.com", account_email: "me@example.com" }],
+    updateCalendarEventSelfResponse: (id, status) => updates.push([id, status]),
+  };
+  const manager = new GoogleCalendarManager(databaseManager, null, {
+    scheduleNextMeeting() {},
+    reset() {},
+  });
+
+  const requests = [];
+  manager._apiRequest = async (method, path, email, body) => {
+    requests.push({ method, path, email, body });
+    return {
+      attendees: [
+        { email: "boss@example.com", organizer: true, responseStatus: "accepted" },
+        { email: "me@example.com", self: true, responseStatus: "needsAction" },
+      ],
+    };
+  };
+
+  await manager.respondToEvent("evt/1", "tentative");
+
+  assert.equal(requests[0].method, "GET");
+  assert.equal(requests[0].path, "/calendars/work%40example.com/events/evt%2F1");
+  assert.equal(requests[0].email, "me@example.com");
+  assert.equal(requests[1].method, "PATCH");
+  assert.equal(requests[1].path, "/calendars/work%40example.com/events/evt%2F1?sendUpdates=all");
+  assert.deepEqual(
+    requests[1].body.attendees.map((a) => a.responseStatus),
+    ["accepted", "tentative"]
+  );
+  assert.deepEqual(updates, [["evt/1", "tentative"]]);
+});
+
+test("respondToEvent rejects bad input before touching the network", async () => {
+  const GoogleCalendarManager = loadManagerModule();
+  const manager = new GoogleCalendarManager(
+    {
+      getGoogleAccounts: () => [],
+      getCalendarEventById: () => ({ id: "a", calendar_id: "c", provider: "apple" }),
+    },
+    null,
+    { scheduleNextMeeting() {}, reset() {} }
+  );
+  manager._apiRequest = async () => assert.fail("no request expected");
+
+  await assert.rejects(manager.respondToEvent("a", "maybe"), /Invalid RSVP response/);
+  await assert.rejects(manager.respondToEvent("a", "accepted"), /Not a Google Calendar event/);
+});

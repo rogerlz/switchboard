@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Check, ChevronLeft, ChevronRight, Mic, Video } from "./icons";
 import { cn } from "./lib/utils";
+import RsvpButtons from "./RsvpButtons";
 import type { CalendarEvent } from "../types/calendar";
 import { getMeetingJoinUrl } from "../helpers/meetingJoinUrl";
 import {
@@ -9,6 +10,7 @@ import {
   groupEventsByDay,
   isVisibleEvent,
   startOfDay,
+  needsRsvp,
 } from "../helpers/trayCalendarModel";
 
 // Menu-bar calendar popover (fork addition), opened from the tray icon.
@@ -221,7 +223,8 @@ export default function TrayCalendar() {
                   >
                     {event.summary || t("upcoming.untitledEvent")}
                   </span>
-                  {!ended && (
+                  {!ended && needsRsvp(event) && <RsvpButtons event={event} />}
+                  {!ended && !needsRsvp(event) && (
                     <button
                       onClick={() => joinMeeting(event)}
                       title={hasLink ? t("upcoming.joinAndTranscribe") : t("upcoming.takeNotes")}

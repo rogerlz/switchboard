@@ -7,6 +7,8 @@ import PersonAvatar from "./ui/PersonAvatar";
 import EmptyStateCard from "./ui/EmptyStateCard";
 import { GRADIENT_CIRCLE } from "./ui/gradientCircle";
 import { cn } from "./lib/utils";
+import RsvpButtons from "./RsvpButtons";
+import { needsRsvp } from "../helpers/trayCalendarModel";
 import type { CalendarAttendee, CalendarEvent } from "../types/calendar";
 import { parseAttendees } from "../utils/calendarAttendees";
 import { useSystemAudioPermission } from "../hooks/useSystemAudioPermission";
@@ -215,8 +217,11 @@ function EventRow({ event, isNow }: { event: CalendarEvent; isNow: boolean }) {
           <p className="mt-0.5 truncate text-xs tabular-nums text-muted-foreground">{timeRange}</p>
         )}
       </div>
-      {/* Always shown once the meeting is live; otherwise revealed on hover so you can join early. */}
-      {isNow ? (
+      {/* A pending invite asks for an answer first; Join takes over once it is accepted.
+          Join is always shown once the meeting is live, otherwise revealed on hover. */}
+      {needsRsvp(event) ? (
+        <RsvpButtons event={event} />
+      ) : isNow ? (
         joinButton
       ) : (
         <span

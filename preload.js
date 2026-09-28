@@ -256,6 +256,8 @@ contextBridge.exposeInMainWorld("electronAPI", {
   gcalGetUpcomingEvents: (windowMinutes) =>
     ipcRenderer.invoke("gcal-get-upcoming-events", windowMinutes),
   gcalGetEvent: (eventId) => ipcRenderer.invoke("gcal-get-event", eventId),
+  gcalRespondToEvent: (eventId, response) =>
+    ipcRenderer.invoke("gcal-respond-to-event", eventId, response),
   trayCalendarGetEvents: () => ipcRenderer.invoke("tray-calendar-get-events"),
 
   // Microsoft Calendar

@@ -895,5 +895,11 @@
   },
   "trayCalendar": {
     "hideWeekends": "Hide weekends"
+  },
+  "rsvp": {
+    "accept": "Accept",
+    "maybe": "Maybe",
+    "decline": "Decline",
+    "failed": "Couldn't send your reply. Reconnect Google Calendar in Integrations and try again."
   }
 }

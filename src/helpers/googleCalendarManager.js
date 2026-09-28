@@ -16,6 +16,8 @@ const SYNC_LOOKAHEAD_MS = 33 * 24 * 60 * 60 * 1000;
 const SYNC_TOKEN_TTL_MS = 24 * 60 * 60 * 1000;
 const GOOGLE_RESPONSE_STATUSES = new Set(["accepted", "declined", "tentative", "needsAction"]);
 
+const RSVP_RESPONSES = new Set(["accepted", "declined", "tentative"]);
+
 class GoogleCalendarManager {
   constructor(databaseManager, windowManager, reminderScheduler) {
     this.databaseManager = databaseManager;
@@ -350,13 +352,48 @@ class GoogleCalendarManager {
     broadcastToWindows("gcal-connection-changed", { accounts });
   }
 
-  async _apiGet(path, accountEmail = null) {
+  /**
+   * Accept, decline or tentatively accept an invite. Google stores the reply on
+   * the event's attendee list, so this rewrites the list with only our own
+   * status changed and lets Google notify the organizer.
+   */
+  async respondToEvent(eventId, response) {
+    if (!RSVP_RESPONSES.has(response)) throw new Error(`Invalid RSVP response: ${response}`);
+    const event = this.databaseManager.getCalendarEventById(eventId);
+    if (!event || event.provider !== "google") throw new Error("Not a Google Calendar event");
+    const calendar = this.databaseManager
+      .getGoogleCalendars()
+      .find((candidate) => candidate.id === event.calendar_id);
+    const accountEmail = calendar?.account_email ?? null;
+    const path = `/calendars/${encodeURIComponent(event.calendar_id)}/events/${encodeURIComponent(eventId)}`;
+
+    const remote = await this._apiGet(path, accountEmail);
+    const attendees = remote.attendees || [];
+    const self = attendees.find((attendee) => attendee.self === true);
+    if (!self) throw new Error("You are not an attendee of this event");
+    self.responseStatus = response;
+
+    await this._apiRequest("PATCH", `${path}?sendUpdates=all`, accountEmail, { attendees });
+    this.databaseManager.updateCalendarEventSelfResponse(eventId, response);
+    broadcastToWindows("gcal-events-synced", {});
+    return { success: true };
+  }
+
+  _apiGet(path, accountEmail = null) {
+    return this._apiRequest("GET", path, accountEmail);
+  }
+
+  async _apiRequest(method, path, accountEmail = null, body = undefined) {
     const accessToken = await this.oauth.getValidAccessToken(accountEmail);
     const urlString = path.startsWith("http") ? path : `${CALENDAR_API_BASE}${path}`;
 
     const response = await net.fetch(urlString, {
-      method: "GET",
-      headers: { Authorization: `Bearer ${accessToken}` },
+      method,
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        ...(body ? { "Content-Type": "application/json" } : {}),
+      },
+      body: body ? JSON.stringify(body) : undefined,
       signal: AbortSignal.timeout(10000),
       useSessionCookies: false,
     });

@@ -71,3 +71,12 @@ test("meeting note title carries the local date and start time", async () => {
   assert.equal(meetingNoteTitle(event("Skie - Daily", at(14))), "Skie - Daily — 2026-09-28 14:00");
   assert.equal(meetingNoteTitle(event(null, "bad")), "New note");
 });
+
+test("only pending Google invites ask for an RSVP", async () => {
+  const { needsRsvp } = await load();
+  const google = (status) => ({ provider: "google", self_response_status: status });
+  assert.equal(needsRsvp(google("needsAction")), true);
+  assert.equal(needsRsvp(google("tentative")), true);
+  assert.equal(needsRsvp(google("accepted")), false);
+  assert.equal(needsRsvp({ provider: "apple", self_response_status: "needsAction" }), false);
+});
