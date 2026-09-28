@@ -24,7 +24,6 @@ async function renderOverview(t, { lng, folder }) {
   const vite = await createRendererServer(t, {
     cachePrefix: `openwhispr-container-overview-${lng}-`,
     mockModules: {
-      "/stores/workspaceStore": "export const useWorkspaceStore = (selector) => selector({ workspaces: [] });",
       "/stores/noteStore": `
         export const useNotes = () => [];
         export const useNotesByContainer = () => ({});
@@ -33,8 +32,6 @@ async function renderOverview(t, { lng, folder }) {
         export const useSpaceRootCounts = () => ({});
       `,
       "/hooks/useContainerChat": "export const useContainerChat = () => ({});",
-      "/lib/spacePermissions": "export const canManageSpace = () => false;",
-      "/InviteTeammateDialog": "export default function Mock() { return null; }",
       "/OverviewExplainerBanner": "export const OverviewExplainerBanner = () => null;",
       "/OverviewAskSection": "export const OverviewAskSection = () => null;",
       "/OverviewNoteList": "export const OverviewNoteList = () => null;",

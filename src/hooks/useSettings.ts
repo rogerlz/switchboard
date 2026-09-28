@@ -65,8 +65,6 @@ export interface ApiKeySettings {
 }
 
 export interface PrivacySettings {
-  cloudBackupEnabled: boolean;
-  insightsSyncEnabled: boolean;
   telemetryEnabled: boolean;
   dataRetentionEnabled: boolean;
 }
@@ -238,10 +236,6 @@ function useSettingsInternal() {
     setWhisperVadSpeechPadMs: store.setWhisperVadSpeechPadMs,
     whisperVadSamplesOverlap: store.whisperVadSamplesOverlap,
     setWhisperVadSamplesOverlap: store.setWhisperVadSamplesOverlap,
-    cloudBackupEnabled: store.cloudBackupEnabled,
-    setCloudBackupEnabled: store.setCloudBackupEnabled,
-    insightsSyncEnabled: store.insightsSyncEnabled,
-    setInsightsSyncEnabled: store.setInsightsSyncEnabled,
     telemetryEnabled: store.telemetryEnabled,
     setTelemetryEnabled: store.setTelemetryEnabled,
     dataRetentionEnabled: store.dataRetentionEnabled,

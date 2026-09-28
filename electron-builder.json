@@ -5,10 +5,6 @@
     "windowsTrayIdentity": true
   },
   "productName": "Switchboard",
-  "protocols": {
-    "name": "OpenWhispr Protocol",
-    "schemes": ["openwhispr"]
-  },
   "directories": {
     "output": "dist"
   },

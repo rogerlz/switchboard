@@ -10,11 +10,6 @@ export const CONTAINER_OVERVIEW_INTRO: VersionedIntro = {
   version: 1,
 };
 
-export const NOTES_STRUCTURE_INTRO: VersionedIntro = {
-  storageKey: "notesStructureIntroVersion",
-  version: 1,
-};
-
 export function shouldShowIntro(
   storage: IntroStorage,
   intro: VersionedIntro,

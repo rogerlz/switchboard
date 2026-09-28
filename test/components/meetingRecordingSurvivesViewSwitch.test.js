@@ -62,7 +62,6 @@ const MOCKS = {
     export const useUpcomingEvents = () => ({ events: [], isLoading: false, isConnected: false });
   `,
   "/overview/ContainerOverview": `export const ContainerOverview = () => null;`,
-  "./NotesStructureIntroDialog": `export default () => null;`,
   "./ActionPicker": `export default () => null;`,
   "./ActionManagerDialog": `export default () => null;`,
   "./AddNotesToFolderDialog": `export default () => null;`,
@@ -74,8 +73,6 @@ const MOCKS = {
   "/hooks/useNotesOnboarding": `
     export const useNotesOnboarding = () => ({ isComplete: true, complete() {} });
   `,
-  "/hooks/useTeamSpacesCapability": `export const useTeamSpacesCapability = () => false;`,
-  "/hooks/useAuth": `export const useAuth = () => ({ isSignedIn: false, user: null });`,
   // Just enough of the note store for setActiveNoteId to drive note switches.
   "/stores/noteStore": `
     import { useSyncExternalStore } from "react";

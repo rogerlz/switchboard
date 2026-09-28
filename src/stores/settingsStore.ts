@@ -12,14 +12,6 @@ import type {
 import type { CalendarAccount } from "../types/calendar";
 import { normalizeChineseScriptPreference } from "../utils/chineseScript";
 import modelRegistryData from "../models/modelRegistryData.json";
-import { MEETING_STREAMING_PROVIDER_IDS } from "../helpers/meetingTranscriptionRouting";
-import {
-  getTranscriptionSelection,
-  resolveEffectivePolicySelection,
-  type PolicyDecisionSnapshot,
-  type TranscriptionPolicyContext,
-} from "./policyRules";
-import { usePolicyStore } from "./policyStore";
 import type {
   TranscriptionSettings,
   MeetingLayoutSettings,
@@ -29,7 +21,6 @@ import type {
   PrivacySettings,
   ThemeSettings,
 } from "../hooks/useSettings";
-import type { EnterpriseSetupMode } from "../types/enterpriseIdentity";
 
 // Requires localStorage as well as window: the module-scope migrations below
 // dereference the bare localStorage global, and test harnesses import this
@@ -38,35 +29,11 @@ const isBrowser = typeof window !== "undefined" && typeof localStorage !== "unde
 
 const DEFAULT_CLOUD_TRANSCRIPTION_PROVIDER = "openai";
 
-export const TRANSCRIPTION_POLICY_PROVIDER_IDS = [
-  ...modelRegistryData.transcriptionProviders.map((provider) => provider.id),
-  "custom",
-] as const;
-
-// Managed transcription is Azure-only in this phase.
-export const TRANSCRIPTION_ENTERPRISE_POLICY_PROVIDER_IDS = ["azure"] as const;
-
-const TRANSCRIPTION_POLICY_CATALOG = {
-  modes: ["openwhispr", "providers", "local", "self-hosted", "enterprise"] as const,
-  byokProviders: TRANSCRIPTION_POLICY_PROVIDER_IDS,
-  enterpriseProviders: TRANSCRIPTION_ENTERPRISE_POLICY_PROVIDER_IDS,
-};
-
-const MEETING_TRANSCRIPTION_POLICY_CATALOG = {
-  // Self-hosted realtime is not implemented for Note Recording.
-  modes: ["openwhispr", "providers", "local"] as const,
-  byokProviders: modelRegistryData.transcriptionProviders
-    .filter(
-      (provider) =>
-        MEETING_STREAMING_PROVIDER_IDS.includes(provider.id) &&
-        provider.models.some((model) => model.streaming)
-    )
-    .map((provider) => provider.id),
-};
+export type TranscriptionContext = "dictation" | "meeting";
 
 function transcriptionProviderModels(
   providerId: string,
-  context: TranscriptionPolicyContext
+  context: TranscriptionContext
 ): Array<{ id: string; streaming?: boolean }> {
   const models =
     modelRegistryData.transcriptionProviders.find((provider) => provider.id === providerId)
@@ -74,27 +41,17 @@ function transcriptionProviderModels(
   return context === "meeting" ? models.filter((model) => model.streaming) : models;
 }
 
-function defaultTranscriptionModel(
-  providerId: string,
-  context: TranscriptionPolicyContext
-): string {
+function defaultTranscriptionModel(providerId: string, context: TranscriptionContext): string {
   return transcriptionProviderModels(providerId, context)[0]?.id ?? "whisper-1";
 }
 
 function transcriptionModelBelongsToProvider(
   providerId: string,
   modelId: string,
-  context: TranscriptionPolicyContext
+  context: TranscriptionContext
 ): boolean {
   if (providerId === "custom") return Boolean(modelId);
   return transcriptionProviderModels(providerId, context).some((model) => model.id === modelId);
-}
-
-function canonicalTranscriptionBaseUrl(providerId: string): string | null {
-  return (
-    modelRegistryData.transcriptionProviders.find((provider) => provider.id === providerId)
-      ?.baseUrl ?? null
-  );
 }
 
 function readString(key: string, fallback: string): string {
@@ -178,8 +135,6 @@ const BOOLEAN_SETTINGS = new Set([
   "allowLocalFallback",
   "assemblyAiStreaming",
   "preferBuiltInMic",
-  "cloudBackupEnabled",
-  "insightsSyncEnabled",
   "telemetryEnabled",
   "startMinimized",
   "meetingProcessDetection",
@@ -187,7 +142,6 @@ const BOOLEAN_SETTINGS = new Set([
   "dictationSileroEnabled",
   "noteRecordingSileroEnabled",
   "meetingSileroEnabled",
-  "isSignedIn",
   "dataRetentionEnabled",
   "noteFilesEnabled",
   "notificationsEnabled",
@@ -433,7 +387,6 @@ export interface SettingsState
     ApiKeySettings,
     PrivacySettings,
     ThemeSettings {
-  isSignedIn: boolean;
   startMinimized: boolean;
   gcalAccounts: CalendarAccount[];
   gcalConnected: boolean;
@@ -514,10 +467,7 @@ export interface SettingsState
   setCloudTranscriptionModel: (value: string) => void;
   setCloudTranscriptionBaseUrl: (value: string) => void;
   setCloudTranscriptionMode: (value: string) => void;
-  switchCloudTranscriptionProvider: (
-    context: TranscriptionPolicyContext,
-    providerId: string
-  ) => void;
+  switchCloudTranscriptionProvider: (context: TranscriptionContext, providerId: string) => void;
   setAssemblyAiStreaming: (value: boolean) => void;
   setUiLanguage: (language: string) => void;
 
@@ -540,10 +490,6 @@ export interface SettingsState
   setCortiEnvironment: (value: string) => void;
   setCortiTenant: (value: string) => void;
 
-  // Enterprise managed transcription
-  enterpriseTranscriptionSetupMode: EnterpriseSetupMode;
-  setEnterpriseTranscriptionSetupMode: (value: EnterpriseSetupMode) => void;
-
   setMeetingHotkeyLayoutMode: (mode: "side-panel" | "full-width") => void;
   setOnboardingUseCases: (useCases: string[]) => void;
   setOnboardingUseCaseNote: (note: string) => void;
@@ -554,8 +500,6 @@ export interface SettingsState
   setSelectedMicDevice: (deviceId: string, label: string) => void;
 
   setTheme: (value: "light" | "dark" | "auto") => void;
-  setCloudBackupEnabled: (value: boolean) => void;
-  setInsightsSyncEnabled: (value: boolean) => void;
   setTelemetryEnabled: (value: boolean) => void;
   setDataRetentionEnabled: (value: boolean) => void;
   setStartMinimized: (enabled: boolean) => void;
@@ -581,7 +525,6 @@ export interface SettingsState
   setWhisperVadSamplesOverlap: (value: number) => void;
   setNoteFilesEnabled: (value: boolean) => void;
   setNoteFilesPath: (value: string) => void;
-  setIsSignedIn: (value: boolean) => void;
 
   updateTranscriptionSettings: (settings: Partial<TranscriptionSettings>) => void;
   setCloudTranscriptionForAllScopes: (settings: Partial<TranscriptionSettings>) => void;
@@ -764,12 +707,6 @@ export const useSettingsStore = create<SettingsState>()((set, get) => ({
   assemblyaiApiKey: "",
   customTranscriptionApiKey: "",
 
-  // Enterprise managed transcription
-  enterpriseTranscriptionSetupMode: (() => {
-    const v = readString("enterpriseTranscriptionSetupMode", "auto");
-    if (v === "auto" || v === "managed" || v === "manual") return v;
-    return "auto" as EnterpriseSetupMode;
-  })(),
   onboardingUseCases: readStringArray("onboardingUseCases", []),
   onboardingUseCaseNote: readString("onboardingUseCaseNote", ""),
   spokenLanguages: readStringArray("spokenLanguages", []),
@@ -792,8 +729,6 @@ export const useSettingsStore = create<SettingsState>()((set, get) => ({
     if (v === "light" || v === "dark" || v === "auto") return v;
     return "auto" as const;
   })(),
-  cloudBackupEnabled: readBoolean("cloudBackupEnabled", false),
-  insightsSyncEnabled: readBoolean("insightsSyncEnabled", false),
   telemetryEnabled: readBoolean("telemetryEnabled", false),
   dataRetentionEnabled: readBoolean("dataRetentionEnabled", true),
   startMinimized: readBoolean("startMinimized", false),
@@ -858,7 +793,6 @@ export const useSettingsStore = create<SettingsState>()((set, get) => ({
   ),
   noteFilesEnabled: readBoolean("noteFilesEnabled", false),
   noteFilesPath: readString("noteFilesPath", ""),
-  isSignedIn: readBoolean("isSignedIn", false),
 
   transcriptionMode: (() => {
     const v = readString("transcriptionMode", "local");
@@ -1004,9 +938,6 @@ export const useSettingsStore = create<SettingsState>()((set, get) => ({
     "customTranscription"
   ),
 
-  setEnterpriseTranscriptionSetupMode: createStringSetter("enterpriseTranscriptionSetupMode") as (
-    value: EnterpriseSetupMode
-  ) => void,
   setMeetingHotkeyLayoutMode: (mode: "side-panel" | "full-width") => {
     if (isBrowser) localStorage.setItem("meetingHotkeyLayoutMode", mode);
     set({ meetingHotkeyLayoutMode: mode });
@@ -1055,8 +986,6 @@ export const useSettingsStore = create<SettingsState>()((set, get) => ({
     set({ theme: value });
   },
 
-  setCloudBackupEnabled: createBooleanSetter("cloudBackupEnabled"),
-  setInsightsSyncEnabled: createBooleanSetter("insightsSyncEnabled"),
   setTelemetryEnabled: createBooleanSetter("telemetryEnabled"),
   setDataRetentionEnabled: (value: boolean) => {
     if (isBrowser) localStorage.setItem("dataRetentionEnabled", String(value));
@@ -1193,11 +1122,6 @@ export const useSettingsStore = create<SettingsState>()((set, get) => ({
   setNoteFilesEnabled: createBooleanSetter("noteFilesEnabled"),
   setNoteFilesPath: createStringSetter("noteFilesPath"),
 
-  setIsSignedIn: (value: boolean) => {
-    if (isBrowser) localStorage.setItem("isSignedIn", String(value));
-    set({ isSignedIn: value });
-  },
-
   updateTranscriptionSettings: (settings: Partial<TranscriptionSettings>) => {
     const s = useSettingsStore.getState();
     if (settings.useLocalWhisper !== undefined) s.setUseLocalWhisper(settings.useLocalWhisper);
@@ -1325,7 +1249,7 @@ export const selectResolvedMeetingTranscription = (
 // --- Convenience getters for non-React code ---
 
 interface TranscriptionContextKeys {
-  context: TranscriptionPolicyContext;
+  context: TranscriptionContext;
   mode: keyof SettingsState;
   useLocal: keyof SettingsState;
   cloudMode: keyof SettingsState;
@@ -1355,70 +1279,8 @@ const TRANSCRIPTION_CONTEXT_KEYS: readonly TranscriptionContextKeys[] = [
   },
 ];
 
-/**
- * Overlay managed policy choices for rendering and future requests while
- * leaving Zustand/localStorage preferences untouched for policy removal.
- */
-export function selectPolicyEffectiveSettings(
-  state: SettingsState,
-  policyState: PolicyDecisionSnapshot
-): SettingsState {
-  if (policyState.status === "idle" || policyState.status === "unmanaged") return state;
-  if (policyState.status !== "managed" || !policyState.policy) return state;
-
-  const effective = { ...state };
-  const writable = effective as unknown as Record<string, unknown>;
-
-  for (const keys of TRANSCRIPTION_CONTEXT_KEYS) {
-    const rawSelection = getTranscriptionSelection(state, keys.context);
-    const selection = resolveEffectivePolicySelection(
-      policyState,
-      "transcription",
-      rawSelection,
-      keys.context === "meeting"
-        ? MEETING_TRANSCRIPTION_POLICY_CATALOG
-        : TRANSCRIPTION_POLICY_CATALOG
-    );
-    if (!selection) continue;
-
-    writable[keys.mode] = selection.mode;
-    writable[keys.useLocal] = selection.mode === "local";
-    writable[keys.cloudMode] = selection.mode === "openwhispr" ? "openwhispr" : "byok";
-    if (selection.mode === "providers") {
-      const providerChanged = selection.provider !== rawSelection.provider;
-      writable[keys.provider] = selection.provider;
-      if (
-        providerChanged ||
-        !transcriptionModelBelongsToProvider(
-          selection.provider,
-          state[keys.model] as string,
-          keys.context
-        )
-      ) {
-        writable[keys.model] = defaultTranscriptionModel(selection.provider, keys.context);
-      }
-
-      const canonicalBaseUrl = canonicalTranscriptionBaseUrl(selection.provider);
-      if (canonicalBaseUrl) {
-        writable[keys.baseUrl] = canonicalBaseUrl;
-      } else if (providerChanged) {
-        // A fallback to Custom must not reinterpret another provider's endpoint
-        // as user authorization to send content there.
-        writable[keys.baseUrl] = "";
-      }
-    } else if (selection.mode === "enterprise") {
-      // The managed deployment/endpoint is resolved separately by
-      // enterpriseIdentityStore; the provider id here only needs to satisfy
-      // the policy gate (isTranscriptionContextAllowed).
-      writable[keys.provider] = selection.provider;
-    }
-  }
-
-  return effective;
-}
-
 export function getSettings(): SettingsState {
-  return selectPolicyEffectiveSettings(useSettingsStore.getState(), usePolicyStore.getState());
+  return useSettingsStore.getState();
 }
 
 // --- Initialization ---

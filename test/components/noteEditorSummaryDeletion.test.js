@@ -134,7 +134,6 @@ async function loadNoteEditor(t) {
         export function SelectionBar() { return null; }
       `,
       "/EmbeddedChat": `export default function EmbeddedChat() { return null; }`,
-      "/hooks/useAuth": `export function useAuth() { return { isSignedIn: false, user: null }; }`,
       "/hooks/useEmbeddedChat": `
         export function useEmbeddedChat() {
           return {
@@ -146,10 +145,6 @@ async function loadNoteEditor(t) {
           };
         }
       `,
-      "/services/NoteSharingService": `
-        export const NoteSharingService = { fetchAcl: async () => null };
-      `,
-      "/hooks/useSpaceRoster": `export async function fetchSpaceRoster() { return []; }`,
     },
   });
 

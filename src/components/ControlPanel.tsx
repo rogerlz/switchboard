@@ -1,26 +1,13 @@
 import React, { Suspense, useState, useEffect, useRef, useCallback } from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "./ui/button";
-import { PAGE_CONTENT_WIDTH_CLASS } from "./ui/pageWidth";
-import { cn } from "./lib/utils";
-import { BIDI_VALUE_TOKEN, BidiInterpolatedText } from "./ui/BidiInterpolatedText";
-import { Download, RefreshCw, Loader2, AlertTriangle } from "./icons";
-import PostMigrationOnboarding from "./PostMigrationOnboarding";
-import { RequiredModelsBanner } from "./RequiredModelsBanner";
+import { Download, RefreshCw, Loader2 } from "./icons";
 import { ConfirmDialog, AlertDialog } from "./ui/dialog";
 import { useDialogs } from "../hooks/useDialogs";
 import { useToast } from "./ui/useToast";
 import { useUpdater } from "../hooks/useUpdater";
-import { useAuth } from "../hooks/useAuth";
-import { useJoinableWorkspaces } from "../hooks/useJoinableWorkspaces";
-import { useWorkspace } from "../hooks/useWorkspace";
-import { manageableWorkspaces, selectWorkspaceForSpaceCreation } from "../lib/workspaceSelection";
-import { useUsage } from "../hooks/useUsage";
-import { decideUpsell } from "../lib/upsell";
 import { useCollapsibleSidebar } from "../hooks/useCollapsibleSidebar";
 import { useSettingsStore } from "../stores/settingsStore";
-import { usePolicyStore } from "../stores/policyStore";
-import { isUpdateRequiredByOrg } from "../stores/policyRules";
 import {
   useIsMeetingMode,
   useIsNarrowWindow,
@@ -42,17 +29,12 @@ import {
   useActiveNoteId,
   initializeNotes,
 } from "../stores/noteStore";
-import { fetchProviders as fetchStreamingProviders } from "../stores/streamingProvidersStore";
-import SpaceSyncToastListener from "./notes/SpaceSyncToastListener";
-import JoinYourTeamModal from "./JoinYourTeamModal";
 
 const platform = getCachedPlatform();
 
 const SIDEBAR_WIDTH_PX = 192;
 
 const SettingsModal = React.lazy(() => import("./SettingsModal"));
-const ReferralModal = React.lazy(() => import("./ReferralModal"));
-const InviteTeammateDialog = React.lazy(() => import("./InviteTeammateDialog"));
 const PersonalNotesView = React.lazy(() => import("./notes/PersonalNotesView"));
 const IntegrationsView = React.lazy(() => import("./IntegrationsView"));
 const CommandSearch = React.lazy(() => import("./CommandSearch"));
@@ -65,17 +47,9 @@ interface ControlPanelProps {
 export default function ControlPanel({ initialSettingsSection }: ControlPanelProps = {}) {
   const { t } = useTranslation();
   const [showSettings, setShowSettings] = useState(!!initialSettingsSection);
-  const [showPostMigration, setShowPostMigration] = useState(false);
   const [settingsSection, setSettingsSection] = useState<string | undefined>(
     initialSettingsSection
   );
-  const [showReferrals, setShowReferrals] = useState(false);
-  const [showInviteTeam, setShowInviteTeam] = useState(false);
-  const [invitationNotesEntry, setInvitationNotesEntry] = useState<{
-    workspaceId: string;
-    teamIds: string[];
-    spaceIds: string[];
-  } | null>(null);
   const [showSearch, setShowSearch] = useState(false);
   const [activeView, setActiveView] = useState<ControlPanelView>("personal-notes");
   const navItems = useControlPanelNavItems();
@@ -101,29 +75,6 @@ export default function ControlPanel({ initialSettingsSection }: ControlPanelPro
   } | null>(null);
   const updateReadyToastShown = useRef(false);
   const { toast } = useToast();
-  const { isSignedIn, isLoaded: authLoaded, user } = useAuth();
-  // Suppressed while a deep-linked invitation is open so the two never stack.
-  const {
-    joinable,
-    dismiss: dismissJoinable,
-    markRequested,
-  } = useJoinableWorkspaces(user?.id ?? null, isSignedIn);
-  const { workspaces, active: activeWorkspace } = useWorkspace();
-  // Invitations are owner/admin-only (server-enforced), so the sidebar row
-  // only exists when the user can manage a workspace.
-  const inviteWorkspace = selectWorkspaceForSpaceCreation(
-    manageableWorkspaces(workspaces),
-    activeWorkspace,
-    null
-  );
-  const usage = useUsage();
-  const upsell = decideUpsell({
-    authLoaded,
-    isSignedIn,
-    hasPaidAccess: usage?.hasPaidAccess ?? null,
-    isPastDue: usage?.isPastDue ?? false,
-  });
-
   const {
     status: updateStatus,
     downloadProgress,
@@ -139,8 +90,6 @@ export default function ControlPanel({ initialSettingsSection }: ControlPanelPro
     await createNote();
     setActiveView("personal-notes");
   }, [createNote]);
-  const updateRequiredByOrg = usePolicyStore(isUpdateRequiredByOrg);
-  const policyMinAppVersion = usePolicyStore((s) => s.policy?.minAppVersion ?? null);
 
   const { confirmDialog, alertDialog, showConfirmDialog, hideConfirmDialog, hideAlertDialog } =
     useDialogs();
@@ -151,18 +100,6 @@ export default function ControlPanel({ initialSettingsSection }: ControlPanelPro
     window.electronAPI?.noteFilesSetEnabled?.(true, noteFilesPath || undefined, {
       skipRebuild: true,
     });
-  }, []);
-
-  useEffect(() => {
-    if (platform !== "darwin") return;
-    window.electronAPI?.getPostMigrationState?.().then((state) => {
-      if (state?.justMigrated) setShowPostMigration(true);
-    });
-  }, []);
-
-  const dismissPostMigrationPermanently = useCallback(async () => {
-    await window.electronAPI?.markBundleMigrated?.();
-    setShowPostMigration(false);
   }, []);
 
   useEffect(() => {
@@ -194,18 +131,6 @@ export default function ControlPanel({ initialSettingsSection }: ControlPanelPro
       updateReadyToastShown.current = false;
     }
   }, [updateStatus.updateDownloaded, isDownloading, toast, t]);
-
-  useEffect(() => {
-    if (!usage?.isPastDue) return;
-    if (sessionStorage.getItem("pastDueNotified")) return;
-    sessionStorage.setItem("pastDueNotified", "true");
-    toast({
-      title: t("controlPanel.billing.pastDueTitle"),
-      description: t("controlPanel.billing.pastDueDescription"),
-      variant: "destructive",
-      duration: 8000,
-    });
-  }, [usage?.isPastDue, toast, t]);
 
   useEffect(() => {
     const drain = async () => {
@@ -253,10 +178,6 @@ export default function ControlPanel({ initialSettingsSection }: ControlPanelPro
       setShowSettings(true);
     });
     return () => cleanup?.();
-  }, []);
-
-  useEffect(() => {
-    fetchStreamingProviders();
   }, []);
 
   const handleMeetingRecordingRequestHandled = useCallback(
@@ -366,12 +287,6 @@ export default function ControlPanel({ initialSettingsSection }: ControlPanelPro
         onOk={() => {}}
       />
 
-      <PostMigrationOnboarding
-        open={showPostMigration}
-        onOpenChange={setShowPostMigration}
-        onDone={dismissPostMigrationPermanently}
-      />
-
       {showSettings && (
         <Suspense fallback={null}>
           <SettingsModal
@@ -384,31 +299,6 @@ export default function ControlPanel({ initialSettingsSection }: ControlPanelPro
           />
         </Suspense>
       )}
-
-      {showReferrals && (
-        <Suspense fallback={null}>
-          <ReferralModal open={showReferrals} onOpenChange={setShowReferrals} />
-        </Suspense>
-      )}
-
-      {showInviteTeam && inviteWorkspace && (
-        <Suspense fallback={null}>
-          <InviteTeammateDialog
-            open={showInviteTeam}
-            onOpenChange={setShowInviteTeam}
-            workspaceId={inviteWorkspace.id}
-            workspaceName={inviteWorkspace.name}
-          />
-        </Suspense>
-      )}
-
-      <JoinYourTeamModal
-        joinable={joinable}
-        domain={user?.email?.split("@")[1] ?? null}
-        onDismiss={dismissJoinable}
-        onRequested={markRequested}
-        onJoined={() => setActiveView("personal-notes")}
-      />
 
       {/* Always mounted so the palette chunk is warm and Radix can play its exit animation. */}
       <Suspense fallback={null}>
@@ -453,19 +343,6 @@ export default function ControlPanel({ initialSettingsSection }: ControlPanelPro
               setSettingsSection(undefined);
               setShowSettings(true);
             }}
-            onOpenReferrals={() => setShowReferrals(true)}
-            onInviteTeam={inviteWorkspace ? () => setShowInviteTeam(true) : undefined}
-            onUpgrade={() => {
-              setSettingsSection("plansBilling");
-              setShowSettings(true);
-            }}
-            isOverLimit={usage?.isOverLimit ?? false}
-            userName={user?.name}
-            userEmail={user?.email}
-            userImage={user?.image}
-            isSignedIn={isSignedIn}
-            authLoaded={authLoaded}
-            upsell={upsell}
             updateAction={
               !updateStatus.isDevelopment &&
               (updateStatus.updateAvailable ||
@@ -499,31 +376,6 @@ export default function ControlPanel({ initialSettingsSection }: ControlPanelPro
               actions={<NewNoteMenu onNewNote={handleNewNote} />}
             />
             <div className="scrollbar-hidden flex-1 overflow-y-auto">
-              {updateRequiredByOrg && (
-                <div className={cn(PAGE_CONTENT_WIDTH_CLASS, "px-6 mb-3")}>
-                  <div className="rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/50 p-3">
-                    <div className="flex items-start gap-3">
-                      <div className="shrink-0 w-8 h-8 rounded-md bg-amber-100 dark:bg-amber-900/50 flex items-center justify-center">
-                        <AlertTriangle size={16} className="text-amber-600 dark:text-amber-400" />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-xs font-medium text-amber-900 dark:text-amber-200 mb-0.5">
-                          {t("controlPanel.updateRequiredByOrg.title")}
-                        </p>
-                        <p className="text-xs text-amber-700 dark:text-amber-300/80">
-                          <BidiInterpolatedText
-                            text={t("controlPanel.updateRequiredByOrg.description", {
-                              version: BIDI_VALUE_TOKEN,
-                            })}
-                            value={policyMinAppVersion}
-                          />
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              )}
-              <RequiredModelsBanner />
               {activeView === "personal-notes" && (
                 <Suspense fallback={null}>
                   <PersonalNotesView
@@ -534,27 +386,18 @@ export default function ControlPanel({ initialSettingsSection }: ControlPanelPro
                     meetingRecordingRequest={meetingRecordingRequest}
                     onMeetingRecordingRequestHandled={handleMeetingRecordingRequestHandled}
                     onOpenIntegrations={() => setActiveView("integrations")}
-                    invitationEntry={invitationNotesEntry}
-                    onInvitationEntryHandled={() => setInvitationNotesEntry(null)}
                   />
                 </Suspense>
               )}
               {activeView === "integrations" && (
                 <Suspense fallback={null}>
-                  <IntegrationsView
-                    isPaid={usage?.hasPaidAccessOptimistic ?? false}
-                    onUpgrade={() => {
-                      setSettingsSection("plansBilling");
-                      setShowSettings(true);
-                    }}
-                  />
+                  <IntegrationsView />
                 </Suspense>
               )}
             </div>
           </div>
         </main>
       </div>
-      <SpaceSyncToastListener />
     </div>
   );
 }

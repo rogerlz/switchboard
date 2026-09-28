@@ -227,7 +227,7 @@ test("a request with no code leaves the flow running until a real callback", asy
   const success = await fetch(`${redirectUri}/?code=ok&state=${getState()}`, {
     redirect: "manual",
   });
-  assert.equal(success.status, 302);
+  assert.equal(success.status, 200);
   assert.deepEqual(await flow, { code: "ok" });
 });
 
@@ -239,7 +239,7 @@ test("a provider error query still fails the flow immediately", async () => {
   const response = await fetch(`${redirectUri}/?error=access_denied`, {
     redirect: "manual",
   });
-  assert.equal(response.status, 302);
+  assert.equal(response.status, 200);
   await rejected;
 });
 
@@ -279,7 +279,7 @@ test("a late state mismatch cannot reject a valid callback already in progress",
   const validResponse = await validResponsePromise;
   assert.equal(mismatchResponse.status, 400);
   assert.equal(outcomeBeforeRelease, "pending");
-  assert.equal(validResponse.status, 302);
+  assert.equal(validResponse.status, 200);
   assert.equal(await flowOutcome, "resolved");
 });
 
@@ -317,7 +317,7 @@ test("a late malformed request cannot reject a valid callback already in progres
   const validResponse = await validResponsePromise;
   assert.equal(malformedStatus, 400);
   assert.equal(outcomeBeforeRelease, "pending");
-  assert.equal(validResponse.status, 302);
+  assert.equal(validResponse.status, 200);
   assert.equal(await flowOutcome, "resolved");
 });
 
@@ -359,7 +359,7 @@ test("a second valid callback cannot start another token exchange", async () => 
   assert.equal(duplicateResponse.status, 400);
   assert.equal(outcomeBeforeRelease, "pending");
   assert.equal(getCallbackCount(), 1);
-  assert.equal(firstResponse.status, 302);
+  assert.equal(firstResponse.status, 200);
   assert.deepEqual(await flowOutcome, {
     status: "resolved",
     result: { code: "first" },
@@ -377,7 +377,7 @@ test("an accepted callback cannot run after a malformed request rejects the flow
   const rejected = assert.rejects(flow, /Invalid URL/);
 
   try {
-    assert.equal(await requestPath(redirectUri, "//["), 302);
+    assert.equal(await requestPath(redirectUri, "//["), 200);
     await rejected;
 
     const lateStatus = await parkedRequest.complete(`?code=late&state=${getState()}`);

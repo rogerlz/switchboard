@@ -20,11 +20,8 @@ function handlerBody(channel, nextChannel) {
 // deleting them. Their markdown mirror files live under the folder's mirror
 // directory, which is removed with the folder — so the handlers must rewrite
 // every live relocated note at its new location.
-test("folder delete handlers rewrite relocated notes into the markdown mirror", () => {
-  for (const [channel, nextChannel] of [
-    ["db-delete-folder", "db-rename-folder"],
-    ["db-hard-delete-folder", "db-relocate-revoked-folder"],
-  ]) {
+test("the folder delete handler rewrites relocated notes into the markdown mirror", () => {
+  for (const [channel, nextChannel] of [["db-delete-folder", "db-rename-folder"]]) {
     const source = handlerBody(channel, nextChannel);
     assert.ok(source.includes("relocatedNotes"), `${channel} consumes relocatedNotes`);
     assert.ok(source.includes("_asyncMirrorWrite"), `${channel} rewrites relocated mirror files`);

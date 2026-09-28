@@ -7,17 +7,13 @@ import {
   FileText,
   Folder,
   FolderOpen,
-  Info,
   Loader2,
   Lock,
   MoreHorizontal,
   Pencil,
   Plus,
   Search,
-  Settings,
-  Share2,
   Trash2,
-  Users,
 } from "../icons";
 import { Button } from "../ui/button";
 import {
@@ -34,41 +30,19 @@ import { ConfirmDialog } from "../ui/dialog";
 import { useDialogs } from "../../hooks/useDialogs";
 import { useToast } from "../ui/useToast";
 import { useNoteDragAndDrop, type NoteMoveTarget } from "../../hooks/useNoteDragAndDrop";
-import { useTeamSpacesCapability } from "../../hooks/useTeamSpacesCapability";
-import { useCanCreateTeamSpace } from "../../hooks/useCanCreateTeamSpace";
-import { useAuth } from "../../hooks/useAuth";
-import { useWorkspace } from "../../hooks/useWorkspace";
-import SpaceSettingsDialog from "./SpaceSettingsDialog";
-import {
-  canChangeSpaceNoteScope,
-  canDeleteSpaceNote,
-  canManageSpace,
-  canManageWorkspace,
-  canMoveBetweenSpaces,
-  canMoveOrDeleteSpaceFolder,
-} from "../../lib/spacePermissions";
-import {
-  canOrganizeNote as canOrganizeSharedNote,
-  resolveNotePermission,
-  sharedNoteBlocksDelete,
-} from "../../lib/notePermissions";
-import { groupTeamSpacesByWorkspace } from "../../lib/workspaceSelection";
 import { localMutationErrorKey } from "../../lib/localMutationError";
 import { useSettingsStore } from "../../stores/settingsStore";
 import { cn } from "../lib/utils";
 import { getCachedPlatform } from "../../utils/platform";
-import CreateSpaceDialog from "./CreateSpaceDialog";
-import DeleteSpaceDialog from "./DeleteSpaceDialog";
 import { treeHorizontalIntent, treeRowActionClearanceStyle } from "./treeDirection";
 import { defaultFolderDisplayName } from "./shared";
-import type { FolderItem, NoteItem, SpaceItem, WorkspaceRole } from "../../types/electron";
+import type { FolderItem, NoteItem, SpaceItem } from "../../types/electron";
 import {
   folderContainerKey,
   spaceContainerKey,
   useSpaces,
   useFolders,
   useFolderCounts,
-  useSpaceRootCounts,
   useNotesByContainer,
   useExpandedContainers,
   useActiveContext,
@@ -78,15 +52,11 @@ import {
   setActiveNoteId,
   setContainerExpanded,
   toggleContainerExpanded,
-  revealContainer,
   createFolder,
   renameFolder,
   deleteFolder,
-  moveFolderToSpace,
   getNoteFromStore,
   getFoldersValue,
-  getSpacesValue,
-  useShareCache,
 } from "../../stores/noteStore";
 
 const FOLDER_INPUT_CLASS =
@@ -123,7 +93,6 @@ const SUB_TRIGGER_CLASS = cn(
 type TFn = (key: string, options?: Record<string, unknown>) => string;
 
 type TreeRow =
-  | { type: "space"; key: string; space: SpaceItem; parentKey?: undefined }
   | {
       type: "folder";
       key: string;
@@ -158,11 +127,6 @@ interface SpacesTreeProps {
   onMoveNote: (noteId: number, target: NoteMoveTarget) => Promise<void>;
   onCreateFolderAndMove: (noteId: number, folderName: string) => void;
   onNewNote: (spaceId: number, folderId: number | null) => void;
-  onShowStructureIntro?: () => void;
-}
-
-function spaceDisplayName(space: SpaceItem, t: TFn): string {
-  return space.kind === "private" ? t("notes.spaces.personal") : space.name;
 }
 
 function getFileManagerName(): string {
@@ -381,167 +345,9 @@ function SearchableMoveSubmenu({
   );
 }
 
-function SpaceMenuIcon({ space }: { space: SpaceItem }) {
-  if (space.kind === "private") {
-    return <Lock size={11} className="text-muted-foreground/70 shrink-0" />;
-  }
-  if (space.emoji) {
-    return (
-      <span className="text-[11px] leading-none shrink-0" aria-hidden="true">
-        {space.emoji}
-      </span>
-    );
-  }
-  return <Users size={11} className="text-muted-foreground/70 shrink-0" />;
-}
-
-function SpaceRow({
-  space,
-  displayName,
-  isExpanded,
-  isActive,
-  count,
-  isDragOver,
-  isDropSuccess,
-  dropHandlers,
-  onActivate,
-  onToggle,
-  onNewFolder,
-  onSettings,
-  a11y,
-  t,
-}: {
-  space: SpaceItem;
-  displayName: string;
-  isExpanded: boolean;
-  isActive: boolean;
-  count: number;
-  isDragOver: boolean;
-  isDropSuccess: boolean;
-  dropHandlers: DropHandlers;
-  onActivate: () => void;
-  onToggle: () => void;
-  onNewFolder: () => void;
-  onSettings: () => void;
-  a11y: RowA11yProps;
-  t: TFn;
-}) {
-  const isPrivate = space.kind === "private";
-  return (
-    <div
-      role="treeitem"
-      aria-level={1}
-      aria-expanded={isExpanded}
-      aria-selected={isActive}
-      aria-label={
-        count > 0 ? `${displayName}, ${t("notes.spaces.noteCount", { count })}` : displayName
-      }
-      tabIndex={a11y.tabIndex}
-      ref={a11y.rowRef}
-      onKeyDown={a11y.onKeyDown}
-      onFocus={a11y.onFocus}
-      onClick={onActivate}
-      title={isPrivate ? t("notes.spaces.privateTooltip") : displayName}
-      {...dropHandlers}
-      style={treeRowActionClearanceStyle()}
-      className={cn(
-        ROW_BASE_CLASS,
-        "h-7 px-2",
-        isActive
-          ? "bg-primary/8 dark:bg-primary/10"
-          : "hover:bg-foreground/4 dark:hover:bg-white/4",
-        isDragOver && DROP_TARGET_CLASS,
-        isDropSuccess && DROP_SUCCESS_CLASS
-      )}
-    >
-      <RowToggle
-        isExpanded={isExpanded}
-        onToggle={onToggle}
-        icon={
-          isPrivate ? (
-            <Lock
-              size={14}
-              className={cn(
-                "transition-colors duration-150",
-                isActive ? "text-primary" : "text-foreground/55 dark:text-foreground/45"
-              )}
-            />
-          ) : space.emoji ? (
-            <span className="text-[12px] leading-none" aria-hidden="true">
-              {space.emoji}
-            </span>
-          ) : (
-            <Users
-              size={14}
-              className={cn(
-                "transition-colors duration-150",
-                isDragOver || isActive
-                  ? "text-primary"
-                  : "text-foreground/55 dark:text-foreground/45"
-              )}
-            />
-          )
-        }
-      />
-      <span
-        dir="auto"
-        className={cn(
-          "text-[13px] truncate flex-1 transition-colors duration-150",
-          isDragOver || isActive ? "text-foreground font-medium" : "text-foreground/85"
-        )}
-      >
-        {displayName}
-      </span>
-      <DropSuccessCheck isDropSuccess={isDropSuccess} />
-      <span className="absolute end-1.5 flex items-center gap-px">
-        <Button
-          variant="ghost"
-          size="icon"
-          aria-label={t("notes.context.newFolder")}
-          onClick={(e) => {
-            e.stopPropagation();
-            onNewFolder();
-          }}
-          className={KEBAB_BUTTON_CLASS}
-        >
-          <Plus size={12} />
-        </Button>
-        {!isPrivate && (
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon"
-                aria-label={t("common.actions")}
-                onClick={(e) => e.stopPropagation()}
-                className={KEBAB_BUTTON_CLASS}
-              >
-                <MoreHorizontal size={12} />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" sideOffset={4} className="min-w-36">
-              <DropdownMenuItem
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onSettings();
-                }}
-                className={MENU_ITEM_CLASS}
-              >
-                <Settings size={11} className="text-muted-foreground/70" />
-                {t("notes.spaces.settings")}
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        )}
-      </span>
-    </div>
-  );
-}
-
 function FolderRow({
   folder,
   level,
-  spaces,
   isExpanded,
   isActive,
   count,
@@ -550,19 +356,16 @@ function FolderRow({
   dropHandlers,
   noteFilesEnabled,
   fileManagerName,
-  canManageDestructive,
   onActivate,
   onToggle,
   onNewNote,
   onRename,
-  onMoveToSpace,
   onDelete,
   a11y,
   t,
 }: {
   folder: FolderItem;
   level: 1 | 2;
-  spaces: SpaceItem[];
   isExpanded: boolean;
   isActive: boolean;
   count: number;
@@ -571,28 +374,15 @@ function FolderRow({
   dropHandlers: DropHandlers;
   noteFilesEnabled: boolean;
   fileManagerName: string;
-  canManageDestructive: boolean;
   onActivate: () => void;
   onToggle: () => void;
   onNewNote: () => void;
   onRename: () => void;
-  onMoveToSpace: (space: SpaceItem) => void;
   onDelete: () => void;
   a11y: RowA11yProps;
   t: TFn;
 }) {
-  const [spaceSearch, setSpaceSearch] = useState("");
   const displayName = defaultFolderDisplayName(folder, t);
-  const canMoveToSpace = canManageDestructive && !folder.is_default && spaces.length > 1;
-  const filteredSpaces = useMemo(
-    () =>
-      spaceSearch
-        ? spaces.filter((s) =>
-            spaceDisplayName(s, t).toLowerCase().includes(spaceSearch.toLowerCase())
-          )
-        : spaces,
-    [spaces, spaceSearch, t]
-  );
 
   return (
     <div
@@ -661,7 +451,7 @@ function FolderRow({
           <Plus size={12} />
         </Button>
         {(!folder.is_default || noteFilesEnabled) && (
-          <DropdownMenu onOpenChange={(open) => !open && setSpaceSearch("")}>
+          <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button
                 variant="ghost"
@@ -699,60 +489,20 @@ function FolderRow({
                     <Pencil size={11} className="text-muted-foreground/70" />
                     {t("notes.context.rename")}
                   </DropdownMenuItem>
-                  {canMoveToSpace && (
-                    <SearchableMoveSubmenu
-                      icon={<Users size={11} className="text-muted-foreground/70" />}
-                      label={t("notes.spaces.moveToSpace")}
-                      itemCount={spaces.length}
-                      search={spaceSearch}
-                      onSearchChange={setSpaceSearch}
-                      searchPlaceholder={t("notes.spaces.searchSpaces")}
-                    >
-                      {filteredSpaces.map((space) => {
-                        const isCurrent = space.id === folder.space_id;
-                        return (
-                          <DropdownMenuItem
-                            key={space.id}
-                            disabled={isCurrent}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              onMoveToSpace(space);
-                            }}
-                            className={MENU_ITEM_CLASS}
-                          >
-                            <SpaceMenuIcon space={space} />
-                            <span dir="auto" className="truncate flex-1">
-                              {spaceDisplayName(space, t)}
-                            </span>
-                            {isCurrent && <Check size={9} className="text-primary shrink-0" />}
-                          </DropdownMenuItem>
-                        );
-                      })}
-                      {spaceSearch && filteredSpaces.length === 0 && (
-                        <p className="text-xs text-foreground/50 text-center py-1.5">
-                          {t("notes.spaces.noSpacesFound")}
-                        </p>
-                      )}
-                    </SearchableMoveSubmenu>
-                  )}
-                  {canManageDestructive && (
-                    <>
-                      <DropdownMenuSeparator />
-                      <DropdownMenuItem
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onDelete();
-                        }}
-                        className={cn(
-                          MENU_ITEM_CLASS,
-                          "text-destructive focus:text-destructive focus:bg-destructive/10"
-                        )}
-                      >
-                        <Trash2 size={11} />
-                        {t("notes.context.delete")}
-                      </DropdownMenuItem>
-                    </>
-                  )}
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onDelete();
+                    }}
+                    className={cn(
+                      MENU_ITEM_CLASS,
+                      "text-destructive focus:text-destructive focus:bg-destructive/10"
+                    )}
+                  >
+                    <Trash2 size={11} />
+                    {t("notes.context.delete")}
+                  </DropdownMenuItem>
                 </>
               )}
             </DropdownMenuContent>
@@ -766,7 +516,6 @@ function FolderRow({
 interface MoveOption {
   key: string;
   label: string;
-  space: SpaceItem;
   target: NoteMoveTarget;
   isCurrent: boolean;
 }
@@ -778,12 +527,9 @@ function NoteLeaf({
   isActive,
   isDragging,
   dragHandlers,
-  spaces,
   folders,
   noteFilesEnabled,
   fileManagerName,
-  canDelete,
-  canMove,
   onOpen,
   onMove,
   onCreateFolderAndMove,
@@ -801,12 +547,9 @@ function NoteLeaf({
     onDragStart: (e: React.DragEvent) => void;
     onDragEnd: () => void;
   };
-  spaces: SpaceItem[];
   folders: FolderItem[];
   noteFilesEnabled: boolean;
   fileManagerName: string;
-  canDelete: boolean;
-  canMove: boolean;
   onOpen: () => void;
   onMove: (target: NoteMoveTarget) => void;
   onCreateFolderAndMove: (noteId: number, folderName: string) => void;
@@ -818,42 +561,24 @@ function NoteLeaf({
   const [newFolderName, setNewFolderName] = useState("");
   const [isCreating, setIsCreating] = useState(false);
 
-  const multiSpace = spaces.length > 1;
-
-  const moveOptions = useMemo<MoveOption[]>(() => {
-    const options: MoveOption[] = [];
-    for (const space of spaces) {
-      if (space.kind === "team") {
-        options.push({
-          key: spaceContainerKey(space.id),
-          label: spaceDisplayName(space, t),
-          space,
-          target: { spaceId: space.id, folderId: null },
-          isCurrent: note.folder_id == null && note.space_id === space.id,
-        });
-      }
-      for (const folder of folders.filter((f) => f.space_id === space.id)) {
-        options.push({
+  const moveOptions = useMemo<MoveOption[]>(
+    () =>
+      folders
+        .filter((folder) => folder.space_id === note.space_id)
+        .map((folder) => ({
           key: folderContainerKey(folder.id),
           label: defaultFolderDisplayName(folder, t),
-          space,
-          target: { spaceId: space.id, folderId: folder.id },
+          target: { spaceId: folder.space_id, folderId: folder.id },
           isCurrent: note.folder_id === folder.id,
-        });
-      }
-    }
-    return options;
-  }, [spaces, folders, note.folder_id, note.space_id, t]);
+        })),
+    [folders, note.folder_id, note.space_id, t]
+  );
 
   const filteredOptions = useMemo(() => {
     if (!moveSearch) return moveOptions;
     const query = moveSearch.toLowerCase();
-    return moveOptions.filter(
-      (option) =>
-        option.label.toLowerCase().includes(query) ||
-        spaceDisplayName(option.space, t).toLowerCase().includes(query)
-    );
-  }, [moveOptions, moveSearch, t]);
+    return moveOptions.filter((option) => option.label.toLowerCase().includes(query));
+  }, [moveOptions, moveSearch]);
 
   const renderOption = (option: MoveOption, label: string) => (
     <DropdownMenuItem
@@ -873,7 +598,6 @@ function NoteLeaf({
   );
 
   const title = note.title || t("notes.list.untitled");
-  const hasActions = noteFilesEnabled || canMove || canDelete;
 
   return (
     <div
@@ -886,8 +610,8 @@ function NoteLeaf({
       onFocus={a11y.onFocus}
       onClick={onOpen}
       title={title}
-      {...(canMove ? dragHandlers : {})}
-      style={hasActions ? treeRowActionClearanceStyle(1) : undefined}
+      {...dragHandlers}
+      style={treeRowActionClearanceStyle(1)}
       className={cn(
         ROW_BASE_CLASS,
         "h-7 pe-2",
@@ -918,186 +642,110 @@ function NoteLeaf({
       >
         {title}
       </span>
-      {Boolean(note.is_shared) && (
-        <Share2
-          size={11}
-          role="img"
-          aria-label={t("notes.list.shared")}
-          className="text-foreground/45 shrink-0 transition-opacity group-hover:opacity-0"
-        />
-      )}
-      {hasActions && (
-        <DropdownMenu
-          onOpenChange={(open) => {
-            if (!open) {
-              setMoveSearch("");
-              setIsCreating(false);
-              setNewFolderName("");
-            }
-          }}
-        >
-          <DropdownMenuTrigger asChild>
-            <Button
-              variant="ghost"
-              size="icon"
-              aria-label={t("common.actions")}
-              onClick={(e) => e.stopPropagation()}
-              className={KEBAB_TRIGGER_CLASS}
-            >
-              <MoreHorizontal size={12} />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" sideOffset={4} className="min-w-40">
-            {noteFilesEnabled && (
-              <>
-                <DropdownMenuItem
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    window.electronAPI?.showNoteFile?.(note.id);
-                  }}
-                  className={MENU_ITEM_CLASS}
-                >
-                  <ExternalLink size={11} className="text-muted-foreground/70" />
-                  {t("notes.context.showInFileManager", { manager: fileManagerName })}
-                </DropdownMenuItem>
-                {(canMove || canDelete) && <DropdownMenuSeparator />}
-              </>
-            )}
-            {canMove && (
-              <SearchableMoveSubmenu
-                icon={<FolderOpen size={11} className="text-muted-foreground/70" />}
-                label={multiSpace ? t("notes.spaces.moveTo") : t("notes.context.moveToFolder")}
-                itemCount={moveOptions.length}
-                search={moveSearch}
-                onSearchChange={setMoveSearch}
-                searchPlaceholder={t("notes.context.searchFolders")}
-                footer={
-                  isCreating ? (
-                    <div className="px-1">
-                      <input
-                        dir="auto"
-                        autoFocus
-                        value={newFolderName}
-                        onChange={(e) => setNewFolderName(e.target.value)}
-                        onKeyDown={(e) => {
-                          e.stopPropagation();
-                          if (e.key === "Enter" && newFolderName.trim()) {
-                            onCreateFolderAndMove(note.id, newFolderName.trim());
-                            setNewFolderName("");
-                            setIsCreating(false);
-                          }
-                          if (e.key === "Escape") {
-                            setIsCreating(false);
-                            setNewFolderName("");
-                          }
-                        }}
-                        placeholder={t("notes.folders.folderName")}
-                        className="input-inline w-full px-2 py-1.5 rounded-md bg-transparent text-xs text-foreground placeholder:text-foreground/45 outline-none border-none appearance-none"
-                      />
-                    </div>
-                  ) : (
-                    <DropdownMenuItem
-                      onSelect={(e) => {
-                        e.preventDefault();
-                        setIsCreating(true);
-                      }}
-                      className={cn(MENU_ITEM_CLASS, "text-foreground/70")}
-                    >
-                      <Plus size={10} />
-                      {t("notes.context.newFolder")}
-                    </DropdownMenuItem>
-                  )
-                }
+      <DropdownMenu
+        onOpenChange={(open) => {
+          if (!open) {
+            setMoveSearch("");
+            setIsCreating(false);
+            setNewFolderName("");
+          }
+        }}
+      >
+        <DropdownMenuTrigger asChild>
+          <Button
+            variant="ghost"
+            size="icon"
+            aria-label={t("common.actions")}
+            onClick={(e) => e.stopPropagation()}
+            className={KEBAB_TRIGGER_CLASS}
+          >
+            <MoreHorizontal size={12} />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" sideOffset={4} className="min-w-40">
+          {noteFilesEnabled && (
+            <>
+              <DropdownMenuItem
+                onClick={(e) => {
+                  e.stopPropagation();
+                  window.electronAPI?.showNoteFile?.(note.id);
+                }}
+                className={MENU_ITEM_CLASS}
               >
-                {moveSearch ? (
-                  <>
-                    {filteredOptions.map((option) =>
-                      renderOption(
-                        option,
-                        multiSpace && option.target.folderId != null
-                          ? `${spaceDisplayName(option.space, t)} / ${option.label}`
-                          : option.label
-                      )
-                    )}
-                    {filteredOptions.length === 0 && (
-                      <p className="text-xs text-foreground/50 text-center py-1.5">
-                        {t("notes.context.noResults")}
-                      </p>
-                    )}
-                  </>
-                ) : multiSpace ? (
-                  spaces.map((space) => {
-                    const spaceOptions = moveOptions.filter(
-                      (option) => option.space.id === space.id
-                    );
-                    if (spaceOptions.length === 0) return null;
-                    return (
-                      <DropdownMenuSub key={space.id}>
-                        <DropdownMenuSubTrigger className={SUB_TRIGGER_CLASS}>
-                          <SpaceMenuIcon space={space} />
-                          <span dir="auto" className="truncate flex-1">
-                            {spaceDisplayName(space, t)}
-                          </span>
-                        </DropdownMenuSubTrigger>
-                        <DropdownMenuSubContent
-                          sideOffset={4}
-                          className={cn(SUB_CONTENT_CLASS, "max-h-40 overflow-y-auto")}
-                        >
-                          {spaceOptions.map((option) =>
-                            renderOption(
-                              option,
-                              option.target.folderId == null
-                                ? t("notes.spaces.spaceRoot")
-                                : option.label
-                            )
-                          )}
-                        </DropdownMenuSubContent>
-                      </DropdownMenuSub>
-                    );
-                  })
-                ) : (
-                  moveOptions.map((option) => renderOption(option, option.label))
-                )}
-              </SearchableMoveSubmenu>
-            )}
-            {canDelete && (
-              <>
-                {canMove && <DropdownMenuSeparator />}
+                <ExternalLink size={11} className="text-muted-foreground/70" />
+                {t("notes.context.showInFileManager", { manager: fileManagerName })}
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+            </>
+          )}
+          <SearchableMoveSubmenu
+            icon={<FolderOpen size={11} className="text-muted-foreground/70" />}
+            label={t("notes.context.moveToFolder")}
+            itemCount={moveOptions.length}
+            search={moveSearch}
+            onSearchChange={setMoveSearch}
+            searchPlaceholder={t("notes.context.searchFolders")}
+            footer={
+              isCreating ? (
+                <div className="px-1">
+                  <input
+                    dir="auto"
+                    autoFocus
+                    value={newFolderName}
+                    onChange={(e) => setNewFolderName(e.target.value)}
+                    onKeyDown={(e) => {
+                      e.stopPropagation();
+                      if (e.key === "Enter" && newFolderName.trim()) {
+                        onCreateFolderAndMove(note.id, newFolderName.trim());
+                        setNewFolderName("");
+                        setIsCreating(false);
+                      }
+                      if (e.key === "Escape") {
+                        setIsCreating(false);
+                        setNewFolderName("");
+                      }
+                    }}
+                    placeholder={t("notes.folders.folderName")}
+                    className="input-inline w-full px-2 py-1.5 rounded-md bg-transparent text-xs text-foreground placeholder:text-foreground/45 outline-none border-none appearance-none"
+                  />
+                </div>
+              ) : (
                 <DropdownMenuItem
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onDelete(note.id);
+                  onSelect={(e) => {
+                    e.preventDefault();
+                    setIsCreating(true);
                   }}
-                  className={cn(
-                    MENU_ITEM_CLASS,
-                    "text-destructive focus:text-destructive focus:bg-destructive/10"
-                  )}
+                  className={cn(MENU_ITEM_CLASS, "text-foreground/70")}
                 >
-                  <Trash2 size={11} />
-                  {t("notes.context.delete")}
+                  <Plus size={10} />
+                  {t("notes.context.newFolder")}
                 </DropdownMenuItem>
-              </>
+              )
+            }
+          >
+            {filteredOptions.map((option) => renderOption(option, option.label))}
+            {moveSearch && filteredOptions.length === 0 && (
+              <p className="text-xs text-foreground/50 text-center py-1.5">
+                {t("notes.context.noResults")}
+              </p>
             )}
-          </DropdownMenuContent>
-        </DropdownMenu>
-      )}
-    </div>
-  );
-}
-
-function SkeletonRows() {
-  return (
-    <div className="space-y-px" aria-hidden="true">
-      {["w-3/5", "w-2/5", "w-1/2"].map((width) => (
-        <div key={width} className="flex items-center h-7 ps-[18px] pe-2">
-          <div
+          </SearchableMoveSubmenu>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem
+            onClick={(e) => {
+              e.stopPropagation();
+              onDelete(note.id);
+            }}
             className={cn(
-              "h-2.5 rounded-full bg-foreground/6 dark:bg-white/6 animate-pulse",
-              width
+              MENU_ITEM_CLASS,
+              "text-destructive focus:text-destructive focus:bg-destructive/10"
             )}
-          />
-        </div>
-      ))}
+          >
+            <Trash2 size={11} />
+            {t("notes.context.delete")}
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
     </div>
   );
 }
@@ -1107,7 +755,6 @@ export default function SpacesTree({
   onMoveNote,
   onCreateFolderAndMove,
   onNewNote,
-  onShowStructureIntro,
 }: SpacesTreeProps) {
   const { t, i18n } = useTranslation();
   const { toast, dismiss } = useToast();
@@ -1116,28 +763,17 @@ export default function SpacesTree({
   const spaces = useSpaces();
   const folders = useFolders();
   const folderCounts = useFolderCounts();
-  const spaceRootCounts = useSpaceRootCounts();
   const notesByContainer = useNotesByContainer();
   const expanded = useExpandedContainers();
   const activeContext = useActiveContext();
   const activeNoteId = useActiveNoteId();
   const isTreeLoading = useIsTreeLoading();
-  const { isSignedIn, user } = useAuth();
-  const teamCapability = useTeamSpacesCapability(isSignedIn);
-  const canCreateTeamSpace = useCanCreateTeamSpace();
-  const { workspaces, loaded: workspacesLoaded } = useWorkspace();
   const noteFilesEnabled = useSettingsStore((s) => s.noteFilesEnabled);
-  const shareByCloudId = useShareCache();
 
   const [creatingFolderSpaceId, setCreatingFolderSpaceId] = useState<number | null>(null);
   const [newFolderName, setNewFolderName] = useState("");
   const [renamingFolderId, setRenamingFolderId] = useState<number | null>(null);
   const [renameValue, setRenameValue] = useState("");
-  const [settingsSpaceId, setSettingsSpaceId] = useState<number | null>(null);
-  const [settingsOpen, setSettingsOpen] = useState(false);
-  const [showCreateSpace, setShowCreateSpace] = useState(false);
-  const [createSpaceWorkspaceId, setCreateSpaceWorkspaceId] = useState<string | null>(null);
-  const [deleteSpaceTarget, setDeleteSpaceTarget] = useState<SpaceItem | null>(null);
   const [focusedKey, setFocusedKey] = useState<string | null>(null);
   const rowRefs = useRef(new Map<string, HTMLDivElement>());
   const privateSectionToggleRef = useRef<HTMLButtonElement>(null);
@@ -1145,115 +781,17 @@ export default function SpacesTree({
 
   const { confirmDialog, showConfirmDialog, hideConfirmDialog } = useDialogs();
 
-  const privateSpaces = useMemo(() => spaces.filter((s) => s.kind === "private"), [spaces]);
-  const privateSpace = privateSpaces[0];
+  const privateSpace = useMemo(() => spaces.find((s) => s.kind === "private"), [spaces]);
   const privateSectionExpanded = privateSpace
     ? expanded.has(spaceContainerKey(privateSpace.id))
     : false;
-  const teamSpaces = useMemo(() => spaces.filter((s) => s.kind === "team"), [spaces]);
-  const showWorkspaceGroups = workspaces.length > 1;
-  const {
-    groups: teamSpaceGroups,
-    ungrouped: ungroupedTeamSpaces,
-    ordered: groupedTeamSpaces,
-  } = useMemo(() => groupTeamSpacesByWorkspace(workspaces, teamSpaces), [teamSpaces, workspaces]);
-  const orderedTeamSpaces = showWorkspaceGroups ? groupedTeamSpaces : teamSpaces;
-  const visibleSpaces = teamCapability ? spaces : privateSpaces;
-  const spacesById = useMemo(() => new Map(spaces.map((space) => [space.id, space])), [spaces]);
-  // Valid move destinations per source space (the source itself stays listed —
-  // menus render it as the disabled "current" row).
-  const moveTargetsBySpace = useMemo(() => {
-    const targets = new Map<number, SpaceItem[]>();
-    for (const source of spaces) {
-      targets.set(
-        source.id,
-        visibleSpaces.filter(
-          (target) => target.id === source.id || canMoveBetweenSpaces(source, target)
-        )
-      );
-    }
-    return targets;
-  }, [spaces, visibleSpaces]);
-
-  // Until the workspace fetch settles, grouping is unknown — showing spaces
-  // flat and regrouping on arrival reads as a glitch, so skeleton instead.
-  // Signed-out users never load workspaces (mirrored team spaces render flat);
-  // errors still flip `loaded`, so this can't skeleton forever.
-  const workspacesPending = isSignedIn && !workspacesLoaded;
-
-  const currentUserId = user?.id ?? null;
-  const workspaceRoleFor = (space: SpaceItem | undefined): WorkspaceRole | null =>
-    workspaces.find((w) => w.id === space?.workspace_id)?.role ?? null;
-
-  // Local-only spaces (no cloud id) stay fully manageable; cloud spaces
-  // follow space/workspace roles. Cosmetic — the server enforces.
-  const canManageTeamSpace = (space: SpaceItem): boolean =>
-    !space.cloud_space_id || canManageSpace(space, workspaceRoleFor(space));
-
-  // Note-level ACL for cloud-backed personal notes shared with this user.
-  // Without a cache entry (note never opened this session, offline) the
-  // owner fallback keeps today's behavior; once the ACL loads, editors and
-  // viewers lose owner-only actions. Team notes follow space roles instead.
-  const sharedNoteScope = (note: NoteItem) => ({
-    isTeamNote: spacesById.get(note.space_id)?.kind === "team",
-    hasCloudCopy: !!note.cloud_id,
-  });
-  const sharedNotePermission = (note: NoteItem) => {
-    const entry = note.cloud_id ? shareByCloudId.get(note.cloud_id) : null;
-    return resolveNotePermission({
-      cachedPermission: entry?.access?.my_permission,
-      aclState: entry ? "loaded" : "unavailable",
-      isTeamNote: sharedNoteScope(note).isTeamNote,
-    });
-  };
-
-  // Destructive/scope-changing note and folder actions mirror the server's
-  // rules (spacePermissions + per-note ACLs). Menus, keyboard, drag/drop,
-  // and undo all route through these so no path bypasses them; the server
-  // enforces regardless.
-  const canDeleteNote = (note: NoteItem): boolean => {
-    if (sharedNoteBlocksDelete(sharedNotePermission(note), sharedNoteScope(note))) return false;
-    const space = spacesById.get(note.space_id);
-    return canDeleteSpaceNote(note, space, currentUserId, workspaceRoleFor(space));
-  };
-  const canChangeNoteScope = (note: NoteItem): boolean => {
-    const space = spacesById.get(note.space_id);
-    return canChangeSpaceNoteScope(note, space, currentUserId, workspaceRoleFor(space));
-  };
-  // Any local re-filing (same-space folder moves included): owner-only on
-  // shared personal notes — a denied folder_id PATCH would fork an
-  // unexpected Personal copy.
-  const canMoveNote = (note: NoteItem): boolean =>
-    canOrganizeSharedNote(sharedNotePermission(note), sharedNoteScope(note));
-  const canManageFolderDestructive = (folder: FolderItem): boolean => {
-    const space = spacesById.get(folder.space_id);
-    return canMoveOrDeleteSpaceFolder(space, workspaceRoleFor(space));
-  };
-
-  // Cross-space targets require scope-change permission; same-space folder
-  // targets stay available to every member.
-  const noteMoveTargets = (note: NoteItem): SpaceItem[] => {
-    const targets = moveTargetsBySpace.get(note.space_id) ?? [];
-    return canChangeNoteScope(note) ? targets : targets.filter((s) => s.id === note.space_id);
-  };
-
-  const requestDeleteNote = (note: NoteItem): void => {
-    if (!canDeleteNote(note)) return;
-    onDeleteNote(note.id);
-  };
-
-  const openCreateSpace = (workspaceId: string | null = null): void => {
-    setCreateSpaceWorkspaceId(workspaceId);
-    setShowCreateSpace(true);
-  };
 
   const targetLabel = (target: NoteMoveTarget): string => {
     if (target.folderId != null) {
       const folder = folders.find((f) => f.id === target.folderId);
       return folder ? defaultFolderDisplayName(folder, t) : "";
     }
-    const space = spaces.find((s) => s.id === target.spaceId);
-    return space ? spaceDisplayName(space, t) : "";
+    return t("notes.spaces.personal");
   };
 
   const showUndoToast = (title: string, target: string, onUndo: () => void): void => {
@@ -1278,26 +816,6 @@ export default function SpacesTree({
     });
   };
 
-  // Every permitted cross-space move enters a team space (private→team or
-  // team→team): moving OUT of a team space is policy-blocked in
-  // canMoveBetweenSpaces, and there is only one private space.
-  const confirmCrossSpaceMove = (
-    toSpaceId: number,
-    isFolder: boolean,
-    onConfirm: () => void
-  ): void => {
-    const intoSpace = spaces.find((s) => s.id === toSpaceId);
-    if (!intoSpace) return;
-    showConfirmDialog({
-      title: t("notes.spaces.confirmMoveInTitle", { space: intoSpace.name }),
-      description: t(isFolder ? "notes.spaces.confirmMoveInFolder" : "notes.spaces.confirmMoveIn", {
-        space: intoSpace.name,
-      }),
-      confirmText: t("notes.spaces.moveConfirm"),
-      onConfirm,
-    });
-  };
-
   const moveNoteSafely = async (noteId: number, target: NoteMoveTarget): Promise<boolean> => {
     try {
       await onMoveNote(noteId, target);
@@ -1312,43 +830,25 @@ export default function SpacesTree({
     }
   };
 
-  // The 8s undo window outlives the tree snapshot: the restore target may
-  // have been deleted (folder) or purged (space) meanwhile. Never restore a
-  // note into a container nothing renders — degrade to the space root.
+  // The 8s undo window outlives the tree snapshot: the previous folder may
+  // have been deleted meanwhile. Never restore a note into a container nothing
+  // renders — degrade to the space root.
   const undoMoveNote = async (
     noteId: number,
     title: string,
     prev: NoteMoveTarget
   ): Promise<void> => {
-    const prevSpace = getSpacesValue().find((s) => s.id === prev.spaceId);
-    if (!prevSpace) {
-      toast({ title: t("notes.spaces.couldNotMoveNote"), variant: "destructive" });
-      return;
-    }
-    // Undo restores across spaces outside the normal one-way policy, but it
-    // must not bypass move/scope permissions after a role or ACL change.
-    const current = getNoteFromStore(noteId);
-    if (
-      current &&
-      (!canMoveNote(current) || (current.space_id !== prev.spaceId && !canChangeNoteScope(current)))
-    ) {
-      toast({ title: t("notes.spaces.couldNotMoveNote"), variant: "destructive" });
-      return;
-    }
     const folderGone =
       prev.folderId != null && !getFoldersValue().some((f) => f.id === prev.folderId);
     const restore = folderGone ? { spaceId: prev.spaceId, folderId: null } : prev;
     const moved = await moveNoteSafely(noteId, restore);
     if (moved && folderGone) {
-      toast({ title: t("notes.spaces.moved", { title, target: spaceDisplayName(prevSpace, t) }) });
+      toast({ title: t("notes.spaces.moved", { title, target: t("notes.spaces.personal") }) });
     }
   };
 
   const commitMoveNote = async (noteId: number, target: NoteMoveTarget): Promise<void> => {
     const note = getNoteFromStore(noteId);
-    // Defense in depth behind the menu/drag gating: shared personal notes
-    // are re-filed by their owner only.
-    if (note && !canMoveNote(note)) return;
     const prev: NoteMoveTarget | null = note
       ? { spaceId: note.space_id, folderId: note.folder_id }
       : null;
@@ -1360,143 +860,33 @@ export default function SpacesTree({
     }
   };
 
-  const allowsCrossSpaceMove = (fromSpaceId: number, toSpaceId: number): boolean => {
-    const from = spacesById.get(fromSpaceId);
-    const to = spacesById.get(toSpaceId);
-    return !!from && !!to && canMoveBetweenSpaces(from, to);
-  };
-
-  const requestMoveNote = (noteId: number, target: NoteMoveTarget): void => {
-    const note = getNoteFromStore(noteId);
-    if (!note || !canMoveNote(note)) return;
-    if (note.space_id !== target.spaceId) {
-      if (!allowsCrossSpaceMove(note.space_id, target.spaceId)) return;
-      if (!canChangeNoteScope(note)) return;
-      confirmCrossSpaceMove(target.spaceId, false, () => void commitMoveNote(noteId, target));
-    } else {
-      void commitMoveNote(noteId, target);
-    }
-  };
-
-  const moveFolderSafely = async (
-    folderId: number,
-    spaceId: number
-  ): Promise<{ success: boolean; error?: string }> => {
-    const result = await moveFolderToSpace(folderId, spaceId).catch((err: unknown) => ({
-      success: false,
-      error: (err as Error).message,
-    }));
-    if (!result.success) {
-      toast({
-        title: t("notes.spaces.couldNotMove"),
-        description: t(localMutationErrorKey(result.error)),
-        variant: "destructive",
-      });
-    }
-    return result;
-  };
-
-  const commitMoveFolder = async (folder: FolderItem, space: SpaceItem): Promise<void> => {
-    const prevSpaceId = folder.space_id;
-    const result = await moveFolderSafely(folder.id, space.id);
-    if (!result.success) return;
-    revealContainer(space.id, null);
-    showUndoToast(folder.name, spaceDisplayName(space, t), () => {
-      // Undo is a folder move like any other: after a role change it must
-      // not bypass the destructive-folder-action rules in the new space.
-      const current = getFoldersValue().find((f) => f.id === folder.id);
-      if (!current || !canManageFolderDestructive(current)) {
-        toast({ title: t("notes.spaces.couldNotMove"), variant: "destructive" });
-        return;
-      }
-      void moveFolderSafely(folder.id, prevSpaceId);
-    });
-  };
-
-  const requestMoveFolder = (folder: FolderItem, space: SpaceItem): void => {
-    if (space.id === folder.space_id) return;
-    if (!allowsCrossSpaceMove(folder.space_id, space.id)) return;
-    if (!canManageFolderDestructive(folder)) return;
-    confirmCrossSpaceMove(space.id, true, () => void commitMoveFolder(folder, space));
-  };
-
   const { dragState, noteDragHandlers, dropTargetHandlers } = useNoteDragAndDrop({
     untitledLabel: t("notes.list.untitled"),
     onMoveToTarget: commitMoveNote,
-    onCrossSpaceDrop: (_note, target, commit) => {
-      confirmCrossSpaceMove(target.spaceId, false, commit);
-    },
-    canCrossSpaceDrop: (note, target) => {
-      if (!allowsCrossSpaceMove(note.spaceId, target.spaceId)) return false;
-      const stored = getNoteFromStore(note.id);
-      return !!stored && canMoveNote(stored) && canChangeNoteScope(stored);
-    },
-    onCrossSpaceVeto: (note) => {
-      const stored = getNoteFromStore(note.id);
-      const scopeDenied = !!stored && !canChangeNoteScope(stored);
-      toast({
-        title: t(scopeDenied ? "notes.spaces.cantMoveTeammate" : "notes.spaces.cantMoveOut"),
-        duration: 4000,
-      });
-    },
     onHoverTarget: (key) => setContainerExpanded(key, true),
   });
 
   const visibleRows = useMemo<TreeRow[]>(() => {
     const rows: TreeRow[] = [];
-    const pushPrivateSpace = (space: SpaceItem) => {
-      const spaceKey = spaceContainerKey(space.id);
-      if (!expanded.has(spaceKey)) return;
-      folders
-        .filter((f) => f.space_id === space.id)
-        .forEach((folder) => {
-          const folderKey = folderContainerKey(folder.id);
-          rows.push({ type: "folder", key: folderKey, folder, level: 1 });
-          if (expanded.has(folderKey)) {
-            (notesByContainer[folderKey] ?? []).forEach((note) => {
-              rows.push({
-                type: "note",
-                key: `n:${note.id}`,
-                note,
-                parentKey: folderKey,
-                level: 2,
-              });
-            });
-          }
-        });
-      (notesByContainer[spaceKey] ?? []).forEach((note) => {
-        rows.push({ type: "note", key: `n:${note.id}`, note, level: 1 });
+    if (!privateSpace) return rows;
+    const spaceKey = spaceContainerKey(privateSpace.id);
+    if (!expanded.has(spaceKey)) return rows;
+    folders
+      .filter((f) => f.space_id === privateSpace.id)
+      .forEach((folder) => {
+        const folderKey = folderContainerKey(folder.id);
+        rows.push({ type: "folder", key: folderKey, folder, level: 1 });
+        if (expanded.has(folderKey)) {
+          (notesByContainer[folderKey] ?? []).forEach((note) => {
+            rows.push({ type: "note", key: `n:${note.id}`, note, parentKey: folderKey, level: 2 });
+          });
+        }
       });
-    };
-    const pushSpace = (space: SpaceItem) => {
-      const spaceKey = spaceContainerKey(space.id);
-      rows.push({ type: "space", key: spaceKey, space });
-      if (!expanded.has(spaceKey)) return;
-      folders
-        .filter((f) => f.space_id === space.id)
-        .forEach((folder) => {
-          const folderKey = folderContainerKey(folder.id);
-          rows.push({ type: "folder", key: folderKey, folder, parentKey: spaceKey, level: 2 });
-          if (expanded.has(folderKey)) {
-            (notesByContainer[folderKey] ?? []).forEach((note) => {
-              rows.push({
-                type: "note",
-                key: `n:${note.id}`,
-                note,
-                parentKey: folderKey,
-                level: 3,
-              });
-            });
-          }
-        });
-      (notesByContainer[spaceKey] ?? []).forEach((note) => {
-        rows.push({ type: "note", key: `n:${note.id}`, note, parentKey: spaceKey, level: 2 });
-      });
-    };
-    privateSpaces.forEach(pushPrivateSpace);
-    if (teamCapability) orderedTeamSpaces.forEach(pushSpace);
+    (notesByContainer[spaceKey] ?? []).forEach((note) => {
+      rows.push({ type: "note", key: `n:${note.id}`, note, level: 1 });
+    });
     return rows;
-  }, [privateSpaces, orderedTeamSpaces, folders, notesByContainer, expanded, teamCapability]);
+  }, [privateSpace, folders, notesByContainer, expanded]);
 
   const effectiveFocusKey =
     focusedKey && visibleRows.some((r) => r.key === focusedKey)
@@ -1516,12 +906,7 @@ export default function SpacesTree({
   };
 
   const activateRow = (row: TreeRow) => {
-    if (row.type === "space") {
-      // Deselect the note so the main pane shows the container overview.
-      setActiveNoteId(null);
-      setActiveContext(row.space.id, null);
-      toggleContainerExpanded(row.key);
-    } else if (row.type === "folder") {
+    if (row.type === "folder") {
       setActiveNoteId(null);
       setActiveContext(row.folder.space_id, row.folder.id);
       toggleContainerExpanded(row.key);
@@ -1535,13 +920,7 @@ export default function SpacesTree({
     setRenameValue(folder.name);
   };
 
-  const openSpaceSettings = (space: SpaceItem) => {
-    setSettingsSpaceId(space.id);
-    setSettingsOpen(true);
-  };
-
   const requestDeleteFolder = (folder: FolderItem) => {
-    if (!canManageFolderDestructive(folder)) return;
     const count = folderCounts[folder.id] ?? 0;
     showConfirmDialog({
       title: t("notes.folders.deleteTitle"),
@@ -1562,10 +941,6 @@ export default function SpacesTree({
         }
       },
     });
-  };
-
-  const requestDeleteSpace = (space: SpaceItem) => {
-    setDeleteSpaceTarget(space);
   };
 
   const handleRowKeyDown = (e: React.KeyboardEvent<HTMLDivElement>, row: TreeRow) => {
@@ -1609,12 +984,6 @@ export default function SpacesTree({
         e.preventDefault();
         if (row.type === "folder" && !row.folder.is_default) {
           startRenameFolder(row.folder);
-        } else if (
-          row.type === "space" &&
-          row.space.kind === "team" &&
-          canManageTeamSpace(row.space)
-        ) {
-          openSpaceSettings(row.space);
         }
         break;
       case "Delete":
@@ -1623,17 +992,10 @@ export default function SpacesTree({
         if (e.key === "Backspace" && !(e.metaKey || e.ctrlKey)) break;
         e.preventDefault();
         if (row.type === "note") {
-          if (!canDeleteNote(row.note)) break;
           focusRow(visibleRows[idx + 1]?.key ?? visibleRows[idx - 1]?.key);
-          requestDeleteNote(row.note);
+          onDeleteNote(row.note.id);
         } else if (row.type === "folder" && !row.folder.is_default) {
           requestDeleteFolder(row.folder);
-        } else if (
-          row.type === "space" &&
-          row.space.kind === "team" &&
-          canManageTeamSpace(row.space)
-        ) {
-          requestDeleteSpace(row.space);
         }
         break;
       case "Enter":
@@ -1719,16 +1081,13 @@ export default function SpacesTree({
         folderId: note.folder_id,
         spaceId: note.space_id,
       })}
-      spaces={noteMoveTargets(note)}
       folders={folders}
       noteFilesEnabled={noteFilesEnabled}
       fileManagerName={fileManagerName}
-      canDelete={canDeleteNote(note)}
-      canMove={canMoveNote(note)}
       onOpen={() => activateRow({ type: "note", key: `n:${note.id}`, note, parentKey, level })}
-      onMove={(target) => requestMoveNote(note.id, target)}
+      onMove={(target) => void commitMoveNote(note.id, target)}
       onCreateFolderAndMove={onCreateFolderAndMove}
-      onDelete={() => requestDeleteNote(note)}
+      onDelete={() => onDeleteNote(note.id)}
       a11y={a11yFor(`n:${note.id}`)}
       t={t}
     />
@@ -1771,7 +1130,6 @@ export default function SpacesTree({
         <FolderRow
           folder={folder}
           level={level}
-          spaces={moveTargetsBySpace.get(folder.space_id) ?? []}
           isExpanded={isExpanded}
           isActive={activeNoteId == null && activeContext?.folderId === folder.id}
           count={folderCounts[folder.id] ?? 0}
@@ -1785,14 +1143,12 @@ export default function SpacesTree({
           })}
           noteFilesEnabled={noteFilesEnabled}
           fileManagerName={fileManagerName}
-          canManageDestructive={canManageFolderDestructive(folder)}
           onActivate={() =>
             activateRow({ type: "folder", key: folderKey, folder, parentKey, level })
           }
           onToggle={() => toggleContainerExpanded(folderKey)}
           onNewNote={() => onNewNote(folder.space_id, folder.id)}
           onRename={() => startRenameFolder(folder)}
-          onMoveToSpace={(space) => requestMoveFolder(folder, space)}
           onDelete={() => requestDeleteFolder(folder)}
           a11y={a11yFor(folderKey)}
           t={t}
@@ -1808,110 +1164,39 @@ export default function SpacesTree({
     );
   };
 
-  const renderSpaceContents = (space: SpaceItem, flattened = false) => {
-    const spaceKey = spaceContainerKey(space.id);
-    const spaceFolders = folders.filter((f) => f.space_id === space.id);
-    const rootNotes = notesByContainer[spaceKey];
-    const showSkeletons =
-      space.kind === "team" &&
-      space.sync_status === "pending" &&
-      spaceFolders.length === 0 &&
-      rootNotes === undefined;
-    const showEmptySpace =
-      space.kind === "team" && spaceFolders.length === 0 && rootNotes?.length === 0;
-
-    return (
-      <div className="space-y-px">
-        {spaceFolders.map((folder) =>
-          flattened ? renderFolder(folder, undefined, 1) : renderFolder(folder, spaceKey)
-        )}
-        {creatingFolderSpaceId === space.id && (
-          <div className={cn(flattened ? "ps-2" : "ps-[14px]", "pe-2")}>
-            <input
-              dir="auto"
-              autoFocus
-              value={newFolderName}
-              onChange={(e) => setNewFolderName(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") {
-                  void confirmCreateFolder().then((key) => key && focusRowSoon(key));
-                }
-                if (e.key === "Escape") {
-                  setCreatingFolderSpaceId(null);
-                  setNewFolderName("");
-                  if (flattened) privateSectionToggleRef.current?.focus();
-                  else focusRowSoon(spaceKey);
-                }
-              }}
-              onBlur={confirmCreateFolder}
-              placeholder={t("notes.folders.folderName")}
-              className={cn(FOLDER_INPUT_CLASS, "placeholder:text-foreground/45")}
-            />
-          </div>
-        )}
-        {(rootNotes ?? []).map((note) =>
-          flattened ? renderNote(note, 1, undefined, "ps-[30px]") : renderNote(note, 2, spaceKey)
-        )}
-        {showSkeletons && <SkeletonRows />}
-        {showEmptySpace && (
-          <div className="ps-[18px] pe-2 py-1">
-            <p className="text-xs text-foreground/60 leading-relaxed mb-1.5">
-              {t("notes.spaces.emptySpace", { space: space.name })}
-            </p>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => onNewNote(space.id, null)}
-              className="h-6 px-2 text-xs gap-1 text-primary/70 hover:text-primary hover:bg-primary/8"
-            >
-              <Plus size={11} />
-              {t("notes.list.newNote")}
-            </Button>
-          </div>
-        )}
-      </div>
-    );
-  };
-
-  const renderSpace = (space: SpaceItem) => {
-    const spaceKey = spaceContainerKey(space.id);
-    const isExpanded = expanded.has(spaceKey);
-    const spaceFolders = folders.filter((f) => f.space_id === space.id);
-    const displayName = spaceDisplayName(space, t);
-    // DB-backed counts: space-root notes count before their container loads,
-    // and the root contribution isn't capped at the container's page size.
-    const noteCount =
-      spaceFolders.reduce((sum, f) => sum + (folderCounts[f.id] ?? 0), 0) +
-      (spaceRootCounts[space.id] ?? 0);
-    return (
-      <div key={space.id} role="none">
-        <SpaceRow
-          space={space}
-          displayName={displayName}
-          isExpanded={isExpanded}
-          isActive={
-            activeNoteId == null &&
-            activeContext?.spaceId === space.id &&
-            activeContext.folderId == null
-          }
-          count={noteCount}
-          isDragOver={dragState.dragOverKey === spaceKey}
-          isDropSuccess={dragState.dropSuccessKey === spaceKey}
-          dropHandlers={dropTargetHandlers({ spaceId: space.id, folderId: null })}
-          onActivate={() => activateRow({ type: "space", key: spaceKey, space })}
-          onToggle={() => toggleContainerExpanded(spaceKey)}
-          onNewFolder={() => startCreateFolder(space)}
-          onSettings={() => openSpaceSettings(space)}
-          a11y={a11yFor(spaceKey)}
-          t={t}
-        />
-        <TreeChildren open={isExpanded}>{renderSpaceContents(space)}</TreeChildren>
-      </div>
-    );
-  };
-
-  const settingsSpace =
-    settingsSpaceId != null ? spaces.find((s) => s.id === settingsSpaceId) : undefined;
+  const renderSpaceContents = (space: SpaceItem) => (
+    <div className="space-y-px">
+      {folders
+        .filter((f) => f.space_id === space.id)
+        .map((folder) => renderFolder(folder, undefined, 1))}
+      {creatingFolderSpaceId === space.id && (
+        <div className="ps-2 pe-2">
+          <input
+            dir="auto"
+            autoFocus
+            value={newFolderName}
+            onChange={(e) => setNewFolderName(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                void confirmCreateFolder().then((key) => key && focusRowSoon(key));
+              }
+              if (e.key === "Escape") {
+                setCreatingFolderSpaceId(null);
+                setNewFolderName("");
+                privateSectionToggleRef.current?.focus();
+              }
+            }}
+            onBlur={confirmCreateFolder}
+            placeholder={t("notes.folders.folderName")}
+            className={cn(FOLDER_INPUT_CLASS, "placeholder:text-foreground/45")}
+          />
+        </div>
+      )}
+      {(notesByContainer[spaceContainerKey(space.id)] ?? []).map((note) =>
+        renderNote(note, 1, undefined, "ps-[30px]")
+      )}
+    </div>
+  );
 
   if (isTreeLoading && spaces.length === 0) {
     return (
@@ -1964,144 +1249,12 @@ export default function SpacesTree({
           />
           {privateSpace && (
             <TreeChildren open={privateSectionExpanded} grouped={false}>
-              {/* The private space remains the storage/sync boundary but is flattened in the UI. */}
-              {renderSpaceContents(privateSpace, true)}
+              {/* The private space remains the storage boundary but is flattened in the UI. */}
+              {renderSpaceContents(privateSpace)}
             </TreeChildren>
           )}
         </div>
-        {teamCapability && (
-          <div role="none" className="group/section">
-            <SectionHeader
-              label={
-                showWorkspaceGroups
-                  ? t("workspaces.switcher.workspaces")
-                  : t("notes.spaces.teamSpaces")
-              }
-              className="mt-4"
-              action={
-                <div className="flex items-center gap-px">
-                  {onShowStructureIntro && (
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      aria-label={t("notes.structureIntro.reopen")}
-                      onClick={onShowStructureIntro}
-                      className={cn(HOVER_REVEAL_BUTTON_CLASS, "group-hover/section:opacity-100")}
-                    >
-                      <Info size={11} />
-                    </Button>
-                  )}
-                  {/* With one workspace the header + is unambiguous; with several,
-                      each workspace row carries its own + instead. */}
-                  {canCreateTeamSpace && !showWorkspaceGroups && (
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      aria-label={t("notes.spaces.newSpace")}
-                      onClick={() => openCreateSpace()}
-                      className={cn(HOVER_REVEAL_BUTTON_CLASS, "group-hover/section:opacity-100")}
-                    >
-                      <Plus size={12} />
-                    </Button>
-                  )}
-                </div>
-              }
-            />
-            {workspacesPending ? (
-              <SkeletonRows />
-            ) : (
-              <>
-                {showWorkspaceGroups
-                  ? teamSpaceGroups.map(({ workspace, spaces: workspaceSpaces }) => (
-                      <div
-                        key={workspace.id}
-                        role="group"
-                        aria-label={workspace.name}
-                        className="mt-1 group/workspace"
-                      >
-                        <div
-                          role="none"
-                          className="flex items-center justify-between h-5 ps-4 pe-2"
-                        >
-                          <span
-                            dir="auto"
-                            title={workspace.name}
-                            className="min-w-0 text-[10px] font-medium text-foreground/60 truncate"
-                          >
-                            {workspace.name}
-                          </span>
-                          {canManageWorkspace(workspace.role) && (
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              aria-label={t("notes.spaces.newSpaceInWorkspace", {
-                                workspace: workspace.name,
-                              })}
-                              onClick={() => openCreateSpace(workspace.id)}
-                              className={cn(
-                                HOVER_REVEAL_BUTTON_CLASS,
-                                "group-hover/workspace:opacity-100"
-                              )}
-                            >
-                              <Plus size={12} />
-                            </Button>
-                          )}
-                        </div>
-                        {workspaceSpaces.map(renderSpace)}
-                      </div>
-                    ))
-                  : teamSpaces.map(renderSpace)}
-                {showWorkspaceGroups && ungroupedTeamSpaces.map(renderSpace)}
-                {teamSpaces.length === 0 &&
-                  (canCreateTeamSpace ? (
-                    // Grouped view already offers a + on each manageable workspace row.
-                    !showWorkspaceGroups && (
-                      <div className="ps-[18px] pe-2 py-1">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => openCreateSpace()}
-                          className="h-6 px-2 text-xs gap-1 text-primary/70 hover:text-primary hover:bg-primary/8"
-                        >
-                          <Plus size={11} />
-                          {t("notes.spaces.newSpace")}
-                        </Button>
-                      </div>
-                    )
-                  ) : (
-                    <p className="ps-[18px] pe-2 py-1 text-xs text-foreground/60 leading-relaxed">
-                      {t("notes.spaces.emptyTeamHint")}
-                    </p>
-                  ))}
-              </>
-            )}
-          </div>
-        )}
       </div>
-
-      <CreateSpaceDialog
-        open={showCreateSpace}
-        onOpenChange={(open) => {
-          setShowCreateSpace(open);
-          if (!open) setCreateSpaceWorkspaceId(null);
-        }}
-        initialWorkspaceId={createSpaceWorkspaceId}
-      />
-
-      {settingsSpace && (
-        <SpaceSettingsDialog
-          space={settingsSpace}
-          open={settingsOpen}
-          onOpenChange={setSettingsOpen}
-          onCloseAutoFocus={(event) => {
-            // No trigger element to return to: the row the settings belong to is the natural target.
-            event.preventDefault();
-            focusRow(spaceContainerKey(settingsSpace.id));
-          }}
-        />
-      )}
-
-      <DeleteSpaceDialog space={deleteSpaceTarget} onClose={() => setDeleteSpaceTarget(null)} />
 
       <ConfirmDialog
         open={confirmDialog.open}

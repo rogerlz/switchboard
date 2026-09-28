@@ -1,10 +1,8 @@
 import React, { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { usePolicyStore } from "../stores/policyStore";
-import { Sliders, Mic, UserCircle, Wrench, CreditCard, Shield, ShieldCheck, Users } from "./icons";
+import { Sliders, Mic, Wrench, Shield } from "./icons";
 import SidebarModal, { type SidebarItem } from "./ui/SidebarModal";
-import SettingsPage, { AccountAvatar, SettingsSectionType } from "./SettingsPage";
-import { useAuth } from "../hooks/useAuth";
+import SettingsPage, { SettingsSectionType } from "./SettingsPage";
 
 export type { SettingsSectionType };
 
@@ -16,12 +14,7 @@ const SECTION_ALIASES: Record<string, SettingsSectionType> = {
   privacy: "privacyData",
   permissions: "privacyData",
   developer: "system",
-  // fork: hidden sections redirect, so deep links (upgrade CTAs) land somewhere real
-  account: "general",
-  plansBilling: "general",
-  workspace: "general",
 };
-const FORK_HIDDEN_SECTIONS = new Set<string>(["account", "plansBilling", "workspace"]);
 
 const LEGACY_SUB_TAB: Record<string, string> = {
   transcription: "dictation",
@@ -36,31 +29,8 @@ interface SettingsModalProps {
 
 export default function SettingsModal({ open, onOpenChange, initialSection }: SettingsModalProps) {
   const { t } = useTranslation();
-  const { isSignedIn, user } = useAuth();
-  const policyManaged = usePolicyStore((s) => s.managed);
   const sidebarItems: SidebarItem<SettingsSectionType>[] = useMemo(() => {
-    const items: SidebarItem<SettingsSectionType>[] = [
-      {
-        id: "account",
-        label: t("settingsModal.sections.account.label"),
-        icon: UserCircle,
-        description: t("settingsModal.sections.account.description"),
-        group: t("settingsModal.groups.account"),
-      },
-      {
-        id: "plansBilling",
-        label: t("settingsModal.sections.plansBilling.label"),
-        icon: CreditCard,
-        description: t("settingsModal.sections.plansBilling.description"),
-        group: t("settingsModal.groups.account"),
-      },
-      {
-        id: "workspace" as const,
-        label: t("settingsModal.sections.workspace.label"),
-        icon: Users,
-        description: t("settingsModal.sections.workspace.description"),
-        group: t("settingsModal.groups.account"),
-      },
+    return [
       {
         id: "general",
         label: t("settingsModal.sections.general.label"),
@@ -90,12 +60,10 @@ export default function SettingsModal({ open, onOpenChange, initialSection }: Se
         group: t("settingsModal.groups.system"),
       },
     ];
-    // fork: no Profile, Plans & Billing or Workspace sections
-    return items.filter((item) => !FORK_HIDDEN_SECTIONS.has(item.id));
-  }, [t, isSignedIn]);
+  }, [t]);
 
   const resolveSection = (section: string | undefined): SettingsSectionType => {
-    if (!section) return "general"; // fork
+    if (!section) return "general";
     return (SECTION_ALIASES[section] ?? section) as SettingsSectionType;
   };
 
@@ -129,29 +97,6 @@ export default function SettingsModal({ open, onOpenChange, initialSection }: Se
       sidebarItems={sidebarItems}
       activeSection={activeSection}
       onSectionChange={handleSectionChange}
-      header={
-        isSignedIn && user ? (
-          <div className="flex flex-col items-center gap-2 pb-2 text-center">
-            <AccountAvatar image={user.image} name={user.name || t("settingsPage.account.user")} />
-            <div className="min-w-0 w-full">
-              <p dir="auto" className="text-[13px] font-semibold text-foreground truncate">
-                {user.name || t("settingsPage.account.user")}
-              </p>
-              <p className="text-xs text-muted-foreground truncate">
-                <bdi dir="ltr">{user.email}</bdi>
-              </p>
-            </div>
-          </div>
-        ) : undefined
-      }
-      notice={
-        policyManaged ? (
-          <>
-            <ShieldCheck className="h-4 w-4 shrink-0" />
-            {t("settingsModal.managedByOrg")}
-          </>
-        ) : undefined
-      }
     >
       <SettingsPage
         activeSection={activeSection}

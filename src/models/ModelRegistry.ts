@@ -69,22 +69,6 @@ interface ModelRegistryData {
 
 const modelData: ModelRegistryData = modelDataRaw as ModelRegistryData;
 
-export type EnterpriseProvider = "bedrock" | "azure" | "vertex";
-export const ENTERPRISE_PROVIDERS: readonly EnterpriseProvider[] = ["bedrock", "azure", "vertex"];
-export function isEnterpriseProvider(value: unknown): value is EnterpriseProvider {
-  return typeof value === "string" && (ENTERPRISE_PROVIDERS as readonly string[]).includes(value);
-}
-
-const ENTERPRISE_PROVIDER_NAMES: Record<EnterpriseProvider, string> = {
-  bedrock: "AWS Bedrock",
-  azure: "Azure OpenAI",
-  vertex: "GCP Vertex AI",
-};
-
-export function enterpriseProviderName(provider: EnterpriseProvider): string {
-  return ENTERPRISE_PROVIDER_NAMES[provider] ?? provider;
-}
-
 export function getTranscriptionProviders(): TranscriptionProviderData[] {
   return modelData.transcriptionProviders;
 }

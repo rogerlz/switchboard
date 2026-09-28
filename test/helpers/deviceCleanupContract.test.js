@@ -20,7 +20,6 @@ test("explicit device cleanup covers models, credentials, caches, and browser se
     "deleteAllParakeetModels",
     "diarizationManager?.deleteModels",
     "environmentManager?.clearAllPersistedData",
-    "tokenStore.clear",
     "clearStorageData",
     "clearCache",
     "setAutoStartEnabled(false)",
@@ -31,9 +30,4 @@ test("explicit device cleanup covers models, credentials, caches, and browser se
   for (const cacheName of ["embedding-models", "qdrant-data", "qdrant-data-dev", "yt-dlp"]) {
     assert.ok(source.includes(`"${cacheName}"`), `device cleanup removes ${cacheName}`);
   }
-
-  assert.ok(
-    source.includes('"account-scope-binding.json"'),
-    "device cleanup removes the account scope binding"
-  );
 });

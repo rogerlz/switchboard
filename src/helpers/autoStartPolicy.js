@@ -46,14 +46,11 @@ function wasLaunchedHidden({ platform, argv, loginItemSettings }) {
 }
 
 // A relaunch must not replay how this process was launched: --hidden would put the
-// restarted app in the tray, and startup would handle a cold-start deep link again
-// (a sign-in link would restore the session a reset just cleared). An AppImage runs
-// from a FUSE mount that is gone once this process exits, so app.relaunch() cannot
-// bring it back: getRelaunchWaiter() starts the on-disk file from outside instead.
-function getRelaunchOptions({ argv, protocol, appImagePath }) {
-  const args = argv
-    .slice(1)
-    .filter((arg) => arg !== HIDDEN_LAUNCH_FLAG && !arg.startsWith(`${protocol}://`));
+// restarted app in the tray. An AppImage runs from a FUSE mount that is gone once
+// this process exits, so app.relaunch() cannot bring it back: getRelaunchWaiter()
+// starts the on-disk file from outside instead.
+function getRelaunchOptions({ argv, appImagePath }) {
+  const args = argv.slice(1).filter((arg) => arg !== HIDDEN_LAUNCH_FLAG);
   return appImagePath ? { launcherPath: appImagePath, args } : { args };
 }
 

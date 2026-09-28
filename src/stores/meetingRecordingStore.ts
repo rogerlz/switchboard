@@ -1,6 +1,5 @@
 import { create } from "zustand";
 import { getSettings, selectResolvedMeetingTranscription } from "./settingsStore";
-import { useStreamingProvidersStore } from "./streamingProvidersStore";
 import { getMeetingStreamingTranscriptionProviders } from "../models/ModelRegistry";
 import { resolveMeetingTranscriptionOptions } from "../helpers/meetingTranscriptionRouting";
 import { followsSystemDefaultMic } from "../helpers/micSelectionRecovery";
@@ -29,8 +28,6 @@ import {
   MAX_SPEAKER_COUNT,
 } from "../constants/speakerDetection.json";
 import logger from "../utils/logger";
-import { isTranscriptionContextAllowed } from "./policyRules";
-import { usePolicyStore } from "./policyStore";
 import {
   lockTranscriptSpeaker,
   mergeTranscriptSegments,
@@ -168,7 +165,6 @@ const getMeetingTranscriptionOptions = () => {
     selectedProvider: resolved.cloudTranscriptionProvider,
     selectedModel: resolved.cloudTranscriptionModel,
     byokProviders: getMeetingStreamingTranscriptionProviders(),
-    managedProviders: useStreamingProvidersStore.getState().providers,
     cortiEnvironment: state.cortiEnvironment,
     cortiTenant: state.cortiTenant,
   });
@@ -718,7 +714,6 @@ async function cleanup(): Promise<void> {
 
 export async function prepareTranscription(): Promise<void> {
   if (isPrepared || isRecordingFlag || isStartingFlag) return;
-  if (!isTranscriptionContextAllowed(usePolicyStore.getState(), getSettings(), "meeting")) return;
   if (preparePromise) return preparePromise;
 
   logger.info("Meeting transcription preparing (pre-warming WebSockets)...", {}, "meeting");
@@ -765,16 +760,10 @@ export interface StartRecordingArgs {
   autoEndEligible: boolean;
 }
 
-// Resolves false only when workspace policy refuses the recording; every other
-// outcome (including setup failures, which are reported through the store) is
-// "accepted" so callers don't roll back UI they didn't own.
+// Always resolves true: setup failures are reported through the store, so
+// callers never roll back UI they didn't own.
 export async function startRecording(args: StartRecordingArgs): Promise<boolean> {
   if (isRecordingFlag || isStartingFlag) return true;
-  if (!isTranscriptionContextAllowed(usePolicyStore.getState(), getSettings(), "meeting")) {
-    logger.warn("Meeting recording blocked by workspace policy", {}, "meeting");
-    reportMeetingError("policyRestricted");
-    return false;
-  }
 
   const sessionId = createMeetingRecordingSessionId();
   await meetingRecordingStartCoordinator.runStart(sessionId, async (startOperation) => {
@@ -1824,24 +1813,16 @@ if (typeof window !== "undefined") {
 }
 
 // Registered once at module load, like the diarization listener above: the
-// note can be deleted from the sidebar while the recording runs on. A team-note
-// delete the server denies revives the same row, and the snapshot pull that
-// follows re-syncs it live, so saves resume. A pull never clears deleted_at, so
-// one racing a real delete re-syncs the tombstone and the guard holds.
+// note can be deleted from the sidebar while the recording runs on.
 if (typeof window !== "undefined") {
   window.electronAPI?.onNoteDeleted?.(({ id }) => {
     if (isRecordingFlag && id === useMeetingRecordingStore.getState().recordingNoteId) {
       recordingNoteDeleted = true;
     }
   });
-  window.electronAPI?.onNoteSynced?.((note) => {
-    if (!note.deleted_at && note.id === useMeetingRecordingStore.getState().recordingNoteId) {
-      recordingNoteDeleted = false;
-    }
-  });
 }
 
-// A reload (Sign in, SSO completion, the crash screen's Reload) replaces this
+// A reload (e.g. the crash screen's Reload) replaces this
 // page mid-recording: main's owner-loss teardown ends the session, and this
 // module's state goes with the page before stopRecording can save what was said
 // since the last 30-second save. beforeunload runs first, for location.reload()

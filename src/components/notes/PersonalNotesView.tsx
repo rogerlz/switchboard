@@ -7,7 +7,6 @@ import SpacesTree from "./SpacesTree";
 import UpcomingMeetings from "../UpcomingMeetings";
 import { useUpcomingEvents } from "../../hooks/useUpcomingEvents";
 import { ContainerOverview } from "./overview/ContainerOverview";
-import NotesStructureIntroDialog from "./NotesStructureIntroDialog";
 import AddNotesToFolderDialog from "./AddNotesToFolderDialog";
 import type { NoteMoveTarget } from "../../hooks/useNoteDragAndDrop";
 import type { NoteItem } from "../../types/electron";
@@ -22,7 +21,6 @@ import {
   useActiveNoteId,
   useActiveFolderId,
   useActiveContext,
-  useIsTreeLoading,
   initializeNotes,
   initializeNotesTree,
   loadFolders,
@@ -43,13 +41,9 @@ import {
   setSessionExpectedCount,
 } from "../../stores/meetingRecordingStore";
 import { startRecordingForNote, useCreateNote } from "../../hooks/useCreateNote";
-import { useTeamSpacesCapability } from "../../hooks/useTeamSpacesCapability";
-import { useAuth } from "../../hooks/useAuth";
-import { useTranscriptionContextAllowed } from "../../hooks/usePolicy";
 import { defaultFolderDisplayName, notesEmptyTitleKey } from "./shared";
 import { isMeetingAutoEndEligible } from "../../helpers/meetingRecordingSession";
 import { handleMeetingRecordingRequest } from "../../helpers/meetingRecordingRequest";
-import { markIntroSeen, NOTES_STRUCTURE_INTRO, shouldShowIntro } from "../../lib/versionedIntro";
 import {
   applyNoteDraftMutation,
   collectPendingNoteWrites,
@@ -83,8 +77,6 @@ interface PersonalNotesViewProps {
     event: any;
   } | null;
   onMeetingRecordingRequestHandled?: () => void;
-  invitationEntry?: { workspaceId: string; teamIds: string[]; spaceIds: string[] } | null;
-  onInvitationEntryHandled?: () => void;
 }
 
 export default function PersonalNotesView({
@@ -92,8 +84,6 @@ export default function PersonalNotesView({
   onOpenIntegrations,
   meetingRecordingRequest,
   onMeetingRecordingRequestHandled,
-  invitationEntry,
-  onInvitationEntryHandled,
 }: PersonalNotesViewProps) {
   const isMeetingMode = useIsMeetingMode();
   const isNarrowWindow = useIsNarrowWindow();
@@ -163,13 +153,6 @@ export default function PersonalNotesView({
     [commitDraft, persistPendingWrites, takePendingSnapshot]
   );
   const { toast } = useToast();
-  const { isSignedIn } = useAuth();
-  const teamSpacesAvailable = useTeamSpacesCapability(isSignedIn);
-  const isTreeLoading = useIsTreeLoading();
-  const [structureIntroPending, setStructureIntroPending] = useState(() =>
-    shouldShowIntro(localStorage, NOTES_STRUCTURE_INTRO)
-  );
-  const [showStructureIntro, setShowStructureIntro] = useState(false);
 
   const isTranscribing = useMeetingRecordingStore((s) => s.isRecording);
   const diarizationSessionId = useMeetingRecordingStore((s) => s.diarizationSessionId);
@@ -177,7 +160,6 @@ export default function PersonalNotesView({
   const sessionDiarizationEnabled = useMeetingRecordingStore((s) => s.sessionDiarizationEnabled);
   const sessionExpectedCount = useMeetingRecordingStore((s) => s.sessionExpectedCount);
   const userTouchedStepper = useMeetingRecordingStore((s) => s.userTouchedStepper);
-  const meetingRecordingAllowed = useTranscriptionContextAllowed("meeting");
 
   const spaces = useSpaces();
   const folders = useFolders();
@@ -196,61 +178,6 @@ export default function PersonalNotesView({
 
   useEffect(() => {
     initializeNotesTree();
-  }, []);
-
-  useEffect(() => {
-    if (
-      structureIntroPending &&
-      isSignedIn &&
-      teamSpacesAvailable &&
-      !isTreeLoading &&
-      !isSidePanelLayout
-    ) {
-      setShowStructureIntro(true);
-    }
-  }, [structureIntroPending, isSignedIn, teamSpacesAvailable, isTreeLoading, isSidePanelLayout]);
-
-  // Arriving via an accepted invitation reopens the structure intro even when
-  // this device has already seen it.
-  useEffect(() => {
-    if (invitationEntry && !isSidePanelLayout) setShowStructureIntro(true);
-  }, [invitationEntry, isSidePanelLayout]);
-
-  // The acceptance modal starts a sync before navigating here. Once the first
-  // space the invitation granted (directly or via a team) appears in the local
-  // mirror, take the user to it instead of leaving the newly shared content
-  // hidden behind Personal.
-  useEffect(() => {
-    if (!invitationEntry) return;
-    const invitedTeamIds = new Set(invitationEntry.teamIds);
-    const invitedSpaceIds = new Set(invitationEntry.spaceIds);
-    // Workspace owners/admins receive implicit access, so their invitation
-    // may enumerate no grants at all. In that case, open the first accessible
-    // team space belonging to the accepted workspace.
-    const anyGrant = invitedTeamIds.size === 0 && invitedSpaceIds.size === 0;
-    const invitedSpace = spaces.find(
-      (space) =>
-        space.kind === "team" &&
-        space.workspace_id === invitationEntry.workspaceId &&
-        space.cloud_space_id != null &&
-        (anyGrant ||
-          invitedSpaceIds.has(space.cloud_space_id) ||
-          space.teams.some((team) => invitedTeamIds.has(team.id)))
-    );
-    if (!invitedSpace) return;
-
-    setActiveNoteId(null);
-    revealContainer(invitedSpace.id, null);
-    setActiveContext(invitedSpace.id, null);
-    onInvitationEntryHandled?.();
-  }, [invitationEntry, onInvitationEntryHandled, spaces]);
-
-  const handleStructureIntroOpenChange = useCallback((open: boolean) => {
-    setShowStructureIntro(open);
-    if (!open) {
-      markIntroSeen(localStorage, NOTES_STRUCTURE_INTRO);
-      setStructureIntroPending(false);
-    }
   }, []);
 
   const activeNote = useActiveNote();
@@ -508,7 +435,6 @@ export default function PersonalNotesView({
             onMoveNote={handleMoveNote}
             onCreateFolderAndMove={handleCreateFolderAndMove}
             onNewNote={createNoteIn}
-            onShowStructureIntro={() => setShowStructureIntro(true)}
           />
         </div>
       </div>
@@ -524,7 +450,6 @@ export default function PersonalNotesView({
               isSaving={isSaving}
               isRecording={isActiveNoteRecording}
               isProcessing={false}
-              recordingAllowed={meetingRecordingAllowed}
               onStartRecording={startRecording}
               onStopRecording={stopRecording}
               onExportNote={handleExportNote}
@@ -541,7 +466,6 @@ export default function PersonalNotesView({
               folders={editorFolders}
               onMoveToFolder={handleMoveToFolder}
               onCreateFolderAndMove={handleCreateFolderAndMove}
-              onCancelPendingSaves={cancelPendingSaves}
             />
           </>
         ) : activeContext && overviewSpace ? (
@@ -716,11 +640,6 @@ export default function PersonalNotesView({
           onNotesAdded={handleNotesAdded}
         />
       )}
-
-      <NotesStructureIntroDialog
-        open={showStructureIntro}
-        onOpenChange={handleStructureIntroOpenChange}
-      />
     </div>
   );
 }
