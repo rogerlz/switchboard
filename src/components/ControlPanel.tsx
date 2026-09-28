@@ -60,7 +60,6 @@ import { getCachedPlatform } from "../utils/platform";
 import { isAccessibilitySkipped } from "../utils/permissions";
 import { useGpuBannerAvailability } from "../hooks/useGpuBannerAvailability";
 import { useCreateNote } from "../hooks/useCreateNote";
-import { useSignInCloudNudge } from "../hooks/useSignInCloudNudge";
 import {
   setActiveNoteId,
   setActiveFolderId,
@@ -189,7 +188,6 @@ export default function ControlPanel({ initialSettingsSection }: ControlPanelPro
     setSettingsSection("transcription");
     setShowSettings(true);
   }, []);
-  useSignInCloudNudge(isSignedIn, openTranscriptionSettings);
 
   const { createNote } = useCreateNote();
   // The note is created before the view switches so Notes mounts with it already open.
