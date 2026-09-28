@@ -1,6 +1,4 @@
 @import "tailwindcss";
-/* Dictation window feature styles (voice pill, live-transcript panel). */
-@import "./styles/dictation-panel.css";
 
 @custom-variant dark (&:where(.dark, .dark *));
 

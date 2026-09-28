@@ -11,10 +11,6 @@ function source(relativePath) {
 
 test("dynamic prose and identity values keep their own direction", () => {
   const expectations = [
-    [
-      "src/components/dictation/LiveTranscriptPanel.tsx",
-      /<p\s+dir="auto"[\s\S]*?\{shimmerParts\.settled\}/,
-    ],
     ["src/components/ui/TranscriptionItem.tsx", /<p\s+dir="auto"[\s\S]*?\{item\.text\}/],
     ["src/components/ui/TranscriptionItem.tsx", /<p\s+dir="auto"[^>]*>\s*\{rawText\}/],
     ["src/components/CommandSearch.tsx", /<p\s+dir="auto"[^>]*>\s*\{transcript\.text\}/],
@@ -112,14 +108,6 @@ test("localized sentences isolate technical interpolations without changing word
     ],
     [
       "src/components/SettingsPage.tsx",
-      /<BidiInterpolatedText[\s\S]*?hyprlandConfigWriteWarningDescription[\s\S]*?value=\{hyprlandConfigStatus\.path\}/,
-    ],
-    [
-      "src/components/SettingsPage.tsx",
-      /<BidiInterpolatedText[\s\S]*?resetToDefault[\s\S]*?value=\{formatHotkeyLabel\(effectiveDefaultHotkey\)\}/,
-    ],
-    [
-      "src/components/SettingsPage.tsx",
       /<BidiInterpolatedText[\s\S]*?updates\.whatsNew[\s\S]*?value=\{updateInfo\.version\}/,
     ],
     [
@@ -145,14 +133,6 @@ test("localized sentences isolate technical interpolations without changing word
     assert.match(text, pattern, `${file} lost a bidi-isolated technical interpolation`);
     assert.match(text, /BIDI_VALUE_TOKEN/, `${file} must interpolate with the stable marker`);
   }
-});
-
-test("direction-sensitive transient motion mirrors in RTL", () => {
-  assert.match(
-    source("src/components/dictation/LiveTranscriptPanel.tsx"),
-    /pointer-events-none translate-x-2 rtl:-translate-x-2 opacity-0/,
-    "LiveTranscriptPanel controls must retreat toward the document end"
-  );
 });
 
 test("user-authored names and previews detect direction at their display boundary", () => {

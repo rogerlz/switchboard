@@ -1,10 +1,8 @@
 import React, { Suspense, useEffect } from "react";
 import { useTranslation } from "react-i18next";
-import App from "./App.jsx";
 import MeetingNotificationOverlay from "./components/MeetingNotificationOverlay.tsx";
 import { useControlPanelWindowDrag } from "./hooks/useControlPanelWindowDrag";
 import { useTheme } from "./hooks/useTheme";
-import { isControlPanelWindow } from "./utils/windowContext.ts";
 
 const ControlPanel = React.lazy(() => import("./components/ControlPanel.tsx"));
 const TrayCalendar = React.lazy(() => import("./components/TrayCalendar.tsx"));
@@ -29,23 +27,19 @@ export default function AppRouter() {
 }
 
 function MainApp() {
-  const isControlPanel = isControlPanelWindow();
-  useControlPanelWindowDrag(isControlPanel);
+  useControlPanelWindowDrag(true);
 
-  // There is no onboarding: release the gates main holds (window size, global
-  // hotkeys, macOS accessibility features) until the renderer shows the app.
+  // There is no onboarding: release the gates main holds (window visibility,
+  // meeting prompts) once the renderer shows the app.
   useEffect(() => {
-    if (isControlPanel) void window.electronAPI?.setOnboardingWindowMode?.("restore");
+    void window.electronAPI?.setOnboardingWindowMode?.("restore");
     void window.electronAPI?.setOnboardingActive?.(false);
-    window.electronAPI?.markMacAccessibilityFeaturesReady?.();
-  }, [isControlPanel]);
+  }, []);
 
-  return isControlPanel ? (
+  return (
     <Suspense fallback={<LoadingFallback />}>
       <ControlPanel />
     </Suspense>
-  ) : (
-    <App />
   );
 }
 

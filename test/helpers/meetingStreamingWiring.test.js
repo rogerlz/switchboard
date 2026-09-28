@@ -44,7 +44,7 @@ test("silent system audio warning arms on start and clears on every teardown pat
   assert.ok(rollbackStart >= 0 && stopStart > rollbackStart);
   const rollbackSection = source.slice(
     rollbackStart,
-    source.indexOf("const setupDictationCallbacks")
+    source.indexOf('ipcMain.handle("meeting-transcription-prepare"')
   );
   assert.match(rollbackSection, /clearMeetingSystemAudioSilenceTimer\(\);/);
   const stopSection = source.slice(
@@ -79,8 +79,11 @@ test("a silent Windows capture hands the live session to renderer loopback", () 
   // Leaking the latch across sessions would pin the fallback off for the rest
   // of the app's life, so it resets everywhere the heard-audio latch does.
   assert.equal(
-    (source.match(/meetingSystemAudioHeard = false;\s*\n\s*meetingSystemAudioDegraded = false;/g) ?? [])
-      .length,
+    (
+      source.match(
+        /meetingSystemAudioHeard = false;\s*\n\s*meetingSystemAudioDegraded = false;/g
+      ) ?? []
+    ).length,
     2
   );
 });
@@ -108,7 +111,10 @@ test("the system-audio watchdog is armed beside the silence timer and torn down 
   // that reported stalls it could not recover from.
   const armStart = source.indexOf("const startMeetingSystemAudioWatchdog");
   assert.ok(armStart >= 0);
-  const armSection = source.slice(armStart, source.indexOf("const rollbackMeetingTranscriptionStart"));
+  const armSection = source.slice(
+    armStart,
+    source.indexOf("const rollbackMeetingTranscriptionStart")
+  );
   assert.match(armSection, /clearMeetingSystemAudioTicker\(\);/);
   assert.doesNotMatch(armSection, /stopMeetingSystemAudioWatchdog\(\);/);
   assert.doesNotMatch(armSection, /detachCapture\(\)/);
@@ -119,7 +125,7 @@ test("the system-audio watchdog is armed beside the silence timer and torn down 
     [
       "rollback",
       "const rollbackMeetingTranscriptionStart",
-      "const setupDictationCallbacks",
+      'ipcMain.handle("meeting-transcription-prepare"',
     ],
     ["stop", "const stopMeetingTranscription", "const meetingTranscriptionLifecycle"],
     ["mic-only fallback", "const fallBackToMicOnly", "const startMeetingSystemAudio = async"],

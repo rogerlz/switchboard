@@ -32,12 +32,6 @@ const PERSISTED_KEYS = [
   "LOCAL_CLEANUP_MODEL",
   "LLAMA_GPU_BACKEND",
   "LLAMA_VULKAN_ENABLED",
-  "DICTATION_KEY",
-  "TRANSLATION_KEY",
-  "MEETING_KEY",
-  "ACTIVATION_MODE",
-  "FLOATING_ICON_AUTO_HIDE",
-  "PANEL_START_POSITION",
   "START_MINIMIZED",
   "UI_LANGUAGE",
   "WHISPER_CUDA_ENABLED",
@@ -56,8 +50,8 @@ const PERSISTED_KEYS = [
   "VERTEX_LOCATION",
 ];
 
-// Module-level so writes are serialized across all instances — hotkeyManager
-// creates its own EnvironmentManager alongside the main.js singleton.
+// Module-level so writes are serialized across all EnvironmentManager
+// instances.
 let envWriteQueue = Promise.resolve();
 
 class EnvironmentManager {
@@ -372,77 +366,12 @@ class EnvironmentManager {
     return this._saveKey("VERTEX_API_KEY", key);
   }
 
-  getDictationKey() {
-    return this._getKey("DICTATION_KEY");
-  }
-
-  saveDictationKey(key) {
-    const result = this._saveKey("DICTATION_KEY", key);
-    this.saveAllKeysToEnvFile().catch(() => {});
-    return result;
-  }
-
-
-  getTranslationKey() {
-    return this._getKey("TRANSLATION_KEY");
-  }
-
-  saveTranslationKey(key) {
-    const result = this._saveKey("TRANSLATION_KEY", key);
-    this.saveAllKeysToEnvFile().catch(() => {});
-    return result;
-  }
-
-  getMeetingKey() {
-    return this._getKey("MEETING_KEY");
-  }
-
-  saveMeetingKey(key) {
-    const result = this._saveKey("MEETING_KEY", key);
-    this.saveAllKeysToEnvFile().catch(() => {});
-    return result;
-  }
-
-  getActivationMode() {
-    const mode = this._getKey("ACTIVATION_MODE");
-    return mode === "push" ? "push" : "tap";
-  }
-
-  saveActivationMode(mode) {
-    const validMode = mode === "push" ? "push" : "tap";
-    const result = this._saveKey("ACTIVATION_MODE", validMode);
-    this.saveAllKeysToEnvFile().catch(() => {});
-    return result;
-  }
-
-  getFloatingIconAutoHide() {
-    return this._getKey("FLOATING_ICON_AUTO_HIDE") === "true";
-  }
-
-  saveFloatingIconAutoHide(enabled) {
-    const result = this._saveKey("FLOATING_ICON_AUTO_HIDE", String(enabled));
-    this.saveAllKeysToEnvFile().catch(() => {});
-    return result;
-  }
-
   getStartMinimized() {
     return this._getKey("START_MINIMIZED") === "true";
   }
 
   saveStartMinimized(enabled) {
     const result = this._saveKey("START_MINIMIZED", String(enabled));
-    this.saveAllKeysToEnvFile().catch(() => {});
-    return result;
-  }
-
-  getPanelStartPosition() {
-    const v = this._getKey("PANEL_START_POSITION");
-    if (v === "bottom-right" || v === "center" || v === "bottom-left") return v;
-    return "bottom-right";
-  }
-
-  savePanelStartPosition(position) {
-    const result = this._saveKey("PANEL_START_POSITION", position);
     this.saveAllKeysToEnvFile().catch(() => {});
     return result;
   }

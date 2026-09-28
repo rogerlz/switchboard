@@ -139,7 +139,6 @@ class UpdateManager {
       this.isQuittingForUpdate = true;
       if (this.windowManager) {
         this.windowManager.isQuitting = true;
-        this.windowManager.hotkeyManager.unregisterAll();
       }
     };
     require("electron").autoUpdater.on("before-quit-for-update", this.handleBeforeQuitForUpdate);
@@ -148,8 +147,8 @@ class UpdateManager {
   notifyRenderers(channel, data) {
     // Read window refs live from windowManager: cached refs go stale when the
     // control panel is created after boot (start minimized) or recreated.
-    const { mainWindow, controlPanelWindow } = this.windowManager ?? {};
-    for (const win of [mainWindow, controlPanelWindow]) {
+    const { controlPanelWindow } = this.windowManager ?? {};
+    for (const win of [controlPanelWindow]) {
       if (win && !win.isDestroyed() && win.webContents) {
         win.webContents.send(channel, data);
       }

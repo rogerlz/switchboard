@@ -62,15 +62,6 @@ class FakeBrowserWindow extends EventEmitter {
   }
 }
 
-class FakeHotkeyManager {
-  unregisterAll() {}
-
-  isInListeningMode() {
-    return false;
-  }
-}
-FakeHotkeyManager.isGlobeLikeHotkey = () => false;
-
 class FakeDragManager {
   cleanup() {}
 }
@@ -94,7 +85,6 @@ Module._load = function loadWindowManagerWithStubs(request, parent, isMain) {
       error: () => undefined,
     };
   }
-  if (request === "./hotkeyManager") return FakeHotkeyManager;
   if (request === "./dragManager") return FakeDragManager;
   if (request === "./menuManager") return {};
   if (request === "./devServerManager") {
@@ -110,10 +100,8 @@ Module._load = function loadWindowManagerWithStubs(request, parent, isMain) {
   if (request === "./windowConfig") {
     const notificationSize = { width: 392, height: 92 };
     return {
-      MAIN_WINDOW_CONFIG: {},
       CONTROL_PANEL_CONFIG: {},
       NOTIFICATION_WINDOW_CONFIG: { ...notificationSize, acceptFirstMouse: true },
-      WINDOW_SIZES: {},
       WindowPositionUtil: {
         getNotificationPosition: () => ({
           ...notificationSize,
@@ -179,55 +167,11 @@ test.beforeEach(() => {
   createdWindows.length = 0;
 });
 
-test("native push-to-talk force-stops after the safety timeout", () => {
-  const timers = installFakeTimers();
-  const manager = createNormalWindowManager();
-  let starts = 0;
-  let stops = 0;
-  manager.showDictationPanel = () => undefined;
-  manager.hideDictationPanel = () => undefined;
-  manager.sendPrepareDictation = () => undefined;
-  manager.sendCancelDictationPreparation = () => undefined;
-  manager.sendStartDictation = () => {
-    starts += 1;
-  };
-  manager.sendStopDictation = () => {
-    stops += 1;
-  };
-
-  try {
-    manager.startWindowsPushToTalk("F8");
-    assert.deepEqual(
-      timers.pendingDelays().sort((left, right) => left - right),
-      [150, 300000]
-    );
-
-    timers.runDelay(150);
-    assert.equal(starts, 1);
-    timers.runDelay(300000);
-    assert.equal(stops, 1);
-    assert.equal(manager.winPushState, null);
-  } finally {
-    timers.restore();
-  }
-});
-
-test("a failed activation-mode change preserves the cached mode", async () => {
-  const manager = createNormalWindowManager();
-  manager.hotkeyManager.setActivationMode = async () => false;
-
-  assert.equal(await manager.setActivationModeCache("push"), false);
-  assert.equal(manager.getActivationMode(), "tap");
-});
-
-
-
-test("window manager starts fail-closed and suppresses normal-app popup surfaces", async () => {
+test("an unmounted control panel suppresses meeting prompts", async () => {
   const manager = new WindowManager();
+  manager.setOnboardingActive(true);
 
-  assert.equal(manager.isMeetingInputAllowed(), false);
   assert.equal(await manager.showMeetingNotification({ detectionId: "onboarding" }), false);
-  assert.equal(await manager.showTranscriptionPreview("partial transcript"), undefined);
   assert.deepEqual(createdWindows, []);
 });
 
@@ -483,23 +427,18 @@ test("a detection card whose load fails releases that detection", async () => {
   assert.deepEqual(closedDetections, ["audio:sustained-audio"]);
 });
 
-test("manual meeting starts fail closed like the meeting hotkey", async () => {
+test("manual meeting starts fail closed until the control panel has mounted", async () => {
   let starts = 0;
   const engine = { startManualMeeting: async () => (starts += 1) };
 
-  const onboarding = new WindowManager();
-  onboarding.meetingDetectionEngine = engine;
-  await onboarding.startManualMeeting();
+  const unmounted = new WindowManager();
+  unmounted.setOnboardingActive(true);
+  unmounted.meetingDetectionEngine = engine;
+  await unmounted.startManualMeeting();
   assert.equal(starts, 0);
 
   const manager = createNormalWindowManager();
   manager.meetingDetectionEngine = engine;
-  manager.hotkeyManager.isInListeningMode = () => true;
-  await manager.startManualMeeting();
-  assert.equal(starts, 0);
-
-  manager.hotkeyManager.isInListeningMode = () => false;
   await manager.startManualMeeting();
   assert.equal(starts, 1);
 });
-

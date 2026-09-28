@@ -6,36 +6,11 @@ const assert = require("node:assert/strict");
 
 const load = () => import("../../src/utils/hotkeys.ts");
 
-test("isGlobeLikeHotkey matches exactly GLOBE and Fn, nothing else", async () => {
-  const { isGlobeLikeHotkey } = await load();
-
-  assert.equal(isGlobeLikeHotkey("GLOBE"), true);
-  assert.equal(isGlobeLikeHotkey("Fn"), true);
-  assert.equal(isGlobeLikeHotkey("F1"), false);
-  assert.equal(isGlobeLikeHotkey("globe"), false);
-  assert.equal(isGlobeLikeHotkey("fn"), false);
-  assert.equal(isGlobeLikeHotkey(""), false);
-});
-
 test("empty input formats to an empty label", async () => {
   const { formatHotkeyLabelForPlatform } = await load();
 
   assert.equal(formatHotkeyLabelForPlatform("", "darwin"), "");
   assert.equal(formatHotkeyLabelForPlatform("  ", "darwin"), "");
-});
-
-test("globe-like hotkeys display as Globe/Fn on every platform", async () => {
-  const { formatHotkeyLabelForPlatform } = await load();
-
-  assert.equal(formatHotkeyLabelForPlatform("GLOBE", "darwin"), "Globe/Fn");
-  assert.equal(formatHotkeyLabelForPlatform("Fn", "win32"), "Globe/Fn");
-});
-
-test("mouse button hotkeys display with spaces", async () => {
-  const { formatHotkeyLabelForPlatform } = await load();
-
-  assert.equal(formatHotkeyLabelForPlatform("MouseButton4", "darwin"), "Mouse Button 4");
-  assert.equal(formatHotkeyLabelForPlatform("MouseButton5", "darwin"), "Mouse Button 5");
 });
 
 test("the same stored accelerator renders per platform: Cmd on macOS, Ctrl on Windows", async () => {
@@ -91,77 +66,9 @@ test("bare modifier tokens format like they do inside a chord", async () => {
   assert.equal(formatHotkeyLabelForPlatform("Super", "linux"), "Super");
 });
 
-test("sidedModifierToken names the physical key behind a modifier code", async () => {
-  const { sidedModifierToken } = await load();
-
-  assert.equal(sidedModifierToken("AltRight", "darwin"), "RightOption");
-  assert.equal(sidedModifierToken("AltLeft", "darwin"), "LeftOption");
-  assert.equal(sidedModifierToken("AltRight", "win32"), "RightAlt");
-  assert.equal(sidedModifierToken("MetaLeft", "darwin"), "LeftCommand");
-  assert.equal(sidedModifierToken("MetaRight", "linux"), "RightSuper");
-  assert.equal(sidedModifierToken("ControlLeft", "win32"), "LeftControl");
-  assert.equal(sidedModifierToken("ShiftRight", "darwin"), "RightShift");
-  // Sideless codes have no side to report.
-  assert.equal(sidedModifierToken("CapsLock", "darwin"), null);
-  assert.equal(sidedModifierToken("KeyK", "darwin"), null);
-});
-
 test("single keys pass through unchanged", async () => {
   const { formatHotkeyLabelForPlatform } = await load();
 
   assert.equal(formatHotkeyLabelForPlatform("`", "darwin"), "`");
   assert.equal(formatHotkeyLabelForPlatform("F8", "win32"), "F8");
-});
-
-test("parseHotkey splits modifiers from the base key", async () => {
-  const { parseHotkey } = await load();
-
-  assert.deepEqual(parseHotkey("CommandOrControl+Shift+K"), {
-    modifiers: ["CommandOrControl", "Shift"],
-    baseKey: "K",
-  });
-  assert.deepEqual(parseHotkey("Alt+R"), { modifiers: ["Alt"], baseKey: "R" });
-  assert.deepEqual(parseHotkey("F8"), { modifiers: [], baseKey: "F8" });
-  assert.deepEqual(parseHotkey(""), { modifiers: [], baseKey: "" });
-  assert.deepEqual(parseHotkey(null), { modifiers: [], baseKey: "" });
-});
-
-test("isCompoundHotkey is true only when modifiers are present", async () => {
-  const { isCompoundHotkey } = await load();
-
-  assert.equal(isCompoundHotkey("Ctrl+Shift+K"), true);
-  assert.equal(isCompoundHotkey("Alt+R"), true);
-  assert.equal(isCompoundHotkey("F8"), false);
-  assert.equal(isCompoundHotkey("GLOBE"), false);
-  assert.equal(isCompoundHotkey(""), false);
-  assert.equal(isCompoundHotkey(null), false);
-});
-
-test("isValidHotkeyFormat accepts single keys, globe, mouse buttons, and well-formed combos", async () => {
-  const { isValidHotkeyFormat } = await load();
-
-  assert.equal(isValidHotkeyFormat("GLOBE"), true);
-  assert.equal(isValidHotkeyFormat("Fn"), true);
-  assert.equal(isValidHotkeyFormat("MouseButton4"), true);
-  assert.equal(isValidHotkeyFormat("`"), true);
-  assert.equal(isValidHotkeyFormat("A"), true);
-  assert.equal(isValidHotkeyFormat("Ctrl+K"), true);
-  assert.equal(isValidHotkeyFormat("Alt+Shift+F9"), true);
-});
-
-test("isValidHotkeyFormat rejects empty input and combos with empty parts", async () => {
-  const { isValidHotkeyFormat } = await load();
-
-  assert.equal(isValidHotkeyFormat(""), false);
-  assert.equal(isValidHotkeyFormat("  "), false);
-  assert.equal(isValidHotkeyFormat("Ctrl+"), false);
-  assert.equal(isValidHotkeyFormat("+K"), false);
-});
-
-test("parseHotkeyList preserves hotkeys ending with '+' when followed by another hotkey", async () => {
-  const { parseHotkeyList } = await load();
-
-  assert.deepEqual(parseHotkeyList("Control++,F8"), ["Control++", "F8"]);
-  assert.deepEqual(parseHotkeyList("Control+,,F8"), ["Control+,", "F8"]);
-  assert.deepEqual(parseHotkeyList("Control++,Control+,"), ["Control++", "Control+,"]);
 });

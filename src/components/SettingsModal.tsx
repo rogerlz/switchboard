@@ -7,7 +7,6 @@ import {
   Brain,
   UserCircle,
   Wrench,
-  Keyboard,
   CreditCard,
   Shield,
   ShieldCheck,
@@ -94,13 +93,6 @@ export default function SettingsModal({ open, onOpenChange, initialSection }: Se
         label: t("settingsModal.sections.general.label"),
         icon: Sliders,
         description: t("settingsModal.sections.general.description"),
-        group: t("settingsModal.groups.app"),
-      },
-      {
-        id: "hotkeys",
-        label: t("settingsModal.sections.hotkeys.label"),
-        icon: Keyboard,
-        description: t("settingsModal.sections.hotkeys.description"),
         group: t("settingsModal.groups.app"),
       },
       {

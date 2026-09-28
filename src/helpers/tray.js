@@ -20,22 +20,13 @@ const MACOS_TRAY_POSITION_KEY = `NSStatusItem Preferred Position ${MACOS_TRAY_GU
 class TrayManager {
   constructor() {
     this.tray = null;
-    this.mainWindow = null;
     this.controlPanelWindow = null;
     this.windowManager = null;
     this.attachedControlPanels = new WeakSet();
   }
 
-  setWindows(mainWindow, controlPanelWindow) {
-    this.mainWindow = mainWindow;
+  setControlPanelWindow(controlPanelWindow) {
     this.controlPanelWindow = controlPanelWindow;
-
-    if (this.mainWindow) {
-      this.mainWindow.on("show", () => this.updateTrayMenu?.());
-      this.mainWindow.on("hide", () => this.updateTrayMenu?.());
-      this.mainWindow.on("minimize", () => this.updateTrayMenu?.());
-      this.mainWindow.on("restore", () => this.updateTrayMenu?.());
-    }
 
     if (this.controlPanelWindow) {
       this.attachControlPanelListeners(this.controlPanelWindow);
@@ -278,40 +269,14 @@ class TrayManager {
   }
 
   buildContextMenuTemplate() {
-    const dictationVisible = this.windowManager?.isDictationPanelVisible?.() ?? false;
-    const dictating = this.windowManager?.isDictating?.() ?? false;
-
     return [
       {
-        label: dictating
-          ? i18nMain.t("app.commandMenu.stopListening")
-          : i18nMain.t("app.commandMenu.startListening"),
-        click: () =>
-          dictating
-            ? this.windowManager?.sendStopDictation()
-            : this.windowManager?.sendStartDictation(),
-      },
-      {
-        // Starts in the main process, like the meeting hotkey: the recording it
-        // opens is policy-gated where it actually begins, in the control panel.
+        // Starts in the main process: the recording it opens is policy-gated
+        // where it actually begins, in the control panel.
         label: i18nMain.t("app.commandMenu.startMeetingRecording"),
         click: () => this.windowManager?.startManualMeeting(),
       },
       { type: "separator" },
-      {
-        label: dictationVisible
-          ? i18nMain.t("tray.toggleDictation.hide")
-          : i18nMain.t("tray.toggleDictation.show"),
-        click: () => {
-          if (!this.windowManager) return;
-          if (this.windowManager.isDictationPanelVisible()) {
-            this.windowManager.hideDictationPanel();
-          } else {
-            this.windowManager.showDictationPanel({ focus: true, reposition: true });
-          }
-          this.updateTrayMenu();
-        },
-      },
       {
         label: this.isControlPanelVisible()
           ? i18nMain.t("tray.hideControlPanel")

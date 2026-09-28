@@ -8,7 +8,6 @@ import { Loader2, Sparkles, X, Mic, Trash2, Archive } from "./icons";
 import TranscriptionItem from "./ui/TranscriptionItem";
 import EmptyStateCard from "./ui/EmptyStateCard";
 import type { TranscriptionItem as TranscriptionItemType } from "../types/electron";
-import { formatHotkeyLabel, parseHotkeyList } from "../utils/hotkeys";
 import { formatDateGroup } from "../utils/dateFormatting";
 import { useUpcomingEvents } from "../hooks/useUpcomingEvents";
 import UpcomingMeetings from "./UpcomingMeetings";
@@ -21,7 +20,6 @@ const EMPTY_PREVIEW_WIDTHS = ["w-full", "w-4/5", "w-3/5"];
 interface HistoryViewProps {
   history: TranscriptionItemType[];
   isLoading: boolean;
-  hotkey: string;
   aiCTADismissed: boolean;
   setAiCTADismissed: (dismissed: boolean) => void;
   useCleanupModel: boolean;
@@ -39,7 +37,6 @@ interface HistoryViewProps {
 export default function HistoryView({
   history,
   isLoading,
-  hotkey,
   aiCTADismissed,
   setAiCTADismissed,
   useCleanupModel,
@@ -172,20 +169,6 @@ export default function HistoryView({
                     />
                   ))}
                 </div>
-                <span className="inline-flex h-[30px] items-center gap-1.5 rounded-full bg-surface-3 px-3 text-xs font-medium text-foreground/70 dark:bg-surface-3">
-                  {t("controlPanel.history.press")}
-                  <span dir="ltr" className="inline-flex items-center gap-1">
-                    {parseHotkeyList(hotkey).map((hk, index) => (
-                      <Fragment key={hk}>
-                        {index > 0 && <span className="text-foreground/45">/</span>}
-                        <kbd className="rounded-md bg-background px-1.5 py-px font-sans text-[11px] font-medium text-foreground/80 shadow-sm dark:bg-surface-2">
-                          {formatHotkeyLabel(hk)}
-                        </kbd>
-                      </Fragment>
-                    ))}
-                  </span>
-                  {t("controlPanel.history.toStart")}
-                </span>
               </EmptyStateCard>
             </>
           ) : (

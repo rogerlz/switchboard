@@ -50,7 +50,7 @@ function resolveAllOverlayTypes(platform, session) {
   );
 }
 
-test("Sway XWayland uses notification type only for focusless overlays", () => {
+test("Sway XWayland gives the focusless meeting prompt the notification type", () => {
   const windowConfig = loadWindowConfig({
     platform: "linux",
     environment: {
@@ -61,17 +61,7 @@ test("Sway XWayland uses notification type only for focusless overlays", () => {
     },
   });
 
-  assert.deepEqual(
-    {
-      main: windowConfig.MAIN_WINDOW_CONFIG.type,
-      notification: windowConfig.NOTIFICATION_WINDOW_CONFIG.type,
-    },
-    {
-      main: "notification",
-      notification: "notification",
-    }
-  );
-  assert.equal(windowConfig.MAIN_WINDOW_CONFIG.focusable, false);
+  assert.equal(windowConfig.NOTIFICATION_WINDOW_CONFIG.type, "notification");
   assert.equal(windowConfig.NOTIFICATION_WINDOW_CONFIG.focusable, false);
 });
 
@@ -213,14 +203,5 @@ test("a stale SWAYSOCK does not change Hyprland window types", () => {
     },
   });
 
-  assert.deepEqual(
-    {
-      main: windowConfig.MAIN_WINDOW_CONFIG.type,
-      notification: windowConfig.NOTIFICATION_WINDOW_CONFIG.type,
-    },
-    {
-      main: "toolbar",
-      notification: "toolbar",
-    }
-  );
+  assert.equal(windowConfig.NOTIFICATION_WINDOW_CONFIG.type, "toolbar");
 });

@@ -10,15 +10,6 @@ import type { CalendarAvailabilityRequest, CalendarAvailabilityResult } from "./
 
 export type LocalTranscriptionProvider = "whisper" | "nvidia" | "cohere";
 
-export interface MainWindowInputRegion {
-  viewportWidth: number;
-  viewportHeight: number;
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-}
-
 export type ChineseScriptPreference = "simplified" | "traditional" | "as-transcribed";
 
 export type InferenceMode = "openwhispr" | "providers" | "local" | "self-hosted" | "enterprise";
@@ -678,7 +669,6 @@ export interface NewWorkspaceApiKey extends WorkspaceApiKey {
   key: string;
 }
 
-
 export interface GpuDevice {
   index: number;
   uuid: string;
@@ -1036,27 +1026,6 @@ export type LocalLLMDownloadProgressEvent =
       sequence?: number;
     };
 
-
-export type OnboardingDemoKind = "dictation" | "assistant";
-/**
- * "partial" streams the transcript, "processing" carries the final transcript,
- * "replying" streams the assistant demo's reply, and "level" mirrors the
- * microphone level while listening.
- */
-export type OnboardingDemoStatus =
-  "listening" | "level" | "processing" | "partial" | "replying" | "success" | "error";
-export interface OnboardingDemoEvent {
-  demoId: string;
-  kind: OnboardingDemoKind;
-  status: OnboardingDemoStatus;
-  text?: string;
-  message?: string;
-  /** Tool the assistant is running while it replies (a tool registry name). */
-  tool?: string;
-  /** Microphone input level, 0..1, on "level" events. */
-  level?: number;
-}
-
 export interface ReferralItem {
   id: string;
   email: string;
@@ -1072,11 +1041,6 @@ declare global {
       // Basic window operations
       setOnboardingWindowMode?: (mode: "compact" | "expanded" | "restore") => Promise<boolean>;
       setOnboardingActive?: (active: boolean) => Promise<boolean>;
-      beginOnboardingDemo?: (session: { id: string; kind: OnboardingDemoKind }) => Promise<boolean>;
-      endOnboardingDemo?: (id: string) => Promise<boolean>;
-      stopOnboardingDemo?: (id: string) => Promise<boolean>;
-      publishOnboardingDemoEvent?: (event: Omit<OnboardingDemoEvent, "demoId">) => Promise<boolean>;
-      onOnboardingDemoEvent?: (callback: (event: OnboardingDemoEvent) => void) => () => void;
       testProviderConnection?: (config: {
         scope: "transcription" | "reasoning";
         provider: string;
@@ -1104,26 +1068,6 @@ declare global {
             clipboardCopied: true;
           }
       >;
-      hideWindow: () => Promise<void>;
-      showDictationPanel: () => Promise<void>;
-      captureDictationTarget?: () => Promise<{ success: boolean; pid: number | null }>;
-      onToggleDictation: (callback: () => void) => () => void;
-      onToggleTranslation?: (callback: () => void) => () => void;
-      onStartDictation?: (callback: () => void) => () => void;
-      onStopDictation?: (callback: () => void) => () => void;
-      onPrepareDictation?: (
-        callback: (options?: { inputKind?: "dictation" | "assistant" | "translation" }) => void
-      ) => () => void;
-      onCancelDictationPreparation?: (callback: () => void) => () => void;
-      onCancelDictation?: (callback: () => void) => () => void;
-      onDictationForceStopped?: (
-        callback: (payload?: { reason?: "timeout" | "reset" | "manual" }) => void
-      ) => () => void;
-      micWarmHoldChanged?: (active: boolean) => void;
-      dictationLifecycleStateChanged: (
-        state: "idle" | "preparing" | "recording" | "processing",
-        inputKind?: "dictation" | "assistant" | "translation"
-      ) => void;
 
       // STT config
       getSttConfig?: () => Promise<
@@ -1481,7 +1425,6 @@ declare global {
       showNoteFile?: (noteId: number) => Promise<{ success: boolean }>;
       showFolderInExplorer?: (folderName: string) => Promise<{ success: boolean }>;
 
-
       // Audio file operations
       saveTempAudio: (buffer: ArrayBuffer) => Promise<{ success: boolean; path: string }>;
       deleteTempAudio: (tempPath: string) => Promise<{ success: boolean; error?: string }>;
@@ -1830,39 +1773,9 @@ declare global {
       snapToMeetingMode: () => Promise<void>;
       restoreFromMeetingMode: () => Promise<void>;
       getPlatform: () => string;
-      startWindowDrag: () => Promise<void>;
-      stopWindowDrag: () => Promise<void>;
       startControlPanelDrag: () => Promise<void>;
       stopControlPanelDrag: () => Promise<void>;
-      setMainWindowInteractivity: (interactive: boolean) => Promise<void>;
-      setMainWindowInputRegion: (region: MainWindowInputRegion | null) => Promise<boolean>;
-      onMainWindowVisibilityChanged: (callback: (visible: boolean) => void) => () => void;
       setNotificationInteractivity: (interactive: boolean) => Promise<void>;
-      resizeMainWindow: (
-        sizeKey:
-          | "BASE"
-          | "RECORDING"
-          | "DICTATION_ERROR"
-          | "DICTATION_ERROR_WITH_TRANSCRIPT"
-          | "WITH_MENU"
-          | "WITH_TOAST"
-          | "EXPANDED"
-          | "ASSISTANT"
-      ) => Promise<{
-        success: boolean;
-        bounds?: Electron.Rectangle;
-        message?: string;
-        changed?: boolean;
-      }>;
-      resizeAssistantWindowToContent: (surfaceHeight: number) => Promise<{
-        success: boolean;
-        bounds?: Electron.Rectangle;
-        message?: string;
-        changed?: boolean;
-      }>;
-      resizeDictationErrorWindowToContent: (
-        surfaceHeight: number
-      ) => Promise<{ success: boolean; bounds?: Electron.Rectangle; message?: string }>;
 
       // App management
       cleanupApp: () => Promise<{ success: boolean; message: string; errors?: string[] }>;
@@ -1891,20 +1804,6 @@ declare global {
 
       openExternal: (url: string) => Promise<{ success: boolean; error?: string }>;
 
-      // Hotkey management
-      updateHotkey: (key: string) => Promise<{ success: boolean; message: string }>;
-      setHotkeyListeningMode?: (enabled: boolean) => Promise<{ success: boolean }>;
-      getHotkeyModeInfo?: (hotkey?: string) => Promise<{
-        isUsingGnome: boolean;
-        isUsingHyprland: boolean;
-        isUsingKDE: boolean;
-        isUsingNativeShortcut: boolean;
-        supportsPushToTalk: boolean;
-        pushToTalkUnavailableReason: string | null;
-        linuxInputAccessDenied?: boolean;
-      }>;
-      getHyprlandConfigStatus?: () => Promise<{ canWrite: boolean; path: string } | null>;
-
       // Wayland paste diagnostics
       getYdotoolStatus?: () => Promise<{
         isLinux: boolean;
@@ -1924,28 +1823,8 @@ declare global {
         hasXsel: boolean;
       }>;
 
-      // Globe key listener for hotkey capture (macOS only)
-      onGlobeKeyPressed?: (callback: () => void) => () => void;
-      onGlobeKeyReleased?: (callback: () => void) => () => void;
-
-      // Hotkey registration events
-      onHotkeyFallbackUsed?: (
-        callback: (data: { original: string; fallback: string }) => void
-      ) => () => void;
-      onHotkeyRegistrationFailed?: (
-        callback: (data: { hotkey: string; error: string; suggestions: string[] }) => void
-      ) => () => void;
-      onSettingUpdated?: (callback: (data: { key: string; value: unknown }) => void) => () => void;
-      onDictationKeyActive?: (callback: (key: string) => void) => () => void;
-      onLinuxPttPermissionDenied?: (callback: () => void) => () => void;
-
       // Settings shortcut (Cmd+, / Ctrl+,)
       onShowSettings?: (callback: () => void) => () => void;
-
-      // Accessibility permission events (macOS)
-      markMacAccessibilityFeaturesReady?: (expectedAccountScope?: ActiveAccountScope) => void;
-      onAccessibilityMissing?: (callback: () => void) => () => void;
-      checkAccessibilityTrusted?: () => Promise<boolean>;
 
       // Gemini API key management
       getGeminiKey: () => Promise<string | null>;
@@ -2099,16 +1978,6 @@ declare global {
         managed: { provider: "azure"; context: ManagedEnterpriseRequestContext };
       }) => Promise<{ text?: string; error?: string; code?: string; messageKey?: string }>;
 
-      // Dictation key persistence (file-based for reliable startup)
-      getDictationKey?: () => Promise<string | null>;
-      getActiveDictationKey?: () => Promise<string>;
-      getEffectiveDefaultHotkey?: () => Promise<string>;
-      saveDictationKey?: (key: string) => Promise<void>;
-
-      // Activation mode persistence (file-based for reliable startup)
-      getActivationMode?: () => Promise<"tap" | "push">;
-      saveActivationMode?: (mode: "tap" | "push") => Promise<void>;
-
       // Debug logging
       getLogLevel?: () => Promise<string>;
       log?: (entry: {
@@ -2157,24 +2026,7 @@ declare global {
       getModelCacheRoot?: () => Promise<string>;
       openWhisperModelsFolder?: () => Promise<{ success: boolean; error?: string }>;
 
-      // Windows Push-to-Talk notifications
-      notifyActivationModeChanged?: (mode: "tap" | "push") => void;
-      notifyHotkeyChanged?: (hotkey: string) => void;
-      registerMeetingHotkey?: (hotkey: string) => Promise<{ success: boolean; message?: string }>;
-      notifyFloatingIconAutoHideChanged?: (enabled: boolean) => void;
-      onFloatingIconAutoHideChanged?: (callback: (enabled: boolean) => void) => () => void;
       notifyStartMinimizedChanged?: (enabled: boolean) => void;
-      notifyPanelStartPositionChanged?: (position: string) => void;
-      getMainWindowHorizontalDirection?: () => Promise<"left" | "right">;
-      onMainWindowHorizontalDirectionChanged?: (
-        callback: (direction: "left" | "right") => void
-      ) => () => void;
-      onMainWindowWillResize?: (
-        callback: (resize: {
-          bounds: Electron.Rectangle;
-          anchor: "bottom-left" | "bottom-right" | "center";
-        }) => void
-      ) => () => void;
 
       // Auto-start at login. requiresApproval is macOS-only: SMAppService can
       // register the login item and still leave it awaiting approval in System
@@ -2392,12 +2244,6 @@ declare global {
         segments?: Array<{ text: string; start: number; end: number; speaker?: string }>;
       }>;
 
-      // Usage limit events
-      notifyLimitReached?: (data: { wordsUsed: number; limit: number }) => void;
-      onLimitReached?: (
-        callback: (data: { wordsUsed: number; limit: number }) => void
-      ) => () => void;
-
       // Workspace invitation deep link
       onWorkspaceInvitationToken?: (callback: (token: string) => void) => () => void;
       getPendingInvitationToken?: () => Promise<string | null>;
@@ -2472,9 +2318,6 @@ declare global {
           convertedAt?: string;
         }>;
       }>;
-
-      updateTranslationHotkey?: (hotkey: string) => Promise<{ success: boolean; message: string }>;
-      getTranslationKey?: () => Promise<string>;
 
       // Deepgram Streaming
       deepgramStreamingWarmup?: (options?: { sampleRate?: number; language?: string }) => Promise<{
@@ -2564,8 +2407,6 @@ declare global {
       onCortiFinalTranscript?: (callback: (text: string) => void) => () => void;
       onCortiError?: (callback: (error: string) => void) => () => void;
       onCortiSessionEnd?: (callback: (data: { text?: string }) => void) => () => void;
-
-
 
       // Google Calendar
       gcalStartOAuth?: () => Promise<{ success: boolean; email?: string; error?: string }>;
@@ -2782,30 +2623,6 @@ declare global {
         embeddings: Record<string, number[]>
       ) => Promise<{ success: boolean }>;
 
-      // Dictation realtime streaming
-      dictationRealtimeWarmup?: (
-        options: DictationRealtimeSessionOptions
-      ) => Promise<{ success: boolean } & PolicyFailureMetadata>;
-      dictationRealtimeStart?: (
-        options: DictationRealtimeSessionOptions
-      ) => Promise<{ success: boolean } & PolicyFailureMetadata>;
-      dictationRealtimeSend?: (buffer: ArrayBuffer) => void;
-      dictationRealtimeFinalize?: () => Promise<
-        {
-          success: boolean;
-          text?: string;
-          error?: string;
-        } & Partial<DictationLanguageMetadata>
-      >;
-      dictationRealtimeStop?: () => Promise<{ success: boolean; text: string }>;
-      onDictationRealtimePartial?: (callback: (text: string) => void) => () => void;
-      onDictationRealtimeFinal?: (callback: (text: string) => void) => () => void;
-      onDictationRealtimeLanguage?: (
-        callback: (metadata: DictationLanguageMetadata) => void
-      ) => () => void;
-      onDictationRealtimeError?: (callback: (error: string) => void) => () => void;
-      onDictationRealtimeSessionEnd?: (callback: (data: { text: string }) => void) => () => void;
-
       // Google Calendar event listeners
       onGcalConnectionChanged?: (callback: (data: any) => void) => () => void;
       onGcalEventsSynced?: (callback: (data: any) => void) => () => void;
@@ -2895,26 +2712,6 @@ declare global {
         folderId: number | null;
       } | null>;
       onNoteNavigationPending?: (callback: () => void) => () => void;
-      onPreviewText?: (callback: (text: string) => void) => () => void;
-      onPreviewAppend?: (callback: (text: string) => void) => () => void;
-      onPreviewHold?: (callback: (payload: { showCleanup: boolean }) => void) => () => void;
-      onPreviewResult?: (callback: (payload: { text: string }) => void) => () => void;
-      onPreviewHide?: (callback: () => void) => () => void;
-      startDictationPreview?: (opts: {
-        provider: string;
-        model: string;
-        language?: string;
-        display?: boolean;
-      }) => Promise<{ success: boolean }>;
-      stopDictationPreview?: (opts?: {
-        showCleanup?: boolean;
-        flushed?: boolean;
-      }) => Promise<{ success: boolean; streamed?: boolean; text?: string }>;
-      dismissDictationPreview?: () => Promise<{ success: boolean }>;
-      updateDictationPreview?: (text: string) => Promise<{ success: boolean }>;
-      completeDictationPreview?: (payload: { text?: string }) => Promise<{ success: boolean }>;
-      hideDictationPreview?: () => Promise<{ success: boolean }>;
-      sendDictationPreviewAudio?: (data: ArrayBuffer) => void;
 
       // Sync operations
       getPendingNotes?: (spaceKind?: "private" | "team") => Promise<NoteItem[]>;
@@ -2989,7 +2786,6 @@ declare global {
         deletedNoteIds?: number[];
         error?: string;
       }>;
-
 
       getPendingTranscriptions?: () => Promise<TranscriptionItem[]>;
       getTranscriptionByClientId?: (clientId: string) => Promise<TranscriptionItem | null>;

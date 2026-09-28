@@ -54,43 +54,8 @@ const registerListener = (channel, handlerFactory) => {
 contextBridge.exposeInMainWorld("electronAPI", {
   setOnboardingWindowMode: (mode) => ipcRenderer.invoke("onboarding-set-window-mode", mode),
   setOnboardingActive: (active) => ipcRenderer.invoke("onboarding-set-active", active),
-  markMacAccessibilityFeaturesReady: (expectedAccountScope) =>
-    expectedAccountScope
-      ? ipcRenderer.send("mac-accessibility-features-ready", expectedAccountScope)
-      : ipcRenderer.send("mac-accessibility-features-ready"),
-  beginOnboardingDemo: (session) => ipcRenderer.invoke("onboarding-demo-begin", session),
-  endOnboardingDemo: (id) => ipcRenderer.invoke("onboarding-demo-end", id),
-  stopOnboardingDemo: (id) => ipcRenderer.invoke("onboarding-demo-stop", id),
-  publishOnboardingDemoEvent: (event) => ipcRenderer.invoke("onboarding-demo-publish", event),
-  onOnboardingDemoEvent: registerListener(
-    "onboarding-demo-event",
-    (callback) => (_event, payload) => callback(payload)
-  ),
   testProviderConnection: (config) => ipcRenderer.invoke("test-provider-connection", config),
   pasteText: (text, options) => ipcRenderer.invoke("paste-text", text, options),
-  hideWindow: () => ipcRenderer.invoke("hide-window"),
-  showDictationPanel: () => ipcRenderer.invoke("show-dictation-panel"),
-  captureDictationTarget: () => ipcRenderer.invoke("capture-dictation-target"),
-  onToggleDictation: registerListener("toggle-dictation", (callback) => () => callback()),
-  onToggleTranslation: registerListener("toggle-translation", (callback) => () => callback()),
-  onStartDictation: registerListener("start-dictation", (callback) => () => callback()),
-  onStopDictation: registerListener("stop-dictation", (callback) => () => callback()),
-  onPrepareDictation: registerListener(
-    "prepare-dictation",
-    (callback) => (_event, options) => callback(options)
-  ),
-  onCancelDictationPreparation: registerListener(
-    "cancel-dictation-preparation",
-    (callback) => () => callback()
-  ),
-  onCancelDictation: registerListener("cancel-dictation", (callback) => () => callback()),
-  onDictationForceStopped: registerListener(
-    "dictation-force-stopped",
-    (callback) => (_event, payload) => callback(payload)
-  ),
-  micWarmHoldChanged: (active) => ipcRenderer.send("mic-warm-hold-changed", active),
-  dictationLifecycleStateChanged: (state) =>
-    ipcRenderer.send("dictation-lifecycle-state-changed", state),
 
   // Database functions
   saveTranscription: (text, rawText, options) =>
@@ -231,7 +196,6 @@ contextBridge.exposeInMainWorld("electronAPI", {
   showNoteFile: (noteId) => ipcRenderer.invoke("show-note-file", noteId),
   showFolderInExplorer: (folderName) => ipcRenderer.invoke("show-folder-in-explorer", folderName),
 
-
   // Audio file operations
   selectAudioFile: (options) => ipcRenderer.invoke("select-audio-file", options),
   getFileSize: (filePath) => ipcRenderer.invoke("get-file-size", filePath),
@@ -289,7 +253,6 @@ contextBridge.exposeInMainWorld("electronAPI", {
     ipcRenderer.on("sync-event", listener);
     return () => ipcRenderer.removeListener("sync-event", listener);
   },
-
 
   onTranscriptionAdded: (callback) => {
     const listener = (_event, transcription) => callback?.(transcription);
@@ -452,39 +415,10 @@ contextBridge.exposeInMainWorld("electronAPI", {
   // Cleanup function
   cleanupApp: () => ipcRenderer.invoke("cleanup-app"),
   relaunchApp: () => ipcRenderer.invoke("relaunch-app"),
-  updateHotkey: (hotkey) => ipcRenderer.invoke("update-hotkey", hotkey),
-  setHotkeyListeningMode: (enabled) => ipcRenderer.invoke("set-hotkey-listening-mode", enabled),
-  getHotkeyModeInfo: (hotkey) => ipcRenderer.invoke("get-hotkey-mode-info", hotkey),
-  getHyprlandConfigStatus: () => ipcRenderer.invoke("get-hyprland-config-status"),
-  startWindowDrag: () => ipcRenderer.invoke("start-window-drag"),
-  stopWindowDrag: () => ipcRenderer.invoke("stop-window-drag"),
   startControlPanelDrag: () => ipcRenderer.invoke("start-control-panel-drag"),
   stopControlPanelDrag: () => ipcRenderer.invoke("stop-control-panel-drag"),
-  getMainWindowHorizontalDirection: () =>
-    ipcRenderer.invoke("get-main-window-horizontal-direction"),
-  onMainWindowHorizontalDirectionChanged: registerListener(
-    "main-window-horizontal-direction-changed",
-    (callback) => (_event, direction) => callback(direction)
-  ),
-  onMainWindowWillResize: registerListener(
-    "main-window-will-resize",
-    (callback) => (_event, resize) => callback(resize)
-  ),
-  ackMainWindowResizeMask: (token) => ipcRenderer.send("main-window-resize-mask-ready", token),
-  setMainWindowInteractivity: (interactive) =>
-    ipcRenderer.invoke("set-main-window-interactivity", interactive),
-  setMainWindowInputRegion: (region) => ipcRenderer.invoke("set-main-window-input-region", region),
-  onMainWindowVisibilityChanged: registerListener(
-    "main-window-visibility-changed",
-    (callback) => (_event, visible) => callback(visible)
-  ),
   setNotificationInteractivity: (interactive) =>
     ipcRenderer.invoke("set-notification-interactivity", interactive),
-  resizeMainWindow: (sizeKey) => ipcRenderer.invoke("resize-main-window", sizeKey),
-  resizeAssistantWindowToContent: (surfaceHeight) =>
-    ipcRenderer.invoke("resize-assistant-window-to-content", surfaceHeight),
-  resizeDictationErrorWindowToContent: (surfaceHeight) =>
-    ipcRenderer.invoke("resize-dictation-error-window-to-content", surfaceHeight),
 
   // Update functions
   checkForUpdates: () => ipcRenderer.invoke("check-for-updates"),
@@ -506,11 +440,6 @@ contextBridge.exposeInMainWorld("electronAPI", {
   onUpdateDownloaded: registerListener("update-downloaded"),
   onUpdateDownloadProgress: registerListener("update-download-progress"),
   onUpdateError: registerListener("update-error"),
-
-  // Audio event listeners
-  onCancelHotkeyPressed: registerListener("cancel-hotkey-pressed", (cb) => () => cb()),
-  registerCancelHotkey: (key) => ipcRenderer.invoke("register-cancel-hotkey", key),
-  unregisterCancelHotkey: () => ipcRenderer.invoke("unregister-cancel-hotkey"),
 
   // External link opener
   openExternal: (url) => ipcRenderer.invoke("open-external", url),
@@ -577,16 +506,6 @@ contextBridge.exposeInMainWorld("electronAPI", {
   saveVertexApiKey: (key) => ipcRenderer.invoke("save-vertex-api-key", key),
   testEnterpriseConnection: (provider, config) =>
     ipcRenderer.invoke("test-enterprise-connection", provider, config),
-
-  // Dictation key persistence (file-based for reliable startup)
-  getDictationKey: () => ipcRenderer.invoke("get-dictation-key"),
-  getActiveDictationKey: () => ipcRenderer.invoke("get-active-dictation-key"),
-  getEffectiveDefaultHotkey: () => ipcRenderer.invoke("get-effective-default-hotkey"),
-  saveDictationKey: (key) => ipcRenderer.invoke("save-dictation-key", key),
-
-  // Activation mode persistence (file-based for reliable startup)
-  getActivationMode: () => ipcRenderer.invoke("get-activation-mode"),
-  saveActivationMode: (mode) => ipcRenderer.invoke("save-activation-mode", mode),
 
   saveAllKeysToEnv: () => ipcRenderer.invoke("save-all-keys-to-env"),
   syncStartupPreferences: (prefs) => ipcRenderer.invoke("sync-startup-preferences", prefs),
@@ -873,37 +792,6 @@ contextBridge.exposeInMainWorld("electronAPI", {
     (callback) => () => callback()
   ),
 
-  // Dictation realtime streaming
-  dictationRealtimeWarmup: (options) => ipcRenderer.invoke("dictation-realtime-warmup", options),
-  dictationRealtimeStart: (options) => ipcRenderer.invoke("dictation-realtime-start", options),
-  dictationRealtimeSend: (buffer) => ipcRenderer.send("dictation-realtime-send", buffer),
-  dictationRealtimeFinalize: () => ipcRenderer.invoke("dictation-realtime-finalize"),
-  dictationRealtimeStop: () => ipcRenderer.invoke("dictation-realtime-stop"),
-  onDictationRealtimePartial: registerListener(
-    "dictation-realtime-partial",
-    (callback) => (_event, data) => callback(data)
-  ),
-  onDictationRealtimeFinal: registerListener(
-    "dictation-realtime-final",
-    (callback) => (_event, data) => callback(data)
-  ),
-  onDictationRealtimeLanguage: registerListener(
-    "dictation-realtime-language",
-    (callback) => (_event, data) => callback(data)
-  ),
-  onDictationRealtimeError: registerListener(
-    "dictation-realtime-error",
-    (callback) => (_event, data) => callback(data)
-  ),
-  onDictationRealtimeSessionEnd: registerListener(
-    "dictation-realtime-session-end",
-    (callback) => (_event, data) => callback(data)
-  ),
-
-  // Usage limit events (for showing UpgradePrompt in ControlPanel)
-  notifyLimitReached: (data) => ipcRenderer.send("limit-reached", data),
-  onLimitReached: registerListener("limit-reached", (callback) => (_event, data) => callback(data)),
-
   // Workspace invitation deep link
   onWorkspaceInvitationToken: registerListener(
     "workspace-invitation-token",
@@ -911,72 +799,8 @@ contextBridge.exposeInMainWorld("electronAPI", {
   ),
   getPendingInvitationToken: () => ipcRenderer.invoke("get-pending-invitation-token"),
 
-  // Globe key listener for hotkey capture (macOS only)
-  onGlobeKeyPressed: (callback) => {
-    const listener = () => callback?.();
-    ipcRenderer.on("globe-key-pressed", listener);
-    return () => ipcRenderer.removeListener("globe-key-pressed", listener);
-  },
-  onGlobeKeyReleased: (callback) => {
-    const listener = () => callback?.();
-    ipcRenderer.on("globe-key-released", listener);
-    return () => ipcRenderer.removeListener("globe-key-released", listener);
-  },
-
-  // Hotkey registration events (for notifying user when hotkey fails)
-  onHotkeyFallbackUsed: (callback) => {
-    const listener = (_event, data) => callback?.(data);
-    ipcRenderer.on("hotkey-fallback-used", listener);
-    return () => ipcRenderer.removeListener("hotkey-fallback-used", listener);
-  },
-  onHotkeyRegistrationFailed: (callback) => {
-    const listener = (_event, data) => callback?.(data);
-    ipcRenderer.on("hotkey-registration-failed", listener);
-    return () => ipcRenderer.removeListener("hotkey-registration-failed", listener);
-  },
-  onSettingUpdated: (callback) => {
-    const listener = (_event, data) => callback?.(data);
-    ipcRenderer.on("setting-updated", listener);
-    return () => ipcRenderer.removeListener("setting-updated", listener);
-  },
-  onDictationKeyActive: (callback) => {
-    const listener = (_event, key) => callback?.(key);
-    ipcRenderer.on("dictation-key-active", listener);
-    return () => ipcRenderer.removeListener("dictation-key-active", listener);
-  },
-  onWindowsPushToTalkUnavailable: registerListener("windows-ptt-unavailable"),
-  onLinuxPttPermissionDenied: registerListener(
-    "linux-ptt-permission-denied",
-    (callback) => () => callback()
-  ),
-
   // Settings shortcut (Cmd+, / Ctrl+,)
   onShowSettings: registerListener("show-settings", (callback) => () => callback()),
-
-  // Accessibility permission events (macOS)
-  onAccessibilityMissing: (callback) => {
-    const listener = () => callback?.();
-    ipcRenderer.on("accessibility-missing", listener);
-    return () => ipcRenderer.removeListener("accessibility-missing", listener);
-  },
-  checkAccessibilityTrusted: () => ipcRenderer.invoke("check-accessibility-trusted"),
-
-  // Notify main process of activation mode changes (for Windows Push-to-Talk)
-  notifyActivationModeChanged: (mode) => ipcRenderer.send("activation-mode-changed", mode),
-  notifyHotkeyChanged: (hotkey) => ipcRenderer.send("hotkey-changed", hotkey),
-  registerMeetingHotkey: (hotkey) => ipcRenderer.invoke("register-meeting-hotkey", hotkey),
-
-  // Floating icon auto-hide
-  notifyFloatingIconAutoHideChanged: (enabled) =>
-    ipcRenderer.send("floating-icon-auto-hide-changed", enabled),
-  onFloatingIconAutoHideChanged: registerListener(
-    "floating-icon-auto-hide-changed",
-    (callback) => (_event, enabled) => callback(enabled)
-  ),
-
-  // Panel start position
-  notifyPanelStartPositionChanged: (position) =>
-    ipcRenderer.send("panel-start-position-changed", position),
 
   // Start minimized
   notifyStartMinimizedChanged: (enabled) => ipcRenderer.send("start-minimized-changed", enabled),
@@ -985,34 +809,8 @@ contextBridge.exposeInMainWorld("electronAPI", {
   getAutoStartEnabled: () => ipcRenderer.invoke("get-auto-start-enabled"),
   setAutoStartEnabled: (enabled) => ipcRenderer.invoke("set-auto-start-enabled", enabled),
 
-  updateTranslationHotkey: (hotkey) => ipcRenderer.invoke("update-translation-hotkey", hotkey),
-  getTranslationKey: () => ipcRenderer.invoke("get-translation-key"),
-  onPreviewText: registerListener("preview-text", (callback) => (_event, text) => callback(text)),
-  onPreviewAppend: registerListener(
-    "preview-append",
-    (callback) => (_event, text) => callback(text)
-  ),
-  onPreviewHold: registerListener(
-    "preview-hold",
-    (callback) => (_event, payload) => callback(payload)
-  ),
-  onPreviewResult: registerListener(
-    "preview-result",
-    (callback) => (_event, payload) => callback(payload)
-  ),
-  onPreviewHide: registerListener("preview-hide", (callback) => () => callback()),
-  startDictationPreview: (opts) => ipcRenderer.invoke("start-dictation-preview", opts),
-  stopDictationPreview: (opts) => ipcRenderer.invoke("stop-dictation-preview", opts),
-  dismissDictationPreview: () => ipcRenderer.invoke("dismiss-dictation-preview"),
-  updateDictationPreview: (text) => ipcRenderer.invoke("update-dictation-preview", text),
-  completeDictationPreview: (payload) => ipcRenderer.invoke("complete-dictation-preview", payload),
-  hideDictationPreview: () => ipcRenderer.invoke("hide-dictation-preview"),
-  sendDictationPreviewAudio: (data) => ipcRenderer.send("dictation-preview-audio", data),
   acquireRecordingLock: (pipeline) => ipcRenderer.invoke("acquire-recording-lock", pipeline),
   releaseRecordingLock: (pipeline) => ipcRenderer.invoke("release-recording-lock", pipeline),
-
-
-
 
   // Sync operations
   getPendingNotes: (spaceKind) => ipcRenderer.invoke("db-get-pending-notes", spaceKind),
@@ -1080,7 +878,6 @@ contextBridge.exposeInMainWorld("electronAPI", {
   hardDeleteFolder: (id) => ipcRenderer.invoke("db-hard-delete-folder", id),
   relocateRevokedFolder: (id, privateSpaceId, preserveFolder) =>
     ipcRenderer.invoke("db-relocate-revoked-folder", id, privateSpaceId, preserveFolder),
-
 
   getPendingTranscriptions: () => ipcRenderer.invoke("db-get-pending-transcriptions"),
   getTranscriptionByClientId: (clientId) =>

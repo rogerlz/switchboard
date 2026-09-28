@@ -1,7 +1,7 @@
 import { useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import { useToast } from "./ui/useToast";
-import { isDictationPanelWindow } from "../utils/windowContext";
+import { isControlPanelWindow } from "../utils/windowContext";
 
 /**
  * One-time notice that the legacy-layout migration cleared a GPU pack, which
@@ -14,9 +14,9 @@ export default function GpuPackMigrationToastListener() {
   const { toast } = useToast();
 
   useEffect(() => {
-    // Only the control panel shows it — the dictation panel is transient and
+    // Only the control panel shows it — the other windows are transient and
     // would burn the one-time notice where it's least likely to be read.
-    if (isDictationPanelWindow()) return;
+    if (!isControlPanelWindow()) return;
     let cancelled = false;
     window.electronAPI?.getGpuPackMigrationNotice?.().then((notice) => {
       if (cancelled || !notice) return;

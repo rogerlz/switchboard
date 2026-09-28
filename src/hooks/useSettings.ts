@@ -62,14 +62,8 @@ export interface CleanupSettings {
   cleanupRemoteUrl: string;
 }
 
-export interface HotkeySettings {
-  dictationKey: string;
-  /** Hotkeys actually registered by the main process (may be a subset of
-   * dictationKey, e.g. primary-only on GNOME/KDE/Hyprland). Display-only. */
-  activeDictationKey: string | null;
-  meetingKey: string;
+export interface MeetingLayoutSettings {
   meetingHotkeyLayoutMode: "side-panel" | "full-width";
-  activationMode: "tap" | "push";
 }
 
 export interface OnboardingSettings {
@@ -330,8 +324,6 @@ function useSettingsInternal() {
     tinfoilApiKey: store.tinfoilApiKey,
     deepgramApiKey: store.deepgramApiKey,
     assemblyaiApiKey: store.assemblyaiApiKey,
-    dictationKey: store.dictationKey,
-    meetingKey: store.meetingKey,
     meetingHotkeyLayoutMode: store.meetingHotkeyLayoutMode,
     setMeetingHotkeyLayoutMode: store.setMeetingHotkeyLayoutMode,
     theme: store.theme,
@@ -373,8 +365,6 @@ function useSettingsInternal() {
     setCustomTranscriptionApiKey: store.setCustomTranscriptionApiKey,
     cleanupCustomApiKey: store.cleanupCustomApiKey,
     setCleanupCustomApiKey: store.setCleanupCustomApiKey,
-    setDictationKey: store.setDictationKey,
-    setMeetingKey: store.setMeetingKey,
     onboardingUseCases: store.onboardingUseCases,
     setOnboardingUseCases: store.setOnboardingUseCases,
     onboardingUseCaseNote: store.onboardingUseCaseNote,
@@ -382,8 +372,6 @@ function useSettingsInternal() {
     spokenLanguages: store.spokenLanguages,
     setSpokenLanguages: store.setSpokenLanguages,
     setTheme: store.setTheme,
-    activationMode: store.activationMode,
-    setActivationMode: store.setActivationMode,
     notificationsEnabled: store.notificationsEnabled,
     setNotificationsEnabled: store.setNotificationsEnabled,
     notifyMeetingDetection: store.notifyMeetingDetection,
@@ -396,12 +384,8 @@ function useSettingsInternal() {
     setAudioCuesEnabled: store.setAudioCuesEnabled,
     pauseMediaOnDictation: store.pauseMediaOnDictation,
     setPauseMediaOnDictation: store.setPauseMediaOnDictation,
-    floatingIconAutoHide: store.floatingIconAutoHide,
-    setFloatingIconAutoHide: store.setFloatingIconAutoHide,
     startMinimized: store.startMinimized,
     setStartMinimized: store.setStartMinimized,
-    panelStartPosition: store.panelStartPosition,
-    setPanelStartPosition: store.setPanelStartPosition,
     microphoneSelectionMode: store.microphoneSelectionMode,
     preferBuiltInMic: store.preferBuiltInMic,
     selectedMicDeviceId: store.selectedMicDeviceId,

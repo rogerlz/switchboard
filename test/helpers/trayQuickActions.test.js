@@ -13,37 +13,23 @@ Module._load = function loadTrayWithStubs(request, parent, isMain) {
 const TrayManager = require("../../src/helpers/tray");
 Module._load = originalLoad;
 
-function createTrayManager(calls, { dictating = false } = {}) {
+function createTrayManager(calls) {
   const trayManager = new TrayManager();
   trayManager.windowManager = {
-    isDictationPanelVisible: () => false,
-    isDictating: () => dictating,
-    sendStartDictation: () => calls.push("start-dictation"),
-    sendStopDictation: () => calls.push("stop-dictation"),
     startManualMeeting: () => calls.push("meeting"),
   };
   return trayManager;
 }
 
-test("the tray menu leads with the dictation pill's quick actions", () => {
+test("the tray menu leads with starting a meeting recording", () => {
   const calls = [];
-  const [listen, meeting, separator] = createTrayManager(calls).buildContextMenuTemplate();
+  const [meeting, separator] = createTrayManager(calls).buildContextMenuTemplate();
 
   assert.deepEqual(
-    [listen.label, meeting.label, separator.type],
-    ["app.commandMenu.startListening", "app.commandMenu.startMeetingRecording", "separator"]
+    [meeting.label, separator.type],
+    ["app.commandMenu.startMeetingRecording", "separator"]
   );
 
-  listen.click();
   meeting.click();
-  assert.deepEqual(calls, ["start-dictation", "meeting"]);
-});
-
-test("the tray's listen item stops the recording it reflects", () => {
-  const calls = [];
-  const [listen] = createTrayManager(calls, { dictating: true }).buildContextMenuTemplate();
-
-  assert.equal(listen.label, "app.commandMenu.stopListening");
-  listen.click();
-  assert.deepEqual(calls, ["stop-dictation"]);
+  assert.deepEqual(calls, ["meeting"]);
 });

@@ -9,7 +9,7 @@ const ipcHandlersSource = fs.readFileSync(
 );
 
 const cleanupHandler = ipcHandlersSource.match(
-  /ipcMain\.handle\("cleanup-app", async \(event\) => \{([\s\S]*?)ipcMain\.handle\("update-hotkey"/
+  /ipcMain\.handle\("cleanup-app", async \(event\) => \{([\s\S]*?)ipcMain\.handle\("start-control-panel-drag"/
 );
 
 test("explicit device cleanup covers models, credentials, caches, and browser settings", () => {

@@ -101,17 +101,6 @@ test("meeting auto-end listener strips the event and can unsubscribe", () => {
   assert.equal(listeners.has("meeting-auto-end-requested"), false);
 });
 
-
-test("dictation lifecycle reports reach the main-process recording gate", () => {
-  const { api, sends } = loadPreloadApi();
-
-  api.dictationLifecycleStateChanged("recording");
-
-  assert.deepEqual(sends, [["dictation-lifecycle-state-changed", "recording"]]);
-});
-
-
-
 test("cloud reasoning cancellation is forwarded to the main process", () => {
   const { api, sends } = loadPreloadApi();
 
@@ -134,17 +123,4 @@ test("cloud transcription cancellation is forwarded to the main process", () => 
   api.cancelCloudTranscription();
 
   assert.deepEqual(sends, [["cloud-transcribe-cancel"]]);
-});
-
-
-test("prepare-dictation forwards the input kind without the Electron event", () => {
-  const { api, listeners } = loadPreloadApi();
-  const received = [];
-  const dispose = api.onPrepareDictation((options) => received.push(options));
-
-  listeners.get("prepare-dictation")?.({ senderId: 1 }, { inputKind: "translation" });
-
-  dispose();
-  assert.deepEqual(received, [{ inputKind: "translation" }]);
-  assert.equal(listeners.has("prepare-dictation"), false);
 });

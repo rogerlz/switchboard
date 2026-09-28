@@ -1,5 +1,3 @@
-const { OrukeetStreaming } = require("./orukeetStreaming");
-const { connectManagedOrukeet } = require("./orukeetCloudSession");
 const { ipcMain, app, shell, BrowserWindow, systemPreferences, net, session } = require("electron");
 const path = require("path");
 const fs = require("fs");
@@ -80,18 +78,12 @@ const diarizationHost = (endpoint) => {
 const { resolveLocalServerNeeds, shouldStopLocalServer } = require("./localServerPolicy");
 const autoStart = require("./autoStart");
 const { getRelaunchOptions, getRelaunchWaiter } = require("./autoStartPolicy");
-const HyprlandShortcutManager = require("./hyprlandShortcut");
 const AssemblyAiStreaming = require("./assemblyAiStreaming");
 const { i18nMain, changeLanguage } = require("./i18nMain");
 const DeepgramStreaming = require("./deepgramStreaming");
 const { GeminiLiveStreaming, GEMINI_LIVE_MODEL } = require("./geminiLiveStreaming");
 const CortiStreaming = require("./cortiStreaming");
-const OpenAIRealtimeStreaming = require("./openaiRealtimeStreaming");
 const { getCortiToken } = require("./cortiAuth");
-const { ONBOARDING_DEMO_KINDS, ONBOARDING_DEMO_STATUSES } = require("./onboardingInputPolicy");
-const { focusWindowsHotkeyCaptureWindow } = require("./hotkeyCaptureFocus");
-const { createTinfoilRealtimeSocket } = require("./tinfoilSecureClient");
-const { TINFOIL_REALTIME_MODEL } = require("./tinfoilRealtimeStreaming");
 const { getTinfoilChatModels } = require("./tinfoilCatalog");
 const { transcribeWithTinfoil } = require("./tinfoilTranscription");
 const { transcribeWithGemini } = require("./geminiTranscription");
@@ -595,8 +587,6 @@ class IPCHandlers {
     this.diarizationManager = managers.diarizationManager;
     this.windowManager = managers.windowManager;
     this.updateManager = managers.updateManager;
-    this.windowsKeyManager = managers.windowsKeyManager;
-    this.linuxKeyManager = managers.linuxKeyManager;
     this.textEditMonitor = managers.textEditMonitor;
     this.selectionManager = managers.selectionManager;
     this.getTrayManager = managers.getTrayManager;
@@ -620,25 +610,17 @@ class IPCHandlers {
     this._cloudReasonRequests = new AgentStreamRequestRegistry();
     this._cloudTranscriptionRequests = new AgentStreamRequestRegistry();
     this._enterpriseReasoningRequests = new AgentStreamRequestRegistry();
-    // webContents id -> its release listener, for renderers holding the mic open.
-    this._micHoldSenders = new Map();
     this.assemblyAiStreaming = null;
     this.deepgramStreaming = null;
     this.geminiStreaming = null;
     this.cortiStreaming = null;
-    this._dictationStreaming = null;
-    this._dictationConnectPromise = null;
-    this._dictationIdleTimer = null;
-    this._dictationPreviewEnabled = false;
     this._meetingMicStreaming = null;
     this._meetingSystemStreaming = null;
-    this._hotkeyCaptureMode = false;
     this._autoLearnEnabled = true; // Default on, synced from renderer
     this._autoLearnDebounceTimer = null;
     this._autoLearnLatestData = null;
     this._textEditHandler = null;
     this._activeRecordingPipeline = null;
-    this._onboardingDemoSession = null;
     this.audioStorageManager = new AudioStorageManager();
     this.localModelDownloadStatus = new LocalModelDownloadStatus();
     this._retentionCleanupInterval = null;
@@ -799,22 +781,6 @@ class IPCHandlers {
     return backfillPromise;
   }
 
-  // The dictation slot reports its own changes from the renderer. Slots
-  // registered through IPC have to announce theirs here so macOS can re-derive
-  // which keys the native Globe listener owns.
-  _notifyHotkeyChanged(hotkey) {
-    ipcMain.emit("hotkey-changed", null, hotkey);
-  }
-
-  _releaseMicHold(sender) {
-    const release = this._micHoldSenders.get(sender.id);
-    if (!release) return;
-    this._micHoldSenders.delete(sender.id);
-    sender.off("destroyed", release);
-    sender.off("did-finish-load", release);
-    this.meetingDetectionEngine?.setMicWarmHold(this._micHoldSenders.size > 0);
-  }
-
   _getWhisperVadSettings() {
     const current = this.whisperVadSettings || {};
     return {
@@ -872,7 +838,6 @@ class IPCHandlers {
     });
   }
 
-
   _resolveWhisperVadOptions(context) {
     const settings = this._getWhisperVadSettings();
     const {
@@ -886,7 +851,6 @@ class IPCHandlers {
       vadConfig,
     };
   }
-
 
   _mirrorDeleteFolderIfUnshared(folderName) {
     if (!this._noteFilesEnabled) return;
@@ -1204,8 +1168,6 @@ class IPCHandlers {
         // still has case-variant dupes), so renderers don't flash ghost rows.
         broadcastToWindows("dictionary-updated", this.databaseManager.getDictionary());
 
-        // Show the overlay so the toast is visible (it may have been hidden after dictation)
-        this.windowManager.showDictationPanel();
         broadcastToWindows("corrections-learned", corrections);
         debugLogger.debug("[AutoLearn] Saved corrections", { corrections });
       }
@@ -1304,67 +1266,9 @@ class IPCHandlers {
       this.windowManager.setOnboardingWindowMode(mode)
     );
 
-    // WindowManager owns every teardown path for a demo (id-matched end,
-    // onboarding-set-active(false), control panel closed); without this hook a
-    // renderer crash mid-demo would leave the session set and broadcast every
-    // later dictation's transcripts on onboarding-demo-event forever.
-    this.windowManager.onOnboardingDemoTeardown = () => {
-      this._onboardingDemoSession = null;
-    };
-
     ipcMain.handle("onboarding-set-active", (_event, active) => {
       if (typeof active !== "boolean") return false;
       return this.windowManager.setOnboardingActive(active);
-    });
-
-    ipcMain.handle("onboarding-demo-begin", (_event, session) => {
-      if (
-        !session ||
-        typeof session.id !== "string" ||
-        session.id.length > 128 ||
-        !ONBOARDING_DEMO_KINDS.has(session.kind)
-      ) {
-        return false;
-      }
-      this._onboardingDemoSession = {
-        id: session.id,
-        kind: session.kind,
-        startedAt: Date.now(),
-      };
-      return this.windowManager.beginOnboardingDemo(session.kind);
-    });
-
-    ipcMain.handle("onboarding-demo-end", (_event, id) => {
-      if (this._onboardingDemoSession?.id === id) {
-        // Session cleanup rides on the teardown hook above.
-        this.windowManager.endOnboardingDemo();
-      }
-      return true;
-    });
-
-    ipcMain.handle("onboarding-demo-stop", (_event, id) => {
-      if (this._onboardingDemoSession?.id !== id) return false;
-      return this.windowManager.stopOnboardingDemoRecording();
-    });
-
-    ipcMain.handle("onboarding-demo-publish", (_event, event) => {
-      const session = this._onboardingDemoSession;
-      if (!session || !event || event.kind !== session.kind) return false;
-      if (!ONBOARDING_DEMO_STATUSES.has(event.status)) return false;
-      const text = typeof event.text === "string" ? event.text.slice(0, 20000) : undefined;
-      const message = typeof event.message === "string" ? event.message.slice(0, 500) : undefined;
-      const level = Number.isFinite(event.level)
-        ? Math.min(1, Math.max(0, event.level))
-        : undefined;
-      broadcastToWindows("onboarding-demo-event", {
-        demoId: session.id,
-        kind: session.kind,
-        status: event.status,
-        text,
-        message,
-        level,
-      });
-      return true;
     });
 
     ipcMain.handle("test-provider-connection", async (_event, config) => {
@@ -1455,56 +1359,9 @@ class IPCHandlers {
       this.meetingDetectionEngine?.setMeetingModeActive(false);
     });
 
-    ipcMain.handle("hide-window", () => {
-      this.windowManager.hideDictationPanel();
-    });
-
-    ipcMain.handle("show-dictation-panel", () => {
-      this.windowManager.showDictationPanel({ reposition: true });
-    });
-
-    ipcMain.handle("capture-dictation-target", async () => {
-      const pid = (await this.textEditMonitor?.captureTargetPid?.()) ?? null;
-      await this.selectionManager?.captureTarget?.();
-      return { success: true, pid };
-    });
-
-    ipcMain.handle("force-stop-dictation", () => {
-      if (this.windowManager?.forceStopMacCompoundPush) {
-        this.windowManager.forceStopMacCompoundPush("manual");
-      }
-      return { success: true };
-    });
-
-    ipcMain.handle("set-main-window-interactivity", (event, shouldCapture) => {
-      this.windowManager.setMainWindowInteractivity(Boolean(shouldCapture));
-      return { success: true };
-    });
-
-    ipcMain.handle("set-main-window-input-region", (event, region) => {
-      if (event.sender !== this.windowManager.mainWindow?.webContents) return null;
-      return this.windowManager.setMainWindowInputRegion(region);
-    });
-
-    ipcMain.handle("get-main-window-horizontal-direction", () => {
-      return this.windowManager.getMainWindowHorizontalDirection();
-    });
-
     ipcMain.handle("set-notification-interactivity", (event, interactive) => {
       this.windowManager.setNotificationInteractivity(event.sender, Boolean(interactive));
       return { success: true };
-    });
-
-    ipcMain.handle("resize-main-window", (event, sizeKey) => {
-      return this.windowManager.resizeMainWindow(sizeKey);
-    });
-
-    ipcMain.handle("resize-assistant-window-to-content", (event, surfaceHeight) => {
-      return this.windowManager.resizeAssistantWindowToContent(surfaceHeight);
-    });
-
-    ipcMain.handle("resize-dictation-error-window-to-content", (event, surfaceHeight) => {
-      return this.windowManager.resizeDictationErrorWindowToContent(surfaceHeight);
     });
 
     for (const k of BYOK_API_KEYS) {
@@ -1707,7 +1564,7 @@ class IPCHandlers {
       "retention-settings-changed",
       createRetentionSettingsHandler({
         getCurrentSettings: () => this._retentionSettings,
-        getOwner: () => this.windowManager.mainWindow?.webContents,
+        getOwner: () => this.windowManager.controlPanelWindow?.webContents,
         hasSynced: () => this._retentionSettingsSynced,
         onSettingsChanged: (settings) => {
           this._retentionSettings = settings;
@@ -1743,40 +1600,6 @@ class IPCHandlers {
     ipcMain.handle("get-transcription-by-id", async (event, id) => {
       return this.databaseManager.getTranscriptionById(id);
     });
-
-    // Every window's AudioManager can hold the mic open outside a recording, so
-    // gate the audio-evidence meeting detector until they all release. A
-    // renderer that reloads or goes away releases implicitly — otherwise a
-    // crash mid-hold would gate detection for the rest of the session.
-    ipcMain.on("mic-warm-hold-changed", (event, active) => {
-      if (!active) {
-        this._releaseMicHold(event.sender);
-        return;
-      }
-      if (this._micHoldSenders.has(event.sender.id)) return;
-      const release = () => this._releaseMicHold(event.sender);
-      this._micHoldSenders.set(event.sender.id, release);
-      event.sender.on("destroyed", release);
-      event.sender.on("did-finish-load", release);
-      this.meetingDetectionEngine?.setMicWarmHold(true);
-    });
-
-    // Hotkey handlers run in main, while AudioManager owns the real lifecycle
-    // in the dictation renderer. Only confirmed renderer state may change the
-    // main-process recording gate; raw key presses are merely requests and can
-    // be declined while a transcript is still being finalized.
-    ipcMain.on("dictation-lifecycle-state-changed", (event, state) => {
-      const dictationWindow = this.windowManager.mainWindow;
-      if (
-        !dictationWindow ||
-        dictationWindow.isDestroyed() ||
-        event.sender !== dictationWindow.webContents
-      ) {
-        return;
-      }
-      this.windowManager.setDictationLifecycleState(state);
-    });
-
 
     // Dictionary handlers
     ipcMain.on("auto-learn-changed", (_event, enabled) => {
@@ -2617,34 +2440,12 @@ class IPCHandlers {
     });
 
     ipcMain.handle("paste-text", async (event, text, options) => {
-      // An onboarding demo already puts the transcript in its own textarea from
-      // the demo event, and that textarea is what has focus — pasting on top of
-      // it appends the same sentence a second time. This is a successful no-op,
-      // not a completed paste, so callers can avoid reporting paste-dependent
-      // fallbacks as if text reached another application.
-      if (this.windowManager?.isOnboardingDemoActive()) {
-        return { success: true, pasted: false };
-      }
-
-      const mainWindow = this.windowManager?.mainWindow;
       const targetPid = this.textEditMonitor?.lastTargetPid || null;
 
-      // Activating the target by PID is more reliable than hide()'s implicit
-      // focus hand-off for Chromium apps like Claude desktop and Brave (#668).
-      let activated = false;
+      // Activating the target by PID is more reliable than an implicit focus
+      // hand-off for Chromium apps like Claude desktop and Brave (#668).
       if (process.platform === "darwin" && this.textEditMonitor) {
-        activated = await this.textEditMonitor.activateTargetPid();
-      }
-
-      if (!activated && mainWindow && !mainWindow.isDestroyed() && mainWindow.isFocused()) {
-        if (process.platform === "darwin") {
-          mainWindow.hide();
-          await new Promise((resolve) => setTimeout(resolve, 120));
-          mainWindow.showInactive();
-        } else {
-          mainWindow.blur();
-          await new Promise((resolve) => setTimeout(resolve, 80));
-        }
+        await this.textEditMonitor.activateTargetPid();
       }
 
       // Smart spacing (#856): append a trailing space so the next paste's leading
@@ -3534,7 +3335,6 @@ class IPCHandlers {
       const fs = require("fs");
       const os = require("os");
       const errors = [];
-      const mainWindow = this.windowManager.mainWindow;
 
       // Stop services before deleting files they hold open
       try {
@@ -3703,12 +3503,10 @@ class IPCHandlers {
       }
 
       // Clear localStorage
-      if (mainWindow?.webContents) {
-        try {
-          await mainWindow.webContents.executeJavaScript("localStorage.clear()");
-        } catch (e) {
-          errors.push(`localStorage: ${e.message}`);
-        }
+      try {
+        await event.sender.executeJavaScript("localStorage.clear()");
+      } catch (e) {
+        errors.push(`localStorage: ${e.message}`);
       }
 
       if (errors.length > 0) {
@@ -3716,255 +3514,6 @@ class IPCHandlers {
       }
 
       return { success: errors.length === 0, message: "Cleanup completed", errors };
-    });
-
-    ipcMain.handle("update-hotkey", async (event, hotkey) => {
-      return await this.windowManager.updateHotkey(hotkey);
-    });
-
-    ipcMain.handle("set-hotkey-listening-mode", async (event, enabled) => {
-      if (enabled) {
-        const captureWindow = BrowserWindow.fromWebContents(event.sender);
-        // Only the control panel owns editable hotkey fields. Refocusing the
-        // sender before the idempotence check also repairs a stale capture-mode
-        // flag after Windows has moved foreground focus to another window.
-        if (captureWindow === this.windowManager.controlPanelWindow) {
-          focusWindowsHotkeyCaptureWindow(captureWindow);
-        }
-      }
-      if (this._hotkeyCaptureMode === enabled) return { success: true, skipped: true };
-      this._hotkeyCaptureMode = enabled;
-      this.windowManager.setHotkeyListeningMode(enabled);
-      ipcMain.emit("hotkey-listening-mode-changed", null, enabled);
-      const hotkeyManager = this.windowManager.hotkeyManager;
-
-      // Restore from slot state only. A freshly captured hotkey is registered by
-      // its own update IPC (invoked before this one); re-binding it here would
-      // overwrite the primary on DE backends or leak untracked registrations.
-      const effectiveHotkey = hotkeyManager.getCurrentHotkey();
-
-      const {
-        isGlobeLikeHotkey,
-        isModifierOnlyHotkey,
-        isRightSideModifier,
-        isMouseButtonHotkey,
-      } = require("./hotkeyManager");
-      const usesNativeListener = (hotkey) =>
-        !hotkey ||
-        isGlobeLikeHotkey(hotkey) ||
-        isMouseButtonHotkey(hotkey) ||
-        isModifierOnlyHotkey(hotkey) ||
-        isRightSideModifier(hotkey);
-
-      if (enabled) {
-        // Entering capture mode — unregister ALL slots so none intercept keypresses.
-        // Dictation is always active; meeting and agent may or may not be set.
-        const allSlots = hotkeyManager.slots;
-        for (const [slot, info] of allSlots) {
-          // Native-listener entries (null accelerator) are handled by stopping
-          // the key listeners below.
-          for (const accel of info?.accelerators || []) {
-            if (!accel) continue;
-            debugLogger.log(
-              `[IPC] Unregistering globalShortcut "${accel}" (slot "${slot}") for capture mode`
-            );
-            const { globalShortcut } = require("electron");
-            try {
-              globalShortcut.unregister(accel);
-            } catch {}
-          }
-        }
-
-        // On Windows, stop the Windows key listener
-        if (process.platform === "win32" && this.windowsKeyManager) {
-          debugLogger.log("[IPC] Stopping Windows key listener for hotkey capture mode");
-          this.windowsKeyManager.stop();
-        }
-
-        // On Linux, stop the Linux key listener
-        if (process.platform === "linux" && this.linuxKeyManager) {
-          debugLogger.log("[IPC] Stopping Linux key listener for hotkey capture mode");
-          this.linuxKeyManager.stop();
-        }
-
-        // On GNOME, unregister all native keybindings during capture
-        if (hotkeyManager.isUsingGnome() && hotkeyManager.gnomeManager) {
-          await hotkeyManager.gnomeManager.unregisterPushToTalk();
-          for (const slot of [...hotkeyManager.gnomeManager.registeredSlots]) {
-            debugLogger.log(
-              `[IPC] Unregistering GNOME keybinding (slot "${slot}") for capture mode`
-            );
-            await hotkeyManager.gnomeManager.unregisterKeybinding(slot).catch((err) => {
-              debugLogger.warn(`[IPC] Failed to unregister GNOME slot "${slot}":`, err.message);
-            });
-          }
-        }
-
-        // On Hyprland Wayland, unregister the keybinding during capture
-        if (hotkeyManager.isUsingHyprland() && hotkeyManager.hyprlandManager) {
-          debugLogger.log("[IPC] Unregistering Hyprland keybinding for hotkey capture mode");
-          const unregistered = await hotkeyManager.hyprlandManager
-            .unregisterKeybinding()
-            .catch((err) => {
-              debugLogger.warn("[IPC] Failed to unregister Hyprland keybinding:", err.message);
-              return false;
-            });
-          if (!unregistered) {
-            debugLogger.warn("[IPC] Hyprland keybinding remained active during capture");
-          }
-        }
-      } else {
-        // Exiting capture mode - re-register globalShortcut if not already registered
-        // Skip for KDE/GNOME/Hyprland — updateHotkey handles re-registration via native path
-        const usesNativePath =
-          hotkeyManager.isUsingKDE() ||
-          hotkeyManager.isUsingGnome() ||
-          hotkeyManager.isUsingHyprland();
-        if (!usesNativePath) {
-          const { globalShortcut } = require("electron");
-          // Re-register every globalShortcut-backed dictation hotkey (the slot
-          // may hold several).
-          for (const hk of hotkeyManager.getSlotHotkeys("dictation")) {
-            if (!hk || usesNativeListener(hk)) continue;
-            const accelerator = hk;
-            if (!globalShortcut.isRegistered(accelerator)) {
-              debugLogger.log(
-                `[IPC] Re-registering globalShortcut "${accelerator}" after capture mode`
-              );
-              const callback = this.windowManager.createHotkeyCallback();
-              const registered = globalShortcut.register(accelerator, () => callback(hk));
-              if (!registered) {
-                debugLogger.warn(
-                  `[IPC] Failed to re-register globalShortcut "${accelerator}" after capture mode`
-                );
-              }
-            }
-          }
-        }
-
-        // Re-sync native key listeners (Windows/Linux) across all hotkey slots now
-        // that capture is done. Idempotent — reads the current slot hotkeys.
-        this.windowManager.reconcileNativeKeyListeners();
-
-        // On GNOME, re-register the keybinding with the effective hotkey
-        if (hotkeyManager.isUsingGnome() && hotkeyManager.gnomeManager && effectiveHotkey) {
-          debugLogger.log(
-            `[IPC] Re-registering GNOME keybinding "${effectiveHotkey}" after capture mode`
-          );
-          await hotkeyManager.registerGnomeDictationHotkey(
-            effectiveHotkey,
-            this.windowManager.createHotkeyCallback()
-          );
-        }
-
-        // On Hyprland Wayland, re-register the keybinding with the effective hotkey
-        if (hotkeyManager.isUsingHyprland() && hotkeyManager.hyprlandManager && effectiveHotkey) {
-          debugLogger.log(
-            `[IPC] Re-registering Hyprland keybinding "${effectiveHotkey}" after capture mode`
-          );
-          await hotkeyManager.hyprlandManager.registerKeybinding(
-            effectiveHotkey,
-            this.windowManager.getActivationMode() === "push"
-          );
-        }
-
-        // On KDE (X11 or Wayland), re-register the keybinding with the effective hotkey
-        if (hotkeyManager.isUsingKDE() && hotkeyManager.kdeManager && effectiveHotkey) {
-          debugLogger.log(
-            `[IPC] Re-registering KDE keybinding "${effectiveHotkey}" after capture mode`
-          );
-          const callback = this.windowManager.createHotkeyCallback();
-          const result = await hotkeyManager.kdeManager.registerKeybinding(
-            effectiveHotkey,
-            "dictation",
-            callback,
-            this.windowManager.getActivationMode() === "push"
-          );
-          if (result !== true) {
-            debugLogger.warn(
-              `[IPC] Failed to re-register KDE keybinding "${effectiveHotkey}" after capture mode`,
-              { result }
-            );
-          }
-        }
-
-        // Re-register non-dictation slots (meeting, agent) that were unregistered on capture enter
-        for (const [slot, info] of hotkeyManager.slots) {
-          const hotkeys = info?.hotkeys || [];
-          if (slot === "dictation" || slot === "cancel" || hotkeys.length === 0 || !info?.callback)
-            continue;
-          debugLogger.log(
-            `[IPC] Re-registering slot "${slot}" ("${hotkeys.join(", ")}") after capture mode`
-          );
-          const result = await hotkeyManager
-            .registerSlot(slot, hotkeys, info.callback)
-            .catch((err) => {
-              debugLogger.warn(`[IPC] Failed to re-register slot "${slot}":`, err.message);
-              return { success: false };
-            });
-          if (!result.success) {
-            debugLogger.warn(`[IPC] Slot "${slot}" was not restored after capture`);
-          }
-        }
-      }
-
-      return { success: true };
-    });
-
-    ipcMain.handle("get-hotkey-mode-info", async (_event, requestedHotkey) => {
-      const hotkeyManager = this.windowManager.hotkeyManager;
-      const hotkey =
-        typeof requestedHotkey === "string" && requestedHotkey.trim()
-          ? requestedHotkey.split(",")[0].trim()
-          : hotkeyManager.getCurrentHotkey();
-      const isUsingNativeShortcut = this.windowManager.isUsingNativeShortcutHotkeys();
-      const supportsPushToTalk =
-        process.platform === "linux" || process.platform === "darwin"
-          ? hotkeyManager.supportsPushToTalk(hotkey)
-          : !isUsingNativeShortcut;
-
-      return {
-        isUsingGnome: this.windowManager.isUsingGnomeHotkeys(),
-        isUsingHyprland: this.windowManager.isUsingHyprlandHotkeys(),
-        isUsingKDE: this.windowManager.isUsingKDEHotkeys(),
-        isUsingNativeShortcut,
-        supportsPushToTalk,
-        pushToTalkUnavailableReason: supportsPushToTalk
-          ? null
-          : hotkeyManager.getPushToTalkUnavailableReason(hotkey),
-        // Lets the renderer show the setup box outside push mode, where the
-        // disabled-Hold tooltip is the only other place this surfaces. Desktop
-        // backends see their own hotkeys, so access matters only without one.
-        linuxInputAccessDenied:
-          hotkeyManager.reliesOnLinuxKeyListener() &&
-          hotkeyManager.nativeListenerProbe().reason === "input_access_denied",
-      };
-    });
-
-    ipcMain.handle("get-hyprland-config-status", async () => {
-      if (!this.windowManager.isUsingHyprlandHotkeys()) return null;
-      return this.windowManager.getHyprlandConfigStatus();
-    });
-
-    ipcMain.handle("register-cancel-hotkey", async (event, key) => {
-      const hotkeyManager = this.windowManager.hotkeyManager;
-      const mainWindow = this.windowManager.mainWindow;
-      return hotkeyManager.registerSlot("cancel", key, () => {
-        mainWindow?.webContents?.send("cancel-hotkey-pressed");
-      });
-    });
-
-    ipcMain.handle("unregister-cancel-hotkey", async () => {
-      this.windowManager.hotkeyManager.unregisterSlot("cancel");
-      return { success: true };
-    });
-
-    ipcMain.handle("start-window-drag", async (event) => {
-      return await this.windowManager.startWindowDrag();
-    });
-
-    ipcMain.handle("stop-window-drag", async (event) => {
-      return await this.windowManager.stopWindowDrag();
     });
 
     ipcMain.handle("start-control-panel-drag", async () => {
@@ -4736,31 +4285,6 @@ class IPCHandlers {
       }
     });
 
-    ipcMain.handle("get-dictation-key", async () => {
-      return this.environmentManager.getDictationKey();
-    });
-
-    ipcMain.handle("save-dictation-key", async (event, key) => {
-      return this.environmentManager.saveDictationKey(key);
-    });
-
-    ipcMain.handle("get-active-dictation-key", async () => {
-      const hotkeys = this.windowManager?.hotkeyManager?.getSlotHotkeys?.("dictation") ?? [];
-      return hotkeys.length > 0 ? hotkeys.join(",") : null;
-    });
-
-    ipcMain.handle("get-effective-default-hotkey", async () => {
-      return this.windowManager?.hotkeyManager?.getEffectiveDefaultHotkey() ?? null;
-    });
-
-    ipcMain.handle("get-activation-mode", async () => {
-      return this.environmentManager.getActivationMode();
-    });
-
-    ipcMain.handle("save-activation-mode", async (event, mode) => {
-      return this.environmentManager.saveActivationMode(mode);
-    });
-
     ipcMain.handle("get-ui-language", async () => {
       return this.environmentManager.getUiLanguage();
     });
@@ -5249,7 +4773,6 @@ class IPCHandlers {
     ipcMain.handle("open-accessibility-settings", () => openSystemSettings("accessibility"));
     ipcMain.handle("open-system-audio-settings", () => openSystemSettings("systemAudio"));
     ipcMain.handle("open-login-items-settings", () => openSystemSettings("loginItems"));
-
 
     ipcMain.handle("open-calendar-privacy-settings", () => openSystemSettings("calendars"));
 
@@ -7569,129 +7092,6 @@ class IPCHandlers {
       meetingEchoLeakDetector.reset();
     };
 
-    let dictationPreviewMode = false;
-    let dictationPreviewBuffer = [];
-    let dictationPreviewTimer = null;
-    let dictationPreviewTranscribing = false;
-    let dictationPreviewProvider = null;
-    let dictationPreviewModel = null;
-    let dictationPreviewLanguage = null;
-    let dictationPreviewSessionActive = false;
-    let dictationPreviewChunkCount = 0;
-    // Online-runtime models stream here instead of the 1.5s chunked path.
-    let dictationPreviewStream = null;
-    // false = headless streaming session (commit-only, no preview window).
-    let dictationPreviewDisplay = true;
-    // Bumped on every reset so async preview work can detect a stale session.
-    let dictationPreviewGen = 0;
-    // Cloud partials can arrive faster than the preview window is created. Keep
-    // preview updates, completion, and dismissal ordered so a late partial can
-    // never overwrite the final result or reopen a dismissed window.
-    let dictationPreviewOperation = Promise.resolve();
-
-    const queueDictationPreviewOperation = (operation) => {
-      const result = dictationPreviewOperation.catch(() => {}).then(operation);
-      dictationPreviewOperation = result.then(
-        () => undefined,
-        () => undefined
-      );
-      return result;
-    };
-
-    const resetDictationPreviewState = ({ preserveSession = false } = {}) => {
-      dictationPreviewGen++;
-      if (dictationPreviewTimer) {
-        clearInterval(dictationPreviewTimer);
-        dictationPreviewTimer = null;
-      }
-      if (dictationPreviewStream) {
-        dictationPreviewStream.abort();
-        dictationPreviewStream = null;
-      }
-      dictationPreviewMode = false;
-      if (!preserveSession) {
-        dictationPreviewSessionActive = false;
-      }
-      dictationPreviewBuffer = [];
-      dictationPreviewTranscribing = false;
-      dictationPreviewProvider = null;
-      dictationPreviewModel = null;
-      dictationPreviewLanguage = null;
-      dictationPreviewDisplay = true;
-    };
-
-    const startDictationPreviewTimer = () => {
-      if (!dictationPreviewTimer) {
-        dictationPreviewTimer = setInterval(() => transcribeDictationPreviewChunk(), 1500);
-      }
-    };
-
-    const transcribeDictationPreviewChunk = async () => {
-      // The chunked path only feeds the preview window.
-      if (!dictationPreviewDisplay) return;
-      if (dictationPreviewTranscribing) return;
-      if (!dictationPreviewBuffer.length) return;
-
-      const gen = dictationPreviewGen;
-      const provider = dictationPreviewProvider;
-      const model = dictationPreviewModel;
-      const language = dictationPreviewLanguage;
-      dictationPreviewTranscribing = true;
-      try {
-        const pcm = Buffer.concat(dictationPreviewBuffer);
-        dictationPreviewBuffer = [];
-
-        const samples = new Int16Array(pcm.buffer, pcm.byteOffset, pcm.length / 2);
-        let sumSq = 0;
-        for (let i = 0; i < samples.length; i++) {
-          const n = samples[i] / 0x7fff;
-          sumSq += n * n;
-        }
-        const rms = Math.sqrt(sumSq / samples.length);
-        debugLogger.debug("Dictation preview chunk", {
-          pcmBytes: pcm.length,
-          rms: rms.toFixed(6),
-          samples: samples.length,
-        });
-        if (rms < 0.002) return;
-
-        const wav = pcm16ToWav(pcm);
-
-        let result;
-        if (isSherpaLocalProvider(provider)) {
-          result = await this.parakeetManager.transcribeLocalParakeet(wav, {
-            model,
-            language,
-          });
-        } else {
-          const vadOptions = this._resolveWhisperVadOptions("dictation");
-          result = await this.whisperManager.transcribeLocalWhisper(wav, {
-            model,
-            language,
-            ...vadOptions,
-          });
-        }
-
-        if (gen !== dictationPreviewGen) return;
-        if (result?.success && result.text?.trim()) {
-          this.windowManager.appendTranscriptionPreview(result.text.trim());
-        } else if (result && !result.success) {
-          debugLogger.warn("Dictation preview chunk returned failure", {
-            error: result.error || result.message,
-            provider,
-          });
-        }
-      } catch (error) {
-        if (gen !== dictationPreviewGen) return;
-        debugLogger.error("Dictation preview transcription chunk failed", {
-          error: error.message,
-          provider,
-        });
-      } finally {
-        if (gen === dictationPreviewGen) dictationPreviewTranscribing = false;
-      }
-    };
-
     const resetMeetingStreamingState = () => {
       this._meetingMicStreaming = null;
       this._meetingSystemStreaming = null;
@@ -7806,171 +7206,6 @@ class IPCHandlers {
       resetMeetingLocalState();
       await disconnectMeetingStreaming().catch(() => {});
       this.activeMeetingSpeakerConfig = null;
-    };
-
-    const setupDictationCallbacks = (streaming, event) => {
-      const isOrukeet = streaming instanceof OrukeetStreaming;
-      const canNotify = () =>
-        !isOrukeet || (this._dictationStreaming === streaming && !event.sender.isDestroyed?.());
-      if (isOrukeet) {
-        const ownerGone = () => {
-          streaming.disconnect().catch(() => {});
-          if (this._dictationStreaming === streaming) this._dictationStreaming = null;
-        };
-        event.sender.once?.("destroyed", ownerGone);
-        streaming.onClose = () => event.sender.removeListener?.("destroyed", ownerGone);
-      }
-      streaming.onPartialTranscript = (text) => {
-        event.sender.send("dictation-realtime-partial", text);
-        if (this._dictationPreviewEnabled && text) {
-          this.windowManager.showTranscriptionPreview(text);
-        }
-      };
-      streaming.onFinalTranscript = (text) => {
-        if (canNotify()) event.sender.send("dictation-realtime-final", text);
-      };
-      streaming.onLanguage = (metadata) => {
-        if (canNotify()) event.sender.send("dictation-realtime-language", metadata);
-      };
-      streaming.onError = (err) => {
-        if (!canNotify()) return;
-        event.sender.send("dictation-realtime-error", err.message);
-        if (this._dictationPreviewEnabled) this.windowManager.hideTranscriptionPreview();
-      };
-      streaming.onSessionEnd = (data) => {
-        event.sender.send("dictation-realtime-session-end", data || {});
-        if (this._dictationPreviewEnabled) this.windowManager.hideTranscriptionPreview();
-      };
-    };
-
-    const DICTATION_IDLE_TIMEOUT_MS = 5 * 60 * 1000;
-    const ORUKEET_IDLE_TIMEOUT_MS = 60 * 1000;
-
-    const clearDictationIdleTimer = () => {
-      if (this._dictationIdleTimer) {
-        clearTimeout(this._dictationIdleTimer);
-        this._dictationIdleTimer = null;
-      }
-    };
-
-    const startDictationIdleTimer = () => {
-      clearDictationIdleTimer();
-      const idleTimeoutMs =
-        this._dictationStreaming instanceof OrukeetStreaming
-          ? ORUKEET_IDLE_TIMEOUT_MS
-          : DICTATION_IDLE_TIMEOUT_MS;
-      this._dictationIdleTimer = setTimeout(() => {
-        if (this._dictationStreaming) {
-          debugLogger.debug("Closing idle dictation warmup connection");
-          this._dictationStreaming.disconnect().catch(() => {});
-          this._dictationStreaming = null;
-        }
-      }, idleTimeoutMs);
-    };
-
-    // What a dictation connection was opened for; a start or warmup reuses one
-    // only when nothing about the route changed.
-    const dictationConnectionKey = (options) =>
-      JSON.stringify([
-        options.provider || "openai-realtime",
-        options.mode,
-        options.model,
-        options.baseUrl,
-      ]);
-
-    const connectDictationStreaming = async (event, options) => {
-      // Older renderers did not label the OpenAI dictation adapter. Dictation
-      // realtime was OpenAI-only before Tinfoil support, so preserve that
-      // established default while requiring new adapters to be explicit.
-      options = {
-        ...options,
-        provider: options?.provider || "openai-realtime",
-      };
-
-      if (this._dictationConnectPromise) {
-        await this._dictationConnectPromise.catch(() => {});
-      }
-
-      clearDictationIdleTimer();
-      this._dictationPreviewEnabled = !!options.preview;
-
-      if (this._dictationStreaming) {
-        await this._dictationStreaming.disconnect().catch(() => {});
-        this._dictationStreaming = null;
-      }
-
-      const connectInner = async () => {
-        const isCloud = options.mode !== "byok";
-        // Dictation renderers before 1.8.4 omit `provider` and mean OpenAI; the
-        // default lives here, at the boundary, so the token allowlist stays
-        // fail-closed for genuinely unknown providers (#1624).
-        const provider = options.provider ?? "openai-realtime";
-        // Managed Cloud retains the capture for batch fallback. A refused
-        // commit must close this attempt instead of retrying for 30 seconds.
-        const streaming =
-          provider === "orukeet"
-            ? new OrukeetStreaming({ retryCapacity: !isCloud })
-            : new OpenAIRealtimeStreaming();
-        setupDictationCallbacks(streaming, event);
-        // Assign before the token fetch (a real network round trip) so
-        // dictation-realtime-send has a live instance to buffer into instead
-        // of silently dropping the start of the recording.
-        streaming.beginConnecting();
-        streaming.connectionKey = dictationConnectionKey(options);
-        this._dictationStreaming = streaming;
-        try {
-          if (provider === "orukeet") {
-            if (isCloud) {
-              await connectManagedOrukeet({
-                streaming,
-                getApiUrl,
-                proxyFetch,
-                tokenStore,
-                withPolicyHeaders,
-              });
-            } else {
-              await streaming.connect({
-                apiKey: this.environmentManager.getCustomTranscriptionKey(),
-                baseUrl: options.baseUrl,
-              });
-            }
-            return;
-          }
-          const apiKey = await fetchRealtimeToken(event, {
-            mode: options.mode,
-            provider,
-          });
-          if (provider === "tinfoil-realtime") {
-            const model = options.model || TINFOIL_REALTIME_MODEL;
-            await streaming.connect({
-              apiKey,
-              model,
-              // The capture worklet emits 16kHz PCM; declare the true rate.
-              inputRate: 16000,
-              createSocket: () => createTinfoilRealtimeSocket({ model, apiKey }),
-            });
-          } else {
-            await streaming.connect({
-              apiKey,
-              model: options.model || "gpt-4o-mini-transcribe",
-              // OpenAI rejects rates below 24kHz; the 16kHz capture is upsampled instead.
-              captureRate: 16000,
-              preconfigured: isCloud,
-            });
-          }
-        } catch (err) {
-          if (provider === "orukeet") await streaming.disconnect().catch(() => {});
-          if (this._dictationStreaming === streaming) this._dictationStreaming = null;
-          throw err;
-        }
-      };
-
-      this._dictationConnectPromise = connectInner();
-      try {
-        await this._dictationConnectPromise;
-      } finally {
-        this._dictationConnectPromise = null;
-      }
     };
 
     // Pre-warm: fetch tokens + connect WebSockets before user hits record
@@ -8600,250 +7835,6 @@ class IPCHandlers {
       if (err.networkCode) result.networkCode = err.networkCode;
       return result;
     };
-
-    // Every managed Orukeet connection spends a single-use GPU token, and both
-    // post-dictation re-warm paths fire together. Warmups run one at a time so
-    // the second finds the first's fresh socket and reuses it rather than
-    // discarding it and minting another.
-    const isUnusedOrukeetConnection = (streaming, options) =>
-      streaming instanceof OrukeetStreaming &&
-      streaming.isConnected &&
-      !streaming.failure &&
-      !streaming.finalPromise &&
-      streaming.audioBytesSent === 0 &&
-      streaming.connectionKey === dictationConnectionKey(options);
-
-    const warmupDictationStreaming = async (event, options) => {
-      await this._dictationConnectPromise?.catch(() => {});
-      if (!isUnusedOrukeetConnection(this._dictationStreaming, options)) {
-        await connectDictationStreaming(event, options);
-        startDictationIdleTimer();
-        return { success: true };
-      }
-      startDictationIdleTimer();
-      return { success: true, alreadyWarm: true };
-    };
-
-    let dictationWarmupQueue = Promise.resolve();
-    ipcMain.handle("dictation-realtime-warmup", (event, options = {}) => {
-      const warmup = dictationWarmupQueue
-        .then(() => warmupDictationStreaming(event, options))
-        .catch(streamingStartFailure);
-      dictationWarmupQueue = warmup;
-      return warmup;
-    });
-
-    ipcMain.handle("dictation-realtime-start", async (event, options = {}) => {
-      try {
-        clearDictationIdleTimer();
-        this._dictationPreviewEnabled = !!options.preview;
-        if (
-          !this._dictationStreaming?.isConnected ||
-          this._dictationStreaming.connectionKey !== dictationConnectionKey(options)
-        ) {
-          await connectDictationStreaming(event, options);
-        }
-        return { success: true };
-      } catch (err) {
-        return streamingStartFailure(err);
-      }
-    });
-
-    ipcMain.on("dictation-realtime-send", (_event, buffer) => {
-      this._dictationStreaming?.sendAudio(Buffer.from(buffer));
-    });
-
-    ipcMain.handle("dictation-realtime-finalize", async () => {
-      if (!(this._dictationStreaming instanceof OrukeetStreaming)) {
-        return { success: false, error: "No Orukeet recording is active" };
-      }
-      try {
-        return { success: true, ...(await this._dictationStreaming.finalize()) };
-      } catch (error) {
-        return { success: false, error: error.message };
-      }
-    });
-
-    ipcMain.handle("dictation-realtime-stop", async () => {
-      clearDictationIdleTimer();
-      if (!this._dictationStreaming) {
-        return { success: true, text: "" };
-      }
-      const result = await this._dictationStreaming.disconnect().catch(() => ({ text: "" }));
-      this._dictationStreaming = null;
-      if (this._dictationPreviewEnabled) {
-        this.windowManager.hideTranscriptionPreview();
-        this._dictationPreviewEnabled = false;
-      }
-      return { success: true, ...result, text: result.text || "" };
-    });
-
-    ipcMain.handle(
-      "start-dictation-preview",
-      async (_event, { provider, model, language, display = true }) => {
-        resetDictationPreviewState();
-        const gen = dictationPreviewGen;
-        dictationPreviewMode = true;
-        dictationPreviewSessionActive = true;
-        dictationPreviewProvider = provider;
-        dictationPreviewModel = model;
-        dictationPreviewLanguage = language || null;
-        dictationPreviewDisplay = display;
-        dictationPreviewChunkCount = 0;
-        if (display) this.windowManager.showTranscriptionPreview("");
-
-        if (provider === "nvidia" && this.parakeetManager.supportsOnlineStreaming(model)) {
-          try {
-            const stream = await this.parakeetManager.createOnlineStream(model, {
-              onUpdate: (text) => {
-                if (gen === dictationPreviewGen && text && dictationPreviewDisplay) {
-                  this.windowManager.showTranscriptionPreview(text);
-                }
-              },
-              onError: (error) => {
-                if (gen !== dictationPreviewGen || dictationPreviewStream !== stream) return;
-                // Keep the preview alive on the chunked path; the final
-                // transcript falls back to decoding the full recording.
-                debugLogger.warn("Online preview stream failed mid-session, falling back", {
-                  model,
-                  error: error.message,
-                });
-                dictationPreviewStream = null;
-                if (dictationPreviewDisplay) startDictationPreviewTimer();
-              },
-            });
-            if (gen !== dictationPreviewGen) {
-              stream.abort();
-              return { success: true };
-            }
-            dictationPreviewStream = stream;
-            for (const chunk of dictationPreviewBuffer) {
-              stream.sendPcm16(chunk);
-            }
-            dictationPreviewBuffer = [];
-            return { success: true };
-          } catch (error) {
-            debugLogger.warn("Online preview stream unavailable, falling back to chunked preview", {
-              model,
-              error: error.message,
-            });
-          }
-        }
-
-        if (gen !== dictationPreviewGen) return { success: true };
-        if (!display) {
-          // A headless session exists only to feed the online stream; without
-          // one, buffered PCM would just accumulate with no consumer.
-          resetDictationPreviewState();
-          return { success: true };
-        }
-        startDictationPreviewTimer();
-        return { success: true };
-      }
-    );
-
-    ipcMain.on("dictation-preview-audio", (_event, audioBuffer) => {
-      if (!dictationPreviewMode) return;
-      dictationPreviewChunkCount++;
-      if (dictationPreviewChunkCount <= 3 || dictationPreviewChunkCount % 50 === 0) {
-        debugLogger.debug("Dictation preview audio received", {
-          bytes: audioBuffer?.byteLength || audioBuffer?.length,
-          count: dictationPreviewChunkCount,
-          bufferSize: dictationPreviewBuffer.length,
-        });
-      }
-      const pcm = Buffer.isBuffer(audioBuffer) ? audioBuffer : Buffer.from(audioBuffer);
-      if (dictationPreviewStream) {
-        dictationPreviewStream.sendPcm16(pcm);
-        return;
-      }
-      dictationPreviewBuffer.push(pcm);
-    });
-
-    ipcMain.handle("dismiss-dictation-preview", () =>
-      queueDictationPreviewOperation(async () => {
-        resetDictationPreviewState();
-        this.windowManager.hideTranscriptionPreview();
-        return { success: true };
-      })
-    );
-
-    ipcMain.handle("update-dictation-preview", (_event, text) =>
-      queueDictationPreviewOperation(async () => {
-        if (typeof text !== "string" || !text.trim()) {
-          return { success: true };
-        }
-        if (!dictationPreviewSessionActive) {
-          resetDictationPreviewState();
-          dictationPreviewSessionActive = true;
-          dictationPreviewDisplay = true;
-        }
-        await this.windowManager.showTranscriptionPreview(text);
-        return { success: true };
-      })
-    );
-
-    ipcMain.handle("complete-dictation-preview", (_event, { text } = {}) =>
-      queueDictationPreviewOperation(async () => {
-        if (!dictationPreviewSessionActive) {
-          return { success: true };
-        }
-        if (typeof text === "string" && text.trim()) {
-          this.windowManager.completeTranscriptionPreview(text);
-        } else {
-          resetDictationPreviewState();
-          this.windowManager.hideTranscriptionPreview();
-        }
-        return { success: true };
-      })
-    );
-
-    ipcMain.handle("hide-dictation-preview", () =>
-      queueDictationPreviewOperation(async () => {
-        resetDictationPreviewState();
-        this.windowManager.hideTranscriptionPreview();
-        return { success: true };
-      })
-    );
-
-    ipcMain.handle("stop-dictation-preview", async (_event, options = {}) => {
-      if (!dictationPreviewMode && !dictationPreviewSessionActive) {
-        return { success: true, streamed: false, text: "" };
-      }
-      clearInterval(dictationPreviewTimer);
-      dictationPreviewTimer = null;
-      const display = dictationPreviewDisplay;
-      // Missing flag defaults to trusted so non-streaming callers never regress.
-      const rendererFlushOk = options.flushed !== false;
-      let streamed = false;
-      let streamedText = "";
-      if (dictationPreviewStream) {
-        const stream = dictationPreviewStream;
-        dictationPreviewStream = null;
-        const gen = dictationPreviewGen;
-        const result = await stream.finish().catch(() => null);
-        if (gen !== dictationPreviewGen) {
-          return { success: true, streamed: false, text: "" };
-        }
-        if (result) {
-          streamedText = result.text || "";
-          // Trust the streamed transcript only on a clean server flush and a clean renderer flush.
-          streamed = !result.truncated && rendererFlushOk;
-        }
-        if (streamedText && display && dictationPreviewSessionActive) {
-          this.windowManager.showTranscriptionPreview(streamedText);
-        }
-      }
-      // Offline chunks only draw previews. The renderer decodes the full
-      // recording separately, so another preview decode here competes with
-      // final transcription without contributing to its result.
-      resetDictationPreviewState({ preserveSession: display });
-      if (!display || !dictationPreviewSessionActive) {
-        return { success: true, streamed, text: streamedText };
-      }
-      this.windowManager.holdTranscriptionPreview(options);
-      return { success: true, streamed, text: streamedText };
-    });
 
     ipcMain.handle("update-transcription-text", async (_event, id, text, rawText) => {
       try {
@@ -10588,42 +9579,6 @@ class IPCHandlers {
         return { isConnected: false, sessionId: null };
       }
       return this.cortiStreaming.getStatus();
-    });
-
-    ipcMain.handle("update-translation-hotkey", async (_event, hotkey) => {
-      const hotkeyManager = this.windowManager.hotkeyManager;
-      const translationCallback = this.windowManager._translationHotkeyCallback;
-      if (!translationCallback) {
-        return { success: false, message: "Translation hotkey callback not initialized" };
-      }
-
-      if (!hotkey) {
-        const removed = await hotkeyManager.unregisterSlot("translation");
-        if (removed === false) return { success: false };
-        this.environmentManager.saveTranslationKey?.("");
-        this.windowManager.reconcileNativeKeyListeners();
-        this._notifyHotkeyChanged("");
-        return { success: true, message: "Translation hotkey cleared" };
-      }
-
-      const result = await hotkeyManager.registerSlot("translation", hotkey, translationCallback, {
-        atomic: true,
-      });
-      this.windowManager.reconcileNativeKeyListeners();
-      if (result.success) {
-        this.environmentManager.saveTranslationKey?.(hotkey);
-        this._notifyHotkeyChanged(hotkey);
-        return { success: true, message: `Translation hotkey updated to: ${hotkey}` };
-      }
-
-      return {
-        success: false,
-        message: result.error || `Failed to update translation hotkey to: ${hotkey}`,
-      };
-    });
-
-    ipcMain.handle("get-translation-key", async () => {
-      return this.environmentManager.getTranslationKey?.() || "";
     });
 
     ipcMain.handle("acquire-recording-lock", async (_event, pipeline) => {

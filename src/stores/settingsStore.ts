@@ -48,7 +48,7 @@ import { usePolicyStore } from "./policyStore";
 import type {
   TranscriptionSettings,
   CleanupSettings,
-  HotkeySettings,
+  MeetingLayoutSettings,
   OnboardingSettings,
   MicrophoneSettings,
   ApiKeySettings,
@@ -280,7 +280,6 @@ const BOOLEAN_SETTINGS = new Set([
   "telemetryEnabled",
   "audioCuesEnabled",
   "pauseMediaOnDictation",
-  "floatingIconAutoHide",
   "startMinimized",
   "meetingProcessDetection",
   "speakerDiarizationEnabled",
@@ -872,7 +871,7 @@ export interface SettingsState
   extends
     TranscriptionSettings,
     CleanupSettings,
-    HotkeySettings,
+    MeetingLayoutSettings,
     OnboardingSettings,
     MicrophoneSettings,
     ApiKeySettings,
@@ -882,7 +881,6 @@ export interface SettingsState
   isSignedIn: boolean;
   audioCuesEnabled: boolean;
   pauseMediaOnDictation: boolean;
-  floatingIconAutoHide: boolean;
   startMinimized: boolean;
   gcalAccounts: CalendarAccount[];
   gcalConnected: boolean;
@@ -907,7 +905,6 @@ export interface SettingsState
   whisperVadMaxSpeechDurationS: number;
   whisperVadSpeechPadMs: number;
   whisperVadSamplesOverlap: number;
-  panelStartPosition: "bottom-right" | "center" | "bottom-left";
   showTranscriptionPreview: boolean;
   autoPasteEnabled: boolean;
   keepTranscriptionInClipboard: boolean;
@@ -1172,15 +1169,10 @@ export interface SettingsState
   setVertexLocation: (value: string) => void;
   setVertexApiKey: (key: string) => void;
 
-  setDictationKey: (key: string) => void;
-  setMeetingKey: (key: string) => void;
-  translationKey: string;
-  setTranslationKey: (key: string) => Promise<boolean>;
   setMeetingHotkeyLayoutMode: (mode: "side-panel" | "full-width") => void;
   setOnboardingUseCases: (useCases: string[]) => void;
   setOnboardingUseCaseNote: (note: string) => void;
   setSpokenLanguages: (languages: string[]) => void;
-  setActivationMode: (mode: "tap" | "push") => void;
 
   setPreferBuiltInMic: (value: boolean) => void;
   setMicrophoneSelectionMode: (mode: MicrophoneSelectionMode) => void;
@@ -1197,7 +1189,6 @@ export interface SettingsState
   setSaveDiscardedTranscriptions: (value: boolean) => void;
   setAudioCuesEnabled: (value: boolean) => void;
   setPauseMediaOnDictation: (value: boolean) => void;
-  setFloatingIconAutoHide: (enabled: boolean) => void;
   setStartMinimized: (enabled: boolean) => void;
   setGcalAccounts: (accounts: CalendarAccount[]) => void;
   setMcalAccounts: (accounts: CalendarAccount[]) => void;
@@ -1219,7 +1210,6 @@ export interface SettingsState
   setWhisperVadMaxSpeechDurationS: (value: number) => void;
   setWhisperVadSpeechPadMs: (value: number) => void;
   setWhisperVadSamplesOverlap: (value: number) => void;
-  setPanelStartPosition: (position: "bottom-right" | "center" | "bottom-left") => void;
   setShowTranscriptionPreview: (value: boolean) => void;
   setAutoPasteEnabled: (value: boolean) => void;
   setKeepTranscriptionInClipboard: (value: boolean) => void;
@@ -1289,55 +1279,6 @@ function createNumberSetter(key: string) {
   return (value: number) => {
     if (isBrowser) localStorage.setItem(key, String(value));
     useSettingsStore.setState({ [key]: value });
-  };
-}
-
-// Setter for hotkeys that must be registered with the main process before
-// being persisted. Rolls back to the previous key if registration fails.
-// Resolves to false on failure so optimistic UIs (HotkeyListInput) can revert.
-function createRegisteredHotkeySetter(
-  key: "translationKey",
-  label: string,
-  getRegisterFn: () =>
-    ((hotkey: string) => Promise<{ success: boolean; message: string }>) | undefined,
-  fallbackSave?: (hotkey: string) => void
-) {
-  return async (hotkey: string): Promise<boolean> => {
-    if (!isBrowser) {
-      useSettingsStore.setState({ [key]: hotkey });
-      return true;
-    }
-
-    const registerFn = getRegisterFn();
-    if (!registerFn) {
-      localStorage.setItem(key, hotkey);
-      useSettingsStore.setState({ [key]: hotkey });
-      fallbackSave?.(hotkey);
-      return true;
-    }
-
-    const previousKey = useSettingsStore.getState()[key];
-
-    try {
-      const result = await registerFn(hotkey);
-      if (!result?.success) {
-        localStorage.setItem(key, previousKey);
-        useSettingsStore.setState({ [key]: previousKey });
-        logger.warn(`Failed to update ${label}`, { hotkey, message: result?.message }, "settings");
-        return false;
-      }
-
-      localStorage.setItem(key, hotkey);
-      useSettingsStore.setState({ [key]: hotkey });
-      return true;
-    } catch (error) {
-      logger.warn(
-        `Failed to update ${label}`,
-        { hotkey, error: error instanceof Error ? error.message : String(error) },
-        "settings"
-      );
-      return false;
-    }
   };
 }
 
@@ -1580,18 +1521,12 @@ export const useSettingsStore = create<SettingsState>()((set, get) => ({
   vertexLocation: readString("vertexLocation", "us-central1"),
   vertexApiKey: "",
 
-  dictationKey: readString("dictationKey", ""),
-  activeDictationKey: null,
-  meetingKey: readString("meetingKey", ""),
-  translationKey: readString("translationKey", ""),
   onboardingUseCases: readStringArray("onboardingUseCases", []),
   onboardingUseCaseNote: readString("onboardingUseCaseNote", ""),
   spokenLanguages: readStringArray("spokenLanguages", []),
   meetingHotkeyLayoutMode: (readString("meetingHotkeyLayoutMode", "full-width") === "side-panel"
     ? "side-panel"
     : "full-width") as "side-panel" | "full-width",
-  activationMode: (readString("activationMode", "tap") === "push" ? "push" : "tap") as
-    "tap" | "push",
 
   microphoneSelectionMode: (() => {
     const mode = readString("microphoneSelectionMode", "system");
@@ -1618,7 +1553,6 @@ export const useSettingsStore = create<SettingsState>()((set, get) => ({
   saveDiscardedTranscriptions: readBoolean("saveDiscardedTranscriptions", false),
   audioCuesEnabled: readBoolean("audioCuesEnabled", true),
   pauseMediaOnDictation: readBoolean("pauseMediaOnDictation", false),
-  floatingIconAutoHide: readBoolean("floatingIconAutoHide", false),
   startMinimized: readBoolean("startMinimized", false),
   notificationsEnabled: readBoolean("notificationsEnabled", true),
   notifyMeetingDetection: readBoolean("notifyMeetingDetection", true),
@@ -1679,11 +1613,6 @@ export const useSettingsStore = create<SettingsState>()((set, get) => ({
     "samplesOverlap",
     readString("whisperVadSamplesOverlap", "0.5")
   ),
-  panelStartPosition: (() => {
-    const v = readString("panelStartPosition", "bottom-right");
-    if (v === "bottom-right" || v === "center" || v === "bottom-left") return v;
-    return "bottom-right" as const;
-  })(),
   showTranscriptionPreview: readBoolean("showTranscriptionPreview", false),
   autoPasteEnabled: readBoolean("autoPasteEnabled", true),
   keepTranscriptionInClipboard: readBoolean("keepTranscriptionInClipboard", false),
@@ -1704,13 +1633,7 @@ export const useSettingsStore = create<SettingsState>()((set, get) => ({
   remoteTranscriptionModel: readString("remoteTranscriptionModel", ""),
   cleanupMode: (() => {
     const v = readString("cleanupMode", "local");
-    if (
-      v === "providers" ||
-      v === "local" ||
-      v === "self-hosted" ||
-      v === "enterprise"
-    )
-      return v;
+    if (v === "providers" || v === "local" || v === "self-hosted" || v === "enterprise") return v;
     return "local" as InferenceMode;
   })(),
   cleanupRemoteUrl: readString("cleanupRemoteUrl", ""),
@@ -1754,13 +1677,7 @@ export const useSettingsStore = create<SettingsState>()((set, get) => ({
 
   noteFormattingMode: (() => {
     const v = readString("noteFormattingMode", "local");
-    if (
-      v === "providers" ||
-      v === "local" ||
-      v === "self-hosted" ||
-      v === "enterprise"
-    )
-      return v;
+    if (v === "providers" || v === "local" || v === "self-hosted" || v === "enterprise") return v;
     return "local" as InferenceMode;
   })(),
   noteFormattingProvider: readString("noteFormattingProvider", ""),
@@ -1772,13 +1689,7 @@ export const useSettingsStore = create<SettingsState>()((set, get) => ({
 
   translationMode: (() => {
     const v = readString("translationMode", "local");
-    if (
-      v === "providers" ||
-      v === "local" ||
-      v === "self-hosted" ||
-      v === "enterprise"
-    )
-      return v;
+    if (v === "providers" || v === "local" || v === "self-hosted" || v === "enterprise") return v;
     return "local" as InferenceMode;
   })(),
   translationProvider: readString("translationProvider", ""),
@@ -1886,13 +1797,7 @@ export const useSettingsStore = create<SettingsState>()((set, get) => ({
   chatAgentCloudMode: readString("chatAgentCloudMode", "byok"),
   chatAgentMode: (() => {
     const v = readString("chatAgentMode", "local");
-    if (
-      v === "providers" ||
-      v === "local" ||
-      v === "self-hosted" ||
-      v === "enterprise"
-    )
-      return v;
+    if (v === "providers" || v === "local" || v === "self-hosted" || v === "enterprise") return v;
     return "local" as InferenceMode;
   })(),
   chatAgentRemoteUrl: readString("chatAgentRemoteUrl", ""),
@@ -1901,13 +1806,7 @@ export const useSettingsStore = create<SettingsState>()((set, get) => ({
 
   dictationAgentMode: (() => {
     const v = readString("dictationAgentMode", "local");
-    if (
-      v === "providers" ||
-      v === "local" ||
-      v === "self-hosted" ||
-      v === "enterprise"
-    )
-      return v;
+    if (v === "providers" || v === "local" || v === "self-hosted" || v === "enterprise") return v;
     return "local" as InferenceMode;
   })(),
   dictationAgentProvider: readString("dictationAgentProvider", ""),
@@ -2280,24 +2179,6 @@ export const useSettingsStore = create<SettingsState>()((set, get) => ({
     debouncedPersistToEnv();
   },
 
-  setDictationKey: (key: string) => {
-    if (isBrowser) localStorage.setItem("dictationKey", key);
-    set({ dictationKey: key });
-    if (isBrowser) {
-      window.electronAPI?.notifyHotkeyChanged?.(key);
-      window.electronAPI?.saveDictationKey?.(key);
-    }
-  },
-  setMeetingKey: (key: string) => {
-    if (isBrowser) localStorage.setItem("meetingKey", key);
-    set({ meetingKey: key });
-  },
-  setTranslationKey: createRegisteredHotkeySetter(
-    "translationKey",
-    "translation hotkey",
-    () => window.electronAPI?.updateTranslationHotkey
-  ),
-
   setMeetingHotkeyLayoutMode: (mode: "side-panel" | "full-width") => {
     if (isBrowser) localStorage.setItem("meetingHotkeyLayoutMode", mode);
     set({ meetingHotkeyLayoutMode: mode });
@@ -2313,14 +2194,6 @@ export const useSettingsStore = create<SettingsState>()((set, get) => ({
   setSpokenLanguages: (languages: string[]) => {
     if (isBrowser) localStorage.setItem("spokenLanguages", JSON.stringify(languages));
     set({ spokenLanguages: languages });
-  },
-
-  setActivationMode: (mode: "tap" | "push") => {
-    if (isBrowser) localStorage.setItem("activationMode", mode);
-    set({ activationMode: mode });
-    if (isBrowser) {
-      window.electronAPI?.notifyActivationModeChanged?.(mode);
-    }
   },
 
   setPreferBuiltInMic: (value: boolean) => {
@@ -2378,15 +2251,6 @@ export const useSettingsStore = create<SettingsState>()((set, get) => ({
   setSaveDiscardedTranscriptions: createBooleanSetter("saveDiscardedTranscriptions"),
   setAudioCuesEnabled: createBooleanSetter("audioCuesEnabled"),
   setPauseMediaOnDictation: createBooleanSetter("pauseMediaOnDictation"),
-
-  setFloatingIconAutoHide: (enabled: boolean) => {
-    if (get().floatingIconAutoHide === enabled) return;
-    if (isBrowser) localStorage.setItem("floatingIconAutoHide", String(enabled));
-    set({ floatingIconAutoHide: enabled });
-    if (isBrowser) {
-      window.electronAPI?.notifyFloatingIconAutoHideChanged?.(enabled);
-    }
-  },
 
   setStartMinimized: (enabled: boolean) => {
     if (get().startMinimized === enabled) return;
@@ -2508,15 +2372,6 @@ export const useSettingsStore = create<SettingsState>()((set, get) => ({
       window.electronAPI?.setWhisperVadConfig?.({ samplesOverlap: next });
     }
   },
-  setPanelStartPosition: (position: "bottom-right" | "center" | "bottom-left") => {
-    if (get().panelStartPosition === position) return;
-    if (isBrowser) localStorage.setItem("panelStartPosition", position);
-    set({ panelStartPosition: position });
-    if (isBrowser) {
-      window.electronAPI?.notifyPanelStartPositionChanged?.(position);
-    }
-  },
-
   setShowTranscriptionPreview: createBooleanSetter("showTranscriptionPreview"),
   setAutoPasteEnabled: createBooleanSetter("autoPasteEnabled"),
   setKeepTranscriptionInClipboard: createBooleanSetter("keepTranscriptionInClipboard"),
@@ -3401,69 +3256,6 @@ export async function initializeSettings(): Promise<void> {
       );
     }
 
-    // Sync dictation key from main process.
-    // localStorage holds the user's preferred hotkey. Only populate from .env
-    // when localStorage is empty (fresh install / cleared data).
-    try {
-      if (!state.dictationKey) {
-        const envKey = await window.electronAPI.getDictationKey?.();
-        if (envKey) {
-          createStringSetter("dictationKey")(envKey);
-        }
-      }
-    } catch (err) {
-      logger.warn(
-        "Failed to sync dictation key on startup",
-        { error: (err as Error).message },
-        "settings"
-      );
-    }
-
-    // Track what is actually registered, separately from the editable
-    // dictationKey preference so partial registrations never get persisted.
-    // May return constructor default during early startup; corrected by dictation-key-active event later.
-    try {
-      const activeKey = await window.electronAPI?.getActiveDictationKey?.();
-      if (activeKey) {
-        useSettingsStore.setState({ activeDictationKey: activeKey });
-      }
-    } catch (err) {
-      logger.warn(
-        "Failed to sync active dictation key on startup",
-        { error: (err as Error).message },
-        "settings"
-      );
-    }
-
-
-    // Sync translation hotkey from main process
-    try {
-      const envKey = await window.electronAPI.getTranslationKey?.();
-      if (envKey && envKey !== state.translationKey) {
-        createStringSetter("translationKey")(envKey);
-      }
-    } catch (err) {
-      logger.warn(
-        "Failed to sync translation hotkey on startup",
-        { error: (err as Error).message },
-        "settings"
-      );
-    }
-
-    try {
-      let envMode = await window.electronAPI.getActivationMode?.();
-      if (envMode && envMode !== state.activationMode) {
-        if (isBrowser) localStorage.setItem("activationMode", envMode);
-        useSettingsStore.setState({ activationMode: envMode });
-      }
-    } catch (err) {
-      logger.warn(
-        "Failed to sync activation mode on startup",
-        { error: (err as Error).message },
-        "settings"
-      );
-    }
-
     // Sync UI language from main process
     try {
       const envLanguage = await window.electronAPI.getUiLanguage?.();
@@ -3697,26 +3489,6 @@ export async function initializeSettings(): Promise<void> {
 
     if (key === "uiLanguage" && typeof value === "string") {
       void i18n.changeLanguage(value);
-    }
-  });
-
-  // Active hotkey updates from backend — display state, never persisted.
-  window.electronAPI?.onDictationKeyActive?.((key: string) => {
-    useSettingsStore.setState({ activeDictationKey: key });
-  });
-
-  // Sync settings pushed from main process (e.g., hotkey changed in control panel)
-  window.electronAPI?.onSettingUpdated?.((data: { key: string; value: unknown }) => {
-    const state = useSettingsStore.getState();
-    if (
-      data.key in state &&
-      typeof (state as unknown as Record<string, unknown>)[data.key] !== "function"
-    ) {
-      localStorage.setItem(
-        data.key,
-        typeof data.value === "string" ? data.value : JSON.stringify(data.value)
-      );
-      useSettingsStore.setState({ [data.key]: data.value });
     }
   });
 }

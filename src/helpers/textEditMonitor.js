@@ -101,7 +101,7 @@ class TextEditMonitor extends EventEmitter {
 
   /**
    * macOS: capture the active app's PID via NSWorkspace before the overlay steals focus.
-   * Must be called at hotkey press time, BEFORE showDictationPanel()/mainWindow.show().
+   * Must be called before OpenWhispr takes focus.
    * NSWorkspace.frontmostApplication correctly identifies the key window owner,
    * ignoring panel-type windows like the OpenWhispr overlay.
    *
