@@ -100,27 +100,3 @@ test("meeting auto-end listener strips the event and can unsubscribe", () => {
   unsubscribe();
   assert.equal(listeners.has("meeting-auto-end-requested"), false);
 });
-
-test("cloud reasoning cancellation is forwarded to the main process", () => {
-  const { api, sends } = loadPreloadApi();
-
-  api.cancelCloudReason();
-
-  assert.deepEqual(sends, [["cloud-reason-cancel"]]);
-});
-
-test("enterprise reasoning cancellation is forwarded to the main process", () => {
-  const { api, sends } = loadPreloadApi();
-
-  api.cancelEnterpriseReasoning();
-
-  assert.deepEqual(sends, [["enterprise-reasoning-cancel"]]);
-});
-
-test("cloud transcription cancellation is forwarded to the main process", () => {
-  const { api, sends } = loadPreloadApi();
-
-  api.cancelCloudTranscription();
-
-  assert.deepEqual(sends, [["cloud-transcribe-cancel"]]);
-});

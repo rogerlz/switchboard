@@ -441,13 +441,7 @@ function initializeCoreManagers() {
     whisperVulkanManager = new WhisperVulkanManager();
     // Heal installs from before GPU packs got per-pack directories; must run
     // before startup pre-warm resolves any GPU binary path.
-    const LlamaVulkanManager = require("./src/helpers/llamaVulkanManager");
-    const llamaVulkanManager = new LlamaVulkanManager();
-    const clearedPacks = migrateLegacyBinDir([
-      whisperCudaManager,
-      whisperVulkanManager,
-      llamaVulkanManager,
-    ]);
+    const clearedPacks = migrateLegacyBinDir([whisperCudaManager, whisperVulkanManager]);
     if (clearedPacks.length > 0) {
       // No window exists yet — persist the notice; a control panel window
       // shows it as a toast and clears it. See #1606.
@@ -460,7 +454,6 @@ function initializeCoreManagers() {
     const orphanedPacks = detectOrphanedGpuPacks([
       { manager: whisperCudaManager, enabledEnvVar: "WHISPER_CUDA_ENABLED" },
       { manager: whisperVulkanManager, enabledEnvVar: "WHISPER_VULKAN_ENABLED" },
-      { manager: llamaVulkanManager, enabledEnvVar: "LLAMA_VULKAN_ENABLED" },
     ]);
     if (orphanedPacks.length > 0) {
       require("./src/helpers/gpuPackMigrationNotice").recordOnce(orphanedPacks);
@@ -545,8 +538,6 @@ function registerSidecars() {
   if (diarizationManager) {
     sidecarRegistry.register("diarization", () => diarizationManager.shutdown());
   }
-  const modelManager = require("./src/helpers/modelManagerBridge").default;
-  sidecarRegistry.register("llama", () => modelManager.stopServer());
   const onnxWorkerClient = require("./src/helpers/onnxWorkerClient");
   sidecarRegistry.register("onnx", () => onnxWorkerClient.stop());
 }

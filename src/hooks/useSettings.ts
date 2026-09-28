@@ -1,10 +1,5 @@
-import React, { createContext, useContext, useEffect, useRef, useState } from "react";
-import { useShallow } from "zustand/react/shallow";
-import {
-  useSettingsStore,
-  initializeSettings,
-  selectLocalServerPrefs,
-} from "../stores/settingsStore";
+import React, { createContext, useContext, useEffect, useRef } from "react";
+import { useSettingsStore, initializeSettings } from "../stores/settingsStore";
 import logger from "../utils/logger";
 import type {
   ChineseScriptPreference,
@@ -12,8 +7,6 @@ import type {
   InferenceMode,
   SelfHostedType,
 } from "../types/electron";
-import { isPolicySettled } from "../stores/policyRules";
-import { usePolicySnapshot } from "./usePolicy";
 
 export interface TranscriptionSettings {
   uiLanguage: string;
@@ -39,18 +32,6 @@ export interface TranscriptionSettings {
   assemblyAiStreaming: boolean;
 }
 
-export interface CleanupSettings {
-  autoGenerateNoteTitle: boolean;
-  useCleanupModel: boolean;
-  useDictationAgent: boolean;
-  cleanupModel: string;
-  cleanupProvider: string;
-  cleanupCloudBaseUrl?: string;
-  cleanupCloudMode: string;
-  cleanupMode: InferenceMode;
-  cleanupRemoteUrl: string;
-}
-
 export interface MeetingLayoutSettings {
   meetingHotkeyLayoutMode: "side-panel" | "full-width";
 }
@@ -70,12 +51,10 @@ export interface MicrophoneSettings {
 
 export interface ApiKeySettings {
   openaiApiKey: string;
-  anthropicApiKey: string;
   geminiApiKey: string;
   groqApiKey: string;
   xaiApiKey: string;
   mistralApiKey: string;
-  openrouterApiKey: string;
   cortiClientId: string;
   cortiClientSecret: string;
   cortiApiKey: string;
@@ -83,7 +62,6 @@ export interface ApiKeySettings {
   deepgramApiKey: string;
   assemblyaiApiKey: string;
   customTranscriptionApiKey: string;
-  cleanupCustomApiKey: string;
 }
 
 export interface PrivacySettings {
@@ -95,16 +73,6 @@ export interface PrivacySettings {
 
 export interface ThemeSettings {
   theme: "light" | "dark" | "auto";
-}
-
-export interface ChatAgentSettings {
-  chatAgentModel: string;
-  chatAgentProvider: string;
-  chatAgentCloudMode: string;
-  chatAgentMode: InferenceMode;
-  chatAgentCloudBaseUrl: string;
-  chatAgentRemoteUrl: string;
-  chatAgentCustomApiKey: string;
 }
 
 function useSettingsInternal() {
@@ -134,24 +102,6 @@ function useSettingsInternal() {
     cohereModel,
     preferredLanguage,
   } = store;
-  // Every window runs this sync, and the main process stops the shared
-  // llama-server from it, so it must see every scope's resolved local model.
-  const policySnapshot = usePolicySnapshot();
-  const localServerPrefs = useSettingsStore(
-    useShallow((state) => selectLocalServerPrefs(state, policySnapshot))
-  );
-  const policySettled = isPolicySettled(policySnapshot);
-  // A sign-out before the policy fetch starts leaves the policy idle, so only
-  // the cleared account scope says this window's deferred sync can now apply.
-  const [signOuts, setSignOuts] = useState(0);
-  useEffect(
-    () =>
-      window.electronAPI?.onActiveAccountScopeChanged?.((scope) => {
-        if (!scope) setSignOuts((count) => count + 1);
-      }),
-    []
-  );
-
   useEffect(() => {
     if (typeof window === "undefined" || !window.electronAPI?.syncStartupPreferences) return;
 
@@ -167,8 +117,6 @@ function useSettingsInternal() {
         localTranscriptionProvider,
         model: model || undefined,
         language: preferredLanguage || undefined,
-        ...localServerPrefs,
-        policySettled,
       })
       .catch((err) =>
         logger.warn(
@@ -184,9 +132,6 @@ function useSettingsInternal() {
     parakeetModel,
     cohereModel,
     preferredLanguage,
-    localServerPrefs,
-    policySettled,
-    signOuts,
   ]);
 
   return {
@@ -204,30 +149,18 @@ function useSettingsInternal() {
     cloudTranscriptionProvider: store.cloudTranscriptionProvider,
     cloudTranscriptionModel: store.cloudTranscriptionModel,
     cloudTranscriptionBaseUrl: store.cloudTranscriptionBaseUrl,
-    cleanupCloudBaseUrl: store.cleanupCloudBaseUrl,
     cloudTranscriptionMode: store.cloudTranscriptionMode,
-    cleanupCloudMode: store.cleanupCloudMode,
     transcriptionMode: store.transcriptionMode,
     remoteTranscriptionType: store.remoteTranscriptionType,
     remoteTranscriptionUrl: store.remoteTranscriptionUrl,
     remoteTranscriptionModel: store.remoteTranscriptionModel,
-    cleanupMode: store.cleanupMode,
-    cleanupRemoteUrl: store.cleanupRemoteUrl,
     assemblyAiStreaming: store.assemblyAiStreaming,
     setAssemblyAiStreaming: store.setAssemblyAiStreaming,
-    autoGenerateNoteTitle: store.autoGenerateNoteTitle,
-    setAutoGenerateNoteTitle: store.setAutoGenerateNoteTitle,
-    useCleanupModel: store.useCleanupModel,
-    useDictationAgent: store.useDictationAgent,
-    cleanupModel: store.cleanupModel,
-    cleanupProvider: store.cleanupProvider,
     openaiApiKey: store.openaiApiKey,
-    anthropicApiKey: store.anthropicApiKey,
     geminiApiKey: store.geminiApiKey,
     groqApiKey: store.groqApiKey,
     xaiApiKey: store.xaiApiKey,
     mistralApiKey: store.mistralApiKey,
-    openrouterApiKey: store.openrouterApiKey,
     tinfoilApiKey: store.tinfoilApiKey,
     deepgramApiKey: store.deepgramApiKey,
     assemblyaiApiKey: store.assemblyaiApiKey,
@@ -249,27 +182,16 @@ function useSettingsInternal() {
     setCloudTranscriptionModel: store.setCloudTranscriptionModel,
     setCloudTranscriptionBaseUrl: store.setCloudTranscriptionBaseUrl,
     setCloudTranscriptionMode: store.setCloudTranscriptionMode,
-    setCleanupCloudBaseUrl: store.setCleanupCloudBaseUrl,
-    setCleanupCloudMode: store.setCleanupCloudMode,
     setTranscriptionMode: store.setTranscriptionMode,
     setRemoteTranscriptionType: store.setRemoteTranscriptionType,
     setRemoteTranscriptionUrl: store.setRemoteTranscriptionUrl,
     setRemoteTranscriptionModel: store.setRemoteTranscriptionModel,
-    setCleanupMode: store.setCleanupMode,
-    setCleanupRemoteUrl: store.setCleanupRemoteUrl,
-    setUseCleanupModel: store.setUseCleanupModel,
-    setUseDictationAgent: store.setUseDictationAgent,
-    setCleanupModel: store.setCleanupModel,
-    setCleanupProvider: store.setCleanupProvider,
     setOpenaiApiKey: store.setOpenaiApiKey,
-    setAnthropicApiKey: store.setAnthropicApiKey,
     setGeminiApiKey: store.setGeminiApiKey,
     setGroqApiKey: store.setGroqApiKey,
     setMistralApiKey: store.setMistralApiKey,
     customTranscriptionApiKey: store.customTranscriptionApiKey,
     setCustomTranscriptionApiKey: store.setCustomTranscriptionApiKey,
-    cleanupCustomApiKey: store.cleanupCustomApiKey,
-    setCleanupCustomApiKey: store.setCleanupCustomApiKey,
     onboardingUseCases: store.onboardingUseCases,
     setOnboardingUseCases: store.setOnboardingUseCases,
     onboardingUseCaseNote: store.onboardingUseCaseNote,
@@ -325,7 +247,6 @@ function useSettingsInternal() {
     dataRetentionEnabled: store.dataRetentionEnabled,
     setDataRetentionEnabled: store.setDataRetentionEnabled,
     updateTranscriptionSettings: store.updateTranscriptionSettings,
-    updateCleanupSettings: store.updateCleanupSettings,
     updateApiKeys: store.updateApiKeys,
   };
 }

@@ -711,52 +711,7 @@
     }
   },
   "reasoning": {
-    "mode": {
-      "cloud": "Cloud",
-      "local": "Local",
-      "enterprise": "Enterprise",
-      "localDescription": "Runs on your device. Complete privacy, works offline.",
-      "cloudDescription": "Advanced models via API. Fast and capable, requires internet.",
-      "enterpriseDescription": "Use your organization's own cloud provider credentials."
-    },
-    "custom": {
-      "endpointWithProtocol": "Enter a full base URL including protocol (for example, https://server/v1).",
-      "httpsRequired": "HTTPS required (HTTP allowed for local network only).",
-      "endpointInvalid": "Custom endpoint is invalid or not configured. Check the endpoint URL in Settings → AI Models.",
-      "endpointUnauthorized": "Endpoint rejected the request (401/403). Add an API key or adjust server auth settings.",
-      "endpointTitle": "Endpoint URL",
-      "endpointExamples": "Examples:",
-      "ollama": "(Ollama)",
-      "localAi": "(LocalAI)",
-      "apiKeyOptional": "API Key (Optional)",
-      "apiKeyHelp": "Optional. Sent as a Bearer token for authentication. This is separate from your OpenAI API key.",
-      "applyAndRefresh": "Apply & Refresh",
-      "queryPrefix": "We'll query",
-      "querySuffix": "for available models.",
-      "modelsReloadHint": "Models will reload when you click away from the URL field or click \"Apply & Refresh\".",
-      "enterEndpoint": "Enter an endpoint URL above to load models.",
-      "fetchingModels": "Fetching model list from endpoint...",
-      "noModels": "No models returned. Check your endpoint URL.",
-      "providerName": "Custom",
-      "ownerLabel": "Owner: {{owner}}",
-      "unableToLoadModels": "Unable to load models from endpoint.",
-      "searchPlaceholder": "Search models…",
-      "selectedGroup": "Selected",
-      "otherGroup": "Other",
-      "noSearchResults": "No models match \"{{query}}\"",
-      "selectModelHint": "No model selected yet — choose one from the list below.",
-      "keyRequiredHint": "An API key is required for inference — add one to use this provider."
-    },
     "getApiKey": "Get your API key ->",
-    "selectModel": "Select Model",
-    "availableModels": "Available Models",
-    "disableThinking": {
-      "label": "Disable thinking output",
-      "help": "Skips reasoning tokens for cleaner output. Recommended for cleanup. Some servers ignore this hint."
-    },
-    "selfHosted": {
-      "endpointHelp": "Point to an OpenAI-compatible server on your local network (e.g. Ollama, LM Studio, vLLM, or llama-server)."
-    },
     "enterprise": {
       "title": "Enterprise Providers",
       "description": "Connect to cloud providers using your organization's credentials.",
@@ -827,14 +782,6 @@
         "adcHelp": "Uses Application Default Credentials. Run: gcloud auth application-default login",
         "apikeyHelp": "Vertex AI Express Mode API key from Google AI Studio."
       }
-    },
-    "tinfoil": {
-      "modelRetiredTitle": "Model no longer available",
-      "modelRetired": "Tinfoil retired {{from}}. Switched to {{to}}.",
-      "refreshingModels": "Refreshing models…"
-    },
-    "corti": {
-      "euOnly": "Corti's models are only available in the EU region."
     }
   },
   "transcription": {
@@ -1200,7 +1147,6 @@
     "connectCalendarDescription": "See your meetings and join them without leaving Switchboard.",
     "connectCalendarButton": "Connect Calendar"
   },
-  "cleanupPrompt": "Cleanup",
   "developerSection": {
     "currentLogFile": "Current log file",
     "debugMode": {
@@ -1319,7 +1265,6 @@
       "revokeFailed": "Failed to revoke API key"
     }
   },
-  "dictionarySuffix": "Dictionary Suffix",
   "emailVerification": {
     "checkEmailDescription": "We have sent a verification link to your email at",
     "checkEmailTitle": "Verification email sent",
@@ -1356,7 +1301,6 @@
     },
     "title": "Reset your password"
   },
-  "actionPrompt": "Action Prompt",
   "hotkeyGuidance": {
     "blockedDescription": "These shortcuts are blocked because they are commonly used by the system.",
     "blockedTitle": "Blocked shortcuts",
@@ -1481,71 +1425,6 @@
     "wtypeFallbackDescription": "wtype is the preferred auto-paste method for this wlroots compositor. A fallback is available, but may be less reliable.",
     "xwaylandAppsOnly": "automatic pasting works for XWayland apps only"
   },
-  "promptStudio": {
-    "common": {
-      "copied": "Copied",
-      "copy": "Copy",
-      "reset": "Reset",
-      "save": "Save"
-    },
-    "defaultTestInput": "Hey Whispr, what's the weather like today?",
-    "dialogs": {
-      "reset": {
-        "description": "Prompt has been reset to the default value.",
-        "title": "Reset Complete"
-      },
-      "saved": {
-        "description": "Your custom prompt will be used for all future AI processing.",
-        "title": "Prompt Saved"
-      }
-    },
-    "edit": {
-      "agentNameLabel": "Assistant name:",
-      "cautionLabel": "Caution",
-      "cautionTextPrefix": "Modifying this prompt may affect transcription quality.",
-      "cautionTextSuffix": "Keep the {{agentName}} placeholder to preserve assistant detection.",
-      "placeholder": "Enter your custom system prompt..."
-    },
-    "tabs": {
-      "customize": "Customize",
-      "test": "Test",
-      "view": "View"
-    },
-    "test": {
-      "addressHint": "Try addressing \"{{agentName}}\" to test instruction mode",
-      "aiModels": "AI Models",
-      "baseUrlMissing": "{{provider}} base URL missing. Add it in AI Models settings.",
-      "cleanup": "Cleanup",
-      "disabledInSettingsPrefix": "AI text enhancement is disabled.",
-      "disabledInSettingsSuffix": "Enable it in AI Models to test prompts.",
-      "disabledReasoning": "AI text enhancement is disabled. Enable it in AI Models to test prompts.",
-      "failed": "Test failed: {{error}}",
-      "inputLabel": "Input",
-      "inputPlaceholder": "Enter text to test...",
-      "instruction": "Instruction",
-      "modelLabel": "Model",
-      "noModelSelected": "No model selected",
-      "none": "None",
-      "outputLabel": "Output",
-      "processing": "Processing...",
-      "openwhisprCloud": "OpenWhispr Cloud",
-      "providerLabel": "Provider",
-      "run": "Run Test",
-      "customEndpoint": "Custom endpoint",
-      "apiKeyMissing": "{{provider}} API key not configured. Add it in AI Models settings.",
-      "translateHint": "The text will be translated to {{language}}",
-      "translation": "Translation",
-      "translationDisabled": "Enable Dictation Translation to test this prompt",
-      "noTargetLanguage": "Pick a target language first",
-      "agentDisabled": "Enable the voice assistant to test this prompt"
-    },
-    "view": {
-      "customPrompt": "Custom prompt",
-      "defaultPrompt": "Default prompt",
-      "modified": "Modified"
-    },
-    "defaultTestInputTranslate": "The weather is beautiful today, want to go for a walk?"
-  },
   "settingsModal": {
     "managedByOrg": "Some settings are managed by your organization.",
     "groups": {
@@ -1578,10 +1457,6 @@
       "speechToText": {
         "description": "Engines for dictation & note recording",
         "label": "Speech-to-Text"
-      },
-      "llms": {
-        "description": "Models for chat, cleanup & summaries",
-        "label": "Language Models"
       },
       "privacyData": {
         "description": "Privacy, permissions & analytics",
@@ -2041,27 +1916,6 @@
         "description": "We couldn't load your plan right now. Your access is unchanged."
       }
     },
-    "agentConfig": {
-      "agentName": "Assistant name",
-      "description": "Name your AI assistant so you can address it directly during dictation",
-      "dialogs": {
-        "updatedDescription": "Your assistant is now named \"{{name}}\". Address it by saying \"Hey {{name}}\" followed by your instructions.",
-        "updatedTitle": "Assistant name updated"
-      },
-      "examplesTitle": "Examples",
-      "helper": "Pick something short and natural to say aloud",
-      "howItWorksDescription": "When you say \"Hey {{agentName}}\" followed by an instruction, highlighted text is safely replaced with the result. With auto-paste enabled, an answer pastes at a focused writable cursor; otherwise it opens in the floating assistant panel.",
-      "howItWorksTitle": "How it works",
-      "instructionMode": "Instruction",
-      "placeholder": "e.g. Jarvis, Nova, Atlas...",
-      "save": "Save",
-      "title": "Voice Assistant",
-      "examples": {
-        "formalEmail": "Hey {{agentName}}, write a formal email about the budget",
-        "professional": "Select text, then say: Hey {{agentName}}, make this more professional",
-        "bulletPoints": "Hey {{agentName}}, convert this to bullet points"
-      }
-    },
     "aiModels": {
       "customSetup": "Custom Setup",
       "customSetupDescription": "Use your own provider and API key.",
@@ -2455,34 +2309,14 @@
       "saveDiscarded": "Save discarded dictations",
       "saveDiscardedDescription": "When you cancel a dictation with Escape, keep its audio in history so you can recover it. Requires data and audio retention to be on."
     },
-    "prompts": {
-      "description": "View, customize, and test the unified system prompt that powers text cleanup and instruction detection",
-      "title": "Prompt Studio"
-    },
     "speechToText": {
       "title": "Speech-to-Text",
       "description": "Pick an engine for dictation and note recording",
       "tabs": {
         "dictation": "Dictation",
-        "noteRecording": "Note Recording",
-        "upload": "Audio Upload"
+        "noteRecording": "Note Recording"
       },
       "selfHostedStreamingNote": "Requires a server that supports streaming transcription."
-    },
-    "llms": {
-      "title": "Language Models",
-      "description": "Configure models for cleanup, note formatting, and chat",
-      "tabs": {
-        "dictationCleanup": "Dictation Cleanup",
-        "dictationAgent": "Voice Assistant",
-        "noteFormatting": "Note Formatting",
-        "chatIntelligence": "Chat",
-        "dictationTranslation": "Translation"
-      }
-    },
-    "noteFormatting": {
-      "autoGenerateTitle": "Auto-generate note titles",
-      "autoGenerateTitleDescription": "Use AI to generate a short title for notes after transcription or enhancement"
     },
     "transcription": {
       "customSetup": "Custom Setup",
@@ -2586,12 +2420,6 @@
         }
       },
       "meetingEnterpriseOnly": "Your organization only allows enterprise cloud transcription, which does not cover meeting recording yet."
-    },
-    "intelligence": {
-      "gpuDevice": {
-        "title": "Intelligence GPU",
-        "description": "GPU used for local AI processing"
-      }
     },
     "selfHosted": {
       "endpointUrl": "Endpoint URL",
@@ -3349,90 +3177,6 @@
       "typeEmail": "Type an email to add...",
       "me": "(me)"
     },
-    "upload": {
-      "title": "Upload Audio",
-      "using": "Using {{model}}",
-      "dropOrBrowse": "Drop an audio or video file, or click to browse",
-      "supportedFormats": "MP3, WAV, M4A, MP4, MOV and most other audio or video formats",
-      "unsupportedFiles": "Skipped {{names}}: not a supported audio or video format.",
-      "dropToUpload": "Drop to upload",
-      "transcribe": "Transcribe",
-      "cancel": "Cancel",
-      "transcribingCloud": "Transcribing via cloud...",
-      "transcribingLocal": "Transcribing locally...",
-      "transcribingProvider": "Transcribing via {{provider}}...",
-      "cancelTranscription": "Cancel transcription",
-      "transcriptionComplete": "Transcription complete",
-      "partialWarning": "Part of the audio couldn't be transcribed.",
-      "partialWarningCount": "{{failed}} of {{total}} audio sections couldn't be transcribed.",
-      "diarizationWarning": "Speaker identification couldn't be applied. The transcript was saved without speaker labels.",
-      "chunkLossExceeded": "Too much of the audio was lost to a network problem. Check your connection and try again.",
-      "openNote": "Open Note",
-      "uploadAnother": "Upload Another",
-      "retry": "Retry",
-      "startOver": "Start Over",
-      "newFolder": "New Folder",
-      "folderName": "Folder name",
-      "create": "Create",
-      "openwhisprCloud": "OpenWhispr Cloud",
-      "custom": "Custom",
-      "selectFolder": "Select folder",
-      "transcriptionFailed": "Transcription failed",
-      "errorOccurred": "An error occurred",
-      "noSpeechDetected": "No speech detected in this audio.",
-      "noProviderTitle": "No transcription provider set up",
-      "noProviderDescription": "Add an API key or download a local model to start transcribing.",
-      "noProviderAction": "Open Transcription Settings",
-      "fileTooLarge": "This file exceeds the 500 MB limit.",
-      "paidPlanRequired": "Cloud transcription for files over 25 MB requires a paid plan. Large files are processed with OpenWhispr Cloud for reliable, high-quality results.",
-      "largeFileNote": "Large files are split and transcribed in parallel.",
-      "chunkProgress": "Transcribing part {{completed}} of {{total}}...",
-      "byokTooLarge": "Third-party API keys only support files up to {{size}} MB.",
-      "byokTooLargeDetail": "For files over {{size}} MB, OpenWhispr Cloud handles splitting, parallel processing, and reassembly — so you get reliable results without depending on third-party provider limits.",
-      "byokTooLargeNeedsAccount": "Create an account and upgrade to a paid plan to transcribe larger files with OpenWhispr Cloud.",
-      "byokTooLargeNeedsUpgrade": "Upgrade to a paid plan to transcribe larger files with OpenWhispr Cloud.",
-      "switchToCloudForLargeFiles": "Switch to OpenWhispr Cloud to transcribe this file.",
-      "createAccount": "Create Account",
-      "upgrade": "Upgrade",
-      "switchToCloud": "OpenWhispr Cloud",
-      "orDivider": "or",
-      "urlPlaceholder": "Paste a YouTube or audio URL",
-      "urlDownloading": "Downloading audio...",
-      "urlResolving": "Resolving URL...",
-      "urlInvalid": "Not a valid URL. Paste a YouTube link or a direct audio file URL.",
-      "urlVideoUnavailable": "This video is unavailable. It may be private, removed, or geo-blocked.",
-      "urlPlaylistNotSupported": "Playlists are not supported. Paste a single video URL.",
-      "urlContentTypeInvalid": "This URL does not point to an audio or video file.",
-      "urlDownloadFailed": "Download failed. Check the URL and try again.",
-      "urlCancelDownload": "Cancel download",
-      "addToQueue": "Add to queue",
-      "queueProgress": "{{completed}}/{{total}} completed",
-      "cancelAll": "Cancel all",
-      "clearQueue": "Clear",
-      "pasteUrls": "Paste URLs (one per line)",
-      "speakerDetection": "Speaker detection",
-      "speakerDetectionDescription": "Identify different speakers in the audio",
-      "numSpeakersPlaceholder": "Auto-detect",
-      "numSpeakersLabel": "Number of speakers",
-      "numSpeakersHint": "Setting the exact count improves accuracy, especially on long recordings.",
-      "downloadingModels": "Downloading models...",
-      "openaiDiarizeNote": "Overrides your transcription model with gpt-4o-transcribe-diarize, the only OpenAI model with speaker detection. Costs may differ from your selected model.",
-      "mistralDiarizeNote": "Speaker detection included at no extra cost with Voxtral.",
-      "groqDiarizeNote": "Speaker detection is not available with Groq. Local diarization will be used instead.",
-      "batchCancelled": "Cancelled",
-      "batchTranscriptionFailed": "Transcription failed",
-      "batchSaveFailed": "Failed to save note",
-      "batchUnknownError": "Unknown error",
-      "removeFromQueue": "Remove from queue",
-      "diarizationRunsLocally": "Speaker detection runs locally on your device.",
-      "urlSubmit": "Add link",
-      "urlsSkipped": "Some links couldn't be added ({{n}})",
-      "queueFailed": "{{n}} failed",
-      "urlFileTooLarge": "File is too large to download. The maximum size is 500 MB.",
-      "urlYoutubeBlocked": "YouTube is temporarily blocking downloads from your network. Try again in a little while.",
-      "customEndpointInvalid": "Custom transcription endpoint is not configured or invalid. Update it in Settings.",
-      "streamingOnlyProvider": "This provider only supports live transcription. Choose another provider for file uploads and retries."
-    },
     "meeting": {
       "title": "Meeting Notes",
       "description": "Transcriptions & structured summaries",
@@ -3554,9 +3298,6 @@
     "realtimeBanner": {
       "message": "Real-time transcription available on Pro",
       "upgrade": "Upgrade"
-    },
-    "enhance": {
-      "title": "Enhancement error"
     },
     "speaker": {
       "you": "You",
@@ -3784,120 +3525,6 @@
       "startMeetingRecording": "Start meeting recording"
     }
   },
-  "dictationAgent": {
-    "enabled": "Enable voice assistant",
-    "enabledDescription": "Dictate instructions to your assistant. Highlighted text is sent to the configured model and edited in place. Activate by saying \"{{agentName}}\".",
-    "screenContext": {
-      "title": "Screen Context",
-      "description": "Attach a screenshot of your active screen to voice assistant commands.",
-      "enable": "Share screen context",
-      "enableDescription": "Captures the display your cursor is on when a voice assistant recording starts. Never saved or logged.",
-      "unsupported": "Screen capture isn't available on Linux Wayland.",
-      "visionModel": "Separate vision model",
-      "visionModelDescription": "Route commands that include a screenshot to a different, vision-capable model.",
-      "permissionTitle": "Screen Recording",
-      "permissionDescription": "macOS requires Screen Recording permission to capture your screen.",
-      "relaunchHint": "Screen Recording was granted while Switchboard was running. Quit and reopen Switchboard to start capturing screenshots."
-    },
-    "modes": {
-      "openwhispr": "OpenWhispr Cloud",
-      "openwhisprDesc": "Use the Switchboard-managed assistant — no API key needed.",
-      "providers": "Bring your own key",
-      "providersDesc": "Connect to OpenAI, Anthropic, Gemini, or Groq with your own API key.",
-      "local": "Local",
-      "localDesc": "Run a local LLM on your device — fully private.",
-      "selfHosted": "Self-hosted",
-      "selfHostedDesc": "Point at a self-hosted OpenAI-compatible endpoint.",
-      "enterprise": "Enterprise",
-      "enterpriseDesc": "Use AWS Bedrock, Azure OpenAI, or Google Vertex."
-    },
-    "prompt": {
-      "title": "Assistant prompt",
-      "description": "The system prompt used when the wake word is detected. Falls back to the built-in default."
-    }
-  },
-  "agentMode": {
-    "settings": {
-      "systemPrompt": "System Prompt",
-      "systemPromptDescription": "Custom instructions for the assistant",
-      "systemPromptPlaceholder": "Enter custom system prompt...",
-      "modes": {
-        "openwhispr": "OpenWhispr Cloud",
-        "providers": "Cloud Providers",
-        "local": "Local",
-        "selfHosted": "Self-Hosted",
-        "enterprise": "Enterprise",
-        "openwhisprDesc": "Reliable accuracy. No setup needed.",
-        "providersDesc": "Bring your own API key.",
-        "localDesc": "On-device models. Fully private.",
-        "selfHostedDesc": "Your own server on your network.",
-        "enterpriseDesc": "Use your organization's cloud account (AWS, Azure, GCP)."
-      }
-    },
-    "chat": {
-      "errorPrefix": "Error",
-      "emptyResponse": "The model returned no response."
-    },
-    "input": {
-      "listening": "Listening...",
-      "transcribing": "Transcribing...",
-      "thinking": "Thinking...",
-      "typeMessage": "Type a message...",
-      "send": "Send",
-      "voiceDraftStreamingOnly": "Voice input isn't available with your transcription provider: it only supports live dictation. Choose another provider in Settings → Speech to Text."
-    },
-    "tools": {
-      "search_notesName": "Search notes",
-      "get_noteName": "Get note",
-      "create_noteName": "Create note",
-      "update_noteName": "Update note",
-      "list_foldersName": "List folders",
-      "copy_to_clipboardName": "Copy to clipboard",
-      "web_searchName": "Web search",
-      "get_calendar_eventsName": "Get calendar events",
-      "get_calendar_availabilityName": "Check calendar availability",
-      "get_snippetName": "Get snippet",
-      "update_dictionaryName": "Update dictionary",
-      "update_snippetsName": "Update snippets",
-      "search_notesStatus": "Searching notes...",
-      "web_searchStatus": "Searching the web...",
-      "copy_to_clipboardStatus": "Copying to clipboard...",
-      "get_calendar_eventsStatus": "Checking calendar...",
-      "get_calendar_availabilityStatus": "Checking availability...",
-      "get_snippetStatus": "Fetching snippet...",
-      "update_dictionaryStatus": "Updating dictionary...",
-      "update_snippetsStatus": "Updating snippets...",
-      "get_noteStatus": "Reading note...",
-      "create_noteStatus": "Creating note...",
-      "update_noteStatus": "Updating note...",
-      "copiedToClipboard": "Copied to your clipboard",
-      "openNote": "Open note",
-      "unknownTool": "Unknown tool: {{name}}",
-      "invalidArgs": "Invalid tool arguments for {{name}}"
-    }
-  },
-  "assistant": {
-    "panel": {
-      "selectionHint": "Select text to edit with",
-      "selectedContext": "Selected text added",
-      "removeSelectedContext": "Remove selected text",
-      "newConversation": "New conversation",
-      "copyToClipboard": "Copy to clipboard",
-      "suggestions": {
-        "summarizeNotes": "Summarize my recent notes",
-        "calendar": "What is on my calendar?",
-        "draft": "Help me draft something"
-      }
-    },
-    "toolActivity": {
-      "verbs": {
-        "invoking": "Invoking",
-        "calling": "Calling",
-        "using": "Using"
-      },
-      "toolFallback": "Tool"
-    }
-  },
   "integrations": {
     "title": "Integrations",
     "description": "Connect services to supercharge your workflow",
@@ -4123,17 +3750,6 @@
     "description": "Switchboard needs a few permissions to work on this computer.",
     "continue": "Continue"
   },
-  "embeddedChat": {
-    "askPlaceholder": "Ask anything...",
-    "send": "Send",
-    "title": "Chat",
-    "emptyState": "Ask a question about this note",
-    "dock": "Dock to sidebar",
-    "undock": "Undock from sidebar",
-    "close": "Close chat",
-    "newChat": "New chat",
-    "conversationSelector": "Switch conversation"
-  },
   "transcriptionPreview": {
     "label": "Preview",
     "listening": "Listening...",
@@ -4150,28 +3766,6 @@
       "others": "Others"
     },
     "missingAudio": "[missing audio {{from}}-{{to}}]"
-  },
-  "dictationTranslation": {
-    "title": "Dictation Translation",
-    "description": "A dedicated hotkey that pastes your dictation translated into another language",
-    "enabled": "Enable Dictation Translation",
-    "enabledDescription": "Dictations started with the translation hotkey are cleaned up and then translated before pasting",
-    "sourceLanguage": "Spoken language",
-    "sourceLanguageDescription": "The language you dictate in — Automatic also handles mixed-language dictation",
-    "targetLanguage": "Translate to",
-    "targetLanguageDescription": "The language of the pasted text",
-    "targetLanguageMissing": "Pick a target language to activate the translation hotkey",
-    "selectLanguage": "Select language…",
-    "prompt": {
-      "title": "Translation Prompt",
-      "description": "Customize how the model translates your dictation"
-    },
-    "hotkeyHint": "Set the hotkey under Settings → Hotkeys → Translation Hotkey",
-    "targetsLabel": "Target languages",
-    "addTarget": "Add language…",
-    "activeTarget": "Active target language",
-    "removeTarget": "Remove {{language}}",
-    "maxTargets": "Up to {{max}} languages"
   },
   "meetingNotification": {
     "title": "Meeting detected",

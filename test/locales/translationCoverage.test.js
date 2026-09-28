@@ -7,7 +7,7 @@ const modelRegistry = require("../../src/models/modelRegistryData.json");
 
 const SRC = path.join(__dirname, "../../src");
 const LOCALES = path.join(SRC, "locales");
-const NAMESPACES = ["translation", "prompts"];
+const NAMESPACES = ["translation"];
 const PLURAL_SUFFIX = /_(zero|one|two|few|many|other)$/;
 const T_CALL = /\bt\(\s*(['"`])([A-Za-z0-9_.-]+)\1/g;
 // messageKey values are passed to t() as a variable, so the T_CALL scan
@@ -193,4 +193,3 @@ test("every messageKey literal resolves in en", () => {
 
   assert.deepEqual(missing, [], `unresolved messageKey values:\n${missing.join("\n")}`);
 });
-

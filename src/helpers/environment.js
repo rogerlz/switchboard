@@ -12,12 +12,6 @@ const SECRET_KEYS = [
   "CORTI_CLIENT_ID",
   "CORTI_CLIENT_SECRET",
   "CUSTOM_TRANSCRIPTION_API_KEY",
-  "CUSTOM_CLEANUP_API_KEY",
-  "BEDROCK_ACCESS_KEY_ID",
-  "BEDROCK_SECRET_ACCESS_KEY",
-  "BEDROCK_SESSION_TOKEN",
-  "AZURE_OPENAI_API_KEY",
-  "VERTEX_API_KEY",
 ];
 
 const SECRET_KEY_SET = new Set(SECRET_KEYS);
@@ -28,10 +22,6 @@ const PERSISTED_KEYS = [
   "PARAKEET_MODEL",
   "DICTATION_LANGUAGE",
   "LOCAL_WHISPER_MODEL",
-  "CLEANUP_PROVIDER",
-  "LOCAL_CLEANUP_MODEL",
-  "LLAMA_GPU_BACKEND",
-  "LLAMA_VULKAN_ENABLED",
   "START_MINIMIZED",
   "UI_LANGUAGE",
   "WHISPER_CUDA_ENABLED",
@@ -40,14 +30,6 @@ const PERSISTED_KEYS = [
   "WHISPER_GPU_FAILED",
   "WHISPER_THREADS",
   "TRANSCRIPTION_GPU_UUID",
-  "INTELLIGENCE_GPU_UUID",
-  "BEDROCK_REGION",
-  "BEDROCK_PROFILE",
-  "AZURE_OPENAI_ENDPOINT",
-  "AZURE_OPENAI_DEPLOYMENT",
-  "AZURE_OPENAI_API_VERSION",
-  "VERTEX_PROJECT",
-  "VERTEX_LOCATION",
 ];
 
 // Module-level so writes are serialized across all EnvironmentManager
@@ -169,13 +151,6 @@ class EnvironmentManager {
     const dir = this._getSecureKeysDir();
     await fsPromises.mkdir(dir, { recursive: true });
 
-    // Adopt renamed key so the value survives migration. Old releases stored
-    // it under CUSTOM_REASONING_API_KEY; new code only encrypts CUSTOM_CLEANUP_API_KEY.
-    if (process.env.CUSTOM_REASONING_API_KEY && !process.env.CUSTOM_CLEANUP_API_KEY) {
-      process.env.CUSTOM_CLEANUP_API_KEY = process.env.CUSTOM_REASONING_API_KEY;
-    }
-    delete process.env.CUSTOM_REASONING_API_KEY;
-
     const migrated = [];
     try {
       for (const name of SECRET_KEYS) {
@@ -278,94 +253,6 @@ class EnvironmentManager {
     return this._saveKey("CUSTOM_TRANSCRIPTION_API_KEY", key);
   }
 
-  getCleanupCustomKey() {
-    // TODO: drop CUSTOM_REASONING_API_KEY fallback after 2 releases.
-    return this._getKey("CUSTOM_CLEANUP_API_KEY") || this._getKey("CUSTOM_REASONING_API_KEY");
-  }
-
-  saveCleanupCustomKey(key) {
-    delete process.env.CUSTOM_REASONING_API_KEY;
-    return this._saveKey("CUSTOM_CLEANUP_API_KEY", key);
-  }
-
-  // Enterprise providers — AWS Bedrock
-  getBedrockRegion() {
-    return this._getKey("BEDROCK_REGION");
-  }
-  saveBedrockRegion(value) {
-    return this._saveKey("BEDROCK_REGION", value);
-  }
-  getBedrockProfile() {
-    return this._getKey("BEDROCK_PROFILE");
-  }
-  saveBedrockProfile(value) {
-    return this._saveKey("BEDROCK_PROFILE", value);
-  }
-  getBedrockAccessKeyId() {
-    return this._getKey("BEDROCK_ACCESS_KEY_ID");
-  }
-  saveBedrockAccessKeyId(key) {
-    return this._saveKey("BEDROCK_ACCESS_KEY_ID", key);
-  }
-  getBedrockSecretAccessKey() {
-    return this._getKey("BEDROCK_SECRET_ACCESS_KEY");
-  }
-  saveBedrockSecretAccessKey(key) {
-    return this._saveKey("BEDROCK_SECRET_ACCESS_KEY", key);
-  }
-  getBedrockSessionToken() {
-    return this._getKey("BEDROCK_SESSION_TOKEN");
-  }
-  saveBedrockSessionToken(key) {
-    return this._saveKey("BEDROCK_SESSION_TOKEN", key);
-  }
-
-  // Enterprise providers — Azure OpenAI
-  getAzureEndpoint() {
-    return this._getKey("AZURE_OPENAI_ENDPOINT");
-  }
-  saveAzureEndpoint(value) {
-    return this._saveKey("AZURE_OPENAI_ENDPOINT", value);
-  }
-  getAzureApiKey() {
-    return this._getKey("AZURE_OPENAI_API_KEY");
-  }
-  saveAzureApiKey(key) {
-    return this._saveKey("AZURE_OPENAI_API_KEY", key);
-  }
-  getAzureDeployment() {
-    return this._getKey("AZURE_OPENAI_DEPLOYMENT");
-  }
-  saveAzureDeployment(value) {
-    return this._saveKey("AZURE_OPENAI_DEPLOYMENT", value);
-  }
-  getAzureApiVersion() {
-    return this._getKey("AZURE_OPENAI_API_VERSION");
-  }
-  saveAzureApiVersion(value) {
-    return this._saveKey("AZURE_OPENAI_API_VERSION", value);
-  }
-
-  // Enterprise providers — GCP Vertex AI
-  getVertexProject() {
-    return this._getKey("VERTEX_PROJECT");
-  }
-  saveVertexProject(value) {
-    return this._saveKey("VERTEX_PROJECT", value);
-  }
-  getVertexLocation() {
-    return this._getKey("VERTEX_LOCATION");
-  }
-  saveVertexLocation(value) {
-    return this._saveKey("VERTEX_LOCATION", value);
-  }
-  getVertexApiKey() {
-    return this._getKey("VERTEX_API_KEY");
-  }
-  saveVertexApiKey(key) {
-    return this._saveKey("VERTEX_API_KEY", key);
-  }
-
   getStartMinimized() {
     return this._getKey("START_MINIMIZED") === "true";
   }
@@ -399,7 +286,6 @@ class EnvironmentManager {
     for (const envVarName of PERSISTED_KEYS) {
       delete process.env[envVarName];
     }
-    delete process.env.CUSTOM_REASONING_API_KEY;
 
     await Promise.all([
       fsPromises.rm(path.join(app.getPath("userData"), ".env"), { force: true }),

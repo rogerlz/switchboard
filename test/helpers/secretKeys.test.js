@@ -54,18 +54,6 @@ test("every BYOK key round-trips through the generated accessors", () => {
   }
 });
 
-test("openrouter is a first-class secret", () => {
-  const or = BYOK_API_KEYS.find((k) => k.base === "openrouter");
-  assert.ok(or, "openrouter present in manifest");
-  assert.equal(or.env, "OPENROUTER_API_KEY");
-  const env = new EnvironmentManager();
-  env.saveOpenrouterKey("sk-or-abc");
-  assert.equal(env.getOpenrouterKey(), "sk-or-abc");
-});
-
-// The accessor names come verbatim from the manifest rather than from `base`,
-// and realtimeTokenProviders.js / stt-canary.mjs call these exact spellings —
-// a base-derived rename would give getAssemblyaiKey and break them silently.
 test("the STT accessors keep the spellings their callers use", () => {
   const env = new EnvironmentManager();
   assert.equal(typeof env.getAssemblyAIKey, "function");

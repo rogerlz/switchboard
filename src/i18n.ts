@@ -1,6 +1,5 @@
 import i18n from "i18next";
 import { initReactI18next } from "react-i18next";
-import { PROMPTS_BY_LOCALE } from "./locales/prompts";
 import { TRANSLATIONS_BY_LOCALE } from "./locales/translations";
 
 export const SUPPORTED_UI_LANGUAGES = ["en"] as const;
@@ -13,10 +12,7 @@ export function normalizeUiLanguage(language: string | null | undefined): UiLang
 }
 
 const resources = Object.fromEntries(
-  SUPPORTED_UI_LANGUAGES.map((lang) => [
-    lang,
-    { translation: TRANSLATIONS_BY_LOCALE[lang], prompts: PROMPTS_BY_LOCALE[lang] },
-  ])
+  SUPPORTED_UI_LANGUAGES.map((lang) => [lang, { translation: TRANSLATIONS_BY_LOCALE[lang] }])
 );
 
 const browserLanguage =
@@ -31,7 +27,7 @@ void i18n.use(initReactI18next).init({
   resources,
   lng: initialLanguage,
   fallbackLng: "en",
-  ns: ["translation", "prompts"],
+  ns: ["translation"],
   defaultNS: "translation",
   interpolation: {
     escapeValue: false,

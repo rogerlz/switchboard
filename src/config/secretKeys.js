@@ -1,4 +1,4 @@
-// Single source of truth for the uniform BYOK cloud-LLM API-key secrets:
+// Single source of truth for the uniform BYOK transcription API-key secrets:
 // environment.js, ipcHandlers.js and the settings store all derive their
 // per-key plumbing from this list, so adding a provider is one entry.
 // CommonJS + pure data so both the main process and the Vite renderer share it.
@@ -13,13 +13,6 @@ const BYOK_API_KEYS = [
     get: "getOpenAIKey",
     save: "saveOpenAIKey",
     storeKey: "openaiApiKey",
-  },
-  {
-    base: "anthropic",
-    env: "ANTHROPIC_API_KEY",
-    get: "getAnthropicKey",
-    save: "saveAnthropicKey",
-    storeKey: "anthropicApiKey",
   },
   {
     base: "gemini",
@@ -42,13 +35,6 @@ const BYOK_API_KEYS = [
     get: "getMistralKey",
     save: "saveMistralKey",
     storeKey: "mistralApiKey",
-  },
-  {
-    base: "openrouter",
-    env: "OPENROUTER_API_KEY",
-    get: "getOpenrouterKey",
-    save: "saveOpenrouterKey",
-    storeKey: "openrouterApiKey",
   },
   {
     base: "tinfoil",
@@ -79,22 +65,6 @@ const BYOK_API_KEYS = [
     get: "getAssemblyAIKey",
     save: "saveAssemblyAIKey",
     storeKey: "assemblyaiApiKey",
-  },
-  // Per-scope Custom-endpoint keys. Dictation cleanup's counterpart predates
-  // this manifest and keeps its bespoke accessors (CUSTOM_CLEANUP_API_KEY).
-  {
-    base: "note-formatting-custom",
-    env: "NOTE_FORMATTING_CUSTOM_API_KEY",
-    get: "getNoteFormattingCustomKey",
-    save: "saveNoteFormattingCustomKey",
-    storeKey: "noteFormattingCustomApiKey",
-  },
-  {
-    base: "translation-custom",
-    env: "TRANSLATION_CUSTOM_API_KEY",
-    get: "getTranslationCustomKey",
-    save: "saveTranslationCustomKey",
-    storeKey: "translationCustomApiKey",
   },
 ];
 

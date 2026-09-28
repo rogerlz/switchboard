@@ -14,15 +14,12 @@ void i18nMain.init({
   resources: Object.fromEntries(
     SUPPORTED_UI_LANGUAGES.map((lang) => [
       lang,
-      {
-        translation: require(`../locales/${lang}/translation.json`),
-        prompts: require(`../locales/${lang}/prompts.json`),
-      },
+      { translation: require(`../locales/${lang}/translation.json`) },
     ])
   ),
   lng: normalizeUiLanguage(process.env.UI_LANGUAGE),
   fallbackLng: "en",
-  ns: ["translation", "prompts"],
+  ns: ["translation"],
   defaultNS: "translation",
   interpolation: {
     escapeValue: false,

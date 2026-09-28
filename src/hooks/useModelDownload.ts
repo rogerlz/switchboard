@@ -3,12 +3,7 @@ import type { TFunction } from "i18next";
 import { useTranslation } from "react-i18next";
 import { useDialogs } from "./useDialogs";
 import { useToast } from "../components/ui/useToast";
-import type {
-  LocalLLMDownloadProgressEvent,
-  LocalModelDownloadStatus,
-  WhisperDownloadProgressData,
-} from "../types/electron";
-import { clearMissingLocalModelSelections } from "../stores/settingsStore";
+import type { LocalModelDownloadStatus, WhisperDownloadProgressData } from "../types/electron";
 import "../types/electron";
 
 const PROGRESS_THROTTLE_MS = 100;
@@ -32,7 +27,7 @@ export interface DownloadProgress {
   eta?: number;
 }
 
-export type ModelType = "whisper" | "llm" | "parakeet";
+export type ModelType = "whisper" | "parakeet";
 
 interface UseModelDownloadOptions {
   modelType: ModelType;
@@ -46,8 +41,6 @@ interface ModelDownloadTerminalEvent {
   code?: string;
   sequence?: number;
 }
-
-type LLMDownloadProgressData = LocalLLMDownloadProgressEvent & { sequence?: number };
 
 export function formatETA(seconds: number): string {
   if (seconds < 60) return `${Math.round(seconds)}s`;
@@ -238,46 +231,17 @@ export function useModelDownload({
     [handleTerminalDownload, modelType, updateDownload]
   );
 
-  const handleLLMProgress = useCallback(
-    (_event: unknown, data: LLMDownloadProgressData) => {
-      if (data.type === "complete") {
-        void handleTerminalDownload(data.modelId, data.type, undefined, undefined, data.sequence);
-        return;
-      }
-      if (data.type === "error") {
-        void handleTerminalDownload(data.modelId, data.type, data.error, data.code, data.sequence);
-        return;
-      }
-      const now = Date.now();
-      const lastUpdate = lastProgressUpdateRef.current[data.modelId] || 0;
-      if ((data.progress || 0) < 100 && now - lastUpdate < PROGRESS_THROTTLE_MS) return;
-      lastProgressUpdateRef.current[data.modelId] = now;
-      updateDownload({
-        modelType: "llm",
-        modelId: data.modelId,
-        phase: "downloading",
-        progress: data.progress || 0,
-        downloadedBytes: data.downloadedSize || 0,
-        totalBytes: data.totalSize || 0,
-        sequence: data.sequence || 0,
-      });
-    },
-    [handleTerminalDownload, updateDownload]
-  );
-
   useEffect(() => {
     const dispose =
       modelType === "whisper"
         ? window.electronAPI?.onWhisperDownloadProgress((_event, data) =>
             handleNativeProgress(data)
           )
-        : modelType === "parakeet"
-          ? window.electronAPI?.onParakeetDownloadProgress((_event, data) =>
-              handleNativeProgress(data)
-            )
-          : window.electronAPI?.onModelDownloadProgress(handleLLMProgress);
+        : window.electronAPI?.onParakeetDownloadProgress((_event, data) =>
+            handleNativeProgress(data)
+          );
     return () => dispose?.();
-  }, [handleLLMProgress, handleNativeProgress, modelType]);
+  }, [handleNativeProgress, modelType]);
 
   useEffect(() => {
     let disposed = false;
@@ -297,7 +261,7 @@ export function useModelDownload({
       if (
         ownedRequestsRef.current.has(modelId) ||
         downloads[modelId] ||
-        (modelType !== "llm" && Object.keys(downloads).length > 0)
+        Object.keys(downloads).length > 0
       ) {
         toast({
           title: t("hooks.modelDownload.downloadInProgress.title"),
@@ -330,9 +294,7 @@ export function useModelDownload({
         const result =
           modelType === "whisper"
             ? await window.electronAPI?.downloadWhisperModel(modelId)
-            : modelType === "parakeet"
-              ? await window.electronAPI?.downloadParakeetModel(modelId)
-              : await window.electronAPI?.modelDownload?.(modelId);
+            : await window.electronAPI?.downloadParakeetModel(modelId);
 
         if (result?.success) {
           notifyLocalModelsChanged();
@@ -341,10 +303,7 @@ export function useModelDownload({
           isDuplicateRequest = true;
           const activeDownloads = await window.electronAPI?.modelGetActiveDownloads?.();
           if (ownedRequestsRef.current.get(modelId)) return;
-          const activeDownload = activeDownloads?.find(
-            (status) =>
-              status.modelType === modelType && (modelType !== "llm" || status.modelId === modelId)
-          );
+          const activeDownload = activeDownloads?.find((status) => status.modelType === modelType);
           if (activeDownload) {
             updateDownload(activeDownload);
             keepActiveDownloadState = activeDownload.modelId === modelId;
@@ -420,7 +379,7 @@ export function useModelDownload({
               }),
             });
           }
-        } else if (modelType === "parakeet") {
+        } else {
           const result = await window.electronAPI?.deleteParakeetModel(modelId);
           if (result?.success) {
             toast({
@@ -430,16 +389,6 @@ export function useModelDownload({
               }),
             });
           }
-        } else {
-          // model-delete reports failure by resolving, not throwing — leaving the
-          // model on disk, so the scopes pointing at it must stay untouched.
-          const result = await window.electronAPI?.modelDelete?.(modelId);
-          if (!result?.success) throw new Error(result?.error ?? "");
-          clearMissingLocalModelSelections((id) => id !== modelId);
-          toast({
-            title: t("hooks.modelDownload.modelDeleted.title"),
-            description: t("hooks.modelDownload.modelDeleted.description"),
-          });
         }
         notifyLocalModelsChanged();
         onComplete?.();
@@ -465,9 +414,7 @@ export function useModelDownload({
         const result =
           modelType === "whisper"
             ? await window.electronAPI?.cancelWhisperDownload()
-            : modelType === "parakeet"
-              ? await window.electronAPI?.cancelParakeetDownload()
-              : await window.electronAPI?.modelCancelDownload?.(targetModel);
+            : await window.electronAPI?.cancelParakeetDownload();
         if (result?.success) {
           toast({
             title: t("hooks.modelDownload.downloadCancelled.title"),

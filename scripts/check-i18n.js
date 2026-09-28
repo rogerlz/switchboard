@@ -5,7 +5,7 @@ const path = require("path");
 
 const LOCALES_DIR = path.join(__dirname, "..", "src", "locales");
 const BASE_LANG = "en";
-const NAMESPACES = ["translation", "prompts"];
+const NAMESPACES = ["translation"];
 
 function readJson(filePath) {
   return JSON.parse(fs.readFileSync(filePath, "utf8"));

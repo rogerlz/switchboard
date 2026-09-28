@@ -31,7 +31,7 @@ function sharedFieldInventory() {
 }
 
 function nativeFieldInventory() {
-  const primitiveFiles = new Set(["src/components/ui/input.tsx", "src/components/ui/textarea.tsx"]);
+  const primitiveFiles = new Set(["src/components/ui/input.tsx"]);
 
   return componentFiles(path.join(repoRoot, "src/components")).flatMap((absolutePath) => {
     const file = path.relative(repoRoot, absolutePath).split(path.sep).join("/");
@@ -59,22 +59,16 @@ const EXPECTED_SHARED_FIELD_DIRECTIONS = {
   "src/components/ApiKeysSection.tsx": ["auto"],
   "src/components/CreateTeamDialog.tsx": ["auto"],
   "src/components/CreateWorkspaceDialog.tsx": ["auto"],
-  "src/components/EnterpriseProviderConfig.tsx": ["ltr", "ltr", "ltr", "ltr", "ltr", "ltr"],
   "src/components/InviteTeammateDialog.tsx": ["ltr"],
-  "src/components/OpenAICompatiblePanel.tsx": ["ltr"],
   "src/components/SelfHostedPanel.tsx": ["ltr", "ltr"],
   "src/components/SettingsPage.tsx": ["ltr", "ltr", "ltr", "ltr", "ltr", "ltr"],
   "src/components/TranscriptionModelPicker.tsx": ["ltr", "ltr", "ltr"],
   "src/components/notes/DeleteSpaceDialog.tsx": ["auto"],
-  "src/components/notes/UploadAudioView.tsx": ["auto"],
   "src/components/settings/EnterpriseCheckoutDialog.tsx": ["inherit"],
   "src/components/settings/ProfileSection.tsx": ["auto", "ltr", "ltr", "ltr"],
   "src/components/settings/WorkspaceDeveloperTab.tsx": ["auto"],
   "src/components/settings/WorkspaceSection.tsx": ["auto"],
   "src/components/ui/ApiKeyInput.tsx": ["ltr"],
-  "src/components/ui/CustomModelInput.tsx": ["ltr"],
-  "src/components/ui/PromptStudio.tsx": ["auto", "auto"],
-  "src/components/ui/SearchableModelList.tsx": ["ltr"],
 };
 
 const EXPECTED_NATIVE_FIELD_DIRECTIONS = {
@@ -90,18 +84,16 @@ const EXPECTED_NATIVE_FIELD_DIRECTIONS = {
   "src/components/notes/ShareNoteDialog.tsx": ["auto"],
   "src/components/notes/SpaceNameField.tsx": ["auto"],
   "src/components/notes/SpacesTree.tsx": ["auto", "auto", "auto", "auto"],
-  "src/components/notes/UploadAudioView.tsx": ["ltr", "ltr", "inherit"],
   "src/components/settings/ProfileSection.tsx": ["inherit"],
   "src/components/ui/EmojiPicker.tsx": ["auto"],
   "src/components/ui/LanguageSelector.tsx": ["auto"],
 };
 
-test("shared field primitives inherit unless a consumer declares its content direction", async (t) => {
+test("the shared Input primitive inherits unless a consumer declares its content direction", async (t) => {
   const vite = await createRendererServer(t, {
     cachePrefix: "openwhispr-field-direction-primitives-",
   });
   const { Input } = await vite.ssrLoadModule("/components/ui/input.tsx");
-  const { Textarea } = await vite.ssrLoadModule("/components/ui/textarea.tsx");
 
   const inherited = renderToStaticMarkup(
     React.createElement(Input, { value: "مرحبا OpenWhispr 2.0", readOnly: true })
@@ -119,16 +111,6 @@ test("shared field primitives inherit unless a consumer declares its content dir
   );
   assert.match(technicalPassword, /\sdir="ltr"/);
   assert.match(technicalPassword, /value="سر-sk_ABC\/123"/);
-
-  const prose = renderToStaticMarkup(
-    React.createElement(Textarea, {
-      dir: "auto",
-      value: "مرحبا OpenWhispr 2.0",
-      readOnly: true,
-    })
-  );
-  assert.match(prose, /\sdir="auto"/);
-  assert.match(prose, />مرحبا OpenWhispr 2.0<\/textarea>/);
 });
 
 test("every shared Input and Textarea consumer has an explicit reviewed classification", () => {
@@ -142,10 +124,6 @@ test("native text fields use the same reviewed direction policy", () => {
 });
 
 test("representative prose, identity, secret, and rich-editor surfaces keep their policy", () => {
-  assert.match(
-    source("src/components/notes/UploadAudioView.tsx"),
-    /<input\s+dir="ltr"\s+type="url"/
-  );
   assert.match(
     source("src/components/notes/ShareNoteDialog.tsx"),
     /<input\s+dir="auto"[\s\S]*?placeholder=\{t\("noteEditor\.share\.dialog\.searchPlaceholder"\)\}/

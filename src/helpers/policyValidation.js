@@ -4,7 +4,6 @@
 // policy as "allow everything" — so a managed response must carry a
 // structurally valid policy or the whole response is malformed.
 const { isCanonicalAppVersion } = require("./appVersion");
-const modelRegistryData = require("../models/modelRegistryData.json");
 
 const POLICY_SCOPES = ["transcription", "llm"];
 const TRANSCRIPTION_MODES = new Set([
@@ -17,9 +16,7 @@ const TRANSCRIPTION_MODES = new Set([
 const LLM_MODES = TRANSCRIPTION_MODES;
 // Enterprise clouds with a managed transcription implementation (Azure only for now).
 const TRANSCRIPTION_ENTERPRISE_PROVIDERS = new Set(["azure"]);
-const ENTERPRISE_PROVIDERS = new Set(
-  modelRegistryData.enterpriseProviders.map((provider) => provider.id)
-);
+const ENTERPRISE_PROVIDERS = new Set(["bedrock", "azure", "vertex"]);
 const SHARING_MODES = ["allowed", "domain_only", "disabled"];
 const LOCAL_HISTORY_MODES = ["user_choice", "always_on", "always_off"];
 

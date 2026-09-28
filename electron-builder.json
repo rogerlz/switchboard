@@ -111,9 +111,7 @@
       "filter": [
         "whisper-cpp-*",
         "whisper-server-*",
-        "llama-server-*",
         "sherpa-onnx-*",
-        "yt-dlp-*",
         "macos-audio-tap",
         "macos-mic-listener",
         "macos-calendar-listener",

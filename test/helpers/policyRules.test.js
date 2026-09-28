@@ -235,18 +235,17 @@ test("mode fallback skips unavailable choices and never invents an empty-allowli
   );
 });
 
-test("managed provider lists hide denied BYOK and enterprise providers", async () => {
-  const { filterByokProviderOptionsByPolicy, filterEnterpriseProviderOptionsByPolicy } =
-    await load();
+test("managed provider lists hide denied BYOK providers", async () => {
+  const { filterByokProviderOptionsByPolicy } = await load();
   const byokOptions = [{ id: "openai" }, { id: "groq" }, { id: "custom" }];
-  const enterpriseOptions = [{ id: "bedrock" }, { id: "azure" }];
   const managed = { status: "managed", policy, appVersion: "1.8.1" };
 
   assert.deepEqual(
-    filterByokProviderOptionsByPolicy(byokOptions, "llm", managed).map((option) => option.id),
+    filterByokProviderOptionsByPolicy(byokOptions, "transcription", managed).map(
+      (option) => option.id
+    ),
     ["openai"]
   );
-  assert.deepEqual(filterEnterpriseProviderOptionsByPolicy(enterpriseOptions, managed), []);
 });
 
 test("unknown BYOK provider ids validate through but grant nothing", async () => {
@@ -420,41 +419,6 @@ test("effective selection skips policy providers unavailable to a narrower surfa
     ),
     { mode: "local", provider: "openai" }
   );
-});
-
-test("empty managed scope allowlists make that scope unavailable", async () => {
-  const { isLlmSelectionAllowed } = await load();
-  const emptyLlmPolicy = {
-    ...policy,
-    llm: { allowedModes: [], allowedByokProviders: [], allowedEnterpriseProviders: [] },
-  };
-  const snapshot = { status: "managed", policy: emptyLlmPolicy, appVersion: "1.8.1" };
-
-  assert.equal(isLlmSelectionAllowed(snapshot, { mode: "providers", provider: "openai" }), false);
-  assert.equal(
-    isLlmSelectionAllowed(
-      { status: "unmanaged", policy: null, appVersion: null },
-      { mode: "providers", provider: "openai" }
-    ),
-    true
-  );
-});
-
-test("LLM dispatch requires an allowed mode and provider", async () => {
-  const { isLlmSelectionAllowed } = await load();
-  const noProviderPolicy = {
-    ...policy,
-    llm: {
-      allowedModes: ["providers", "local"],
-      allowedByokProviders: [],
-      allowedEnterpriseProviders: [],
-    },
-  };
-  const snapshot = { status: "managed", policy: noProviderPolicy, appVersion: "1.8.1" };
-
-  assert.equal(isLlmSelectionAllowed(snapshot, { mode: "providers", provider: "openai" }), false);
-  assert.equal(isLlmSelectionAllowed(snapshot, { mode: "local", provider: "local" }), true);
-  assert.equal(isLlmSelectionAllowed(snapshot, { mode: "enterprise", provider: "bedrock" }), false);
 });
 
 test("blocks transcription contexts whose stored mode is disallowed", async () => {
@@ -773,42 +737,6 @@ test("a browsed provider resolves for display without leaking the committed mode
       hasCustomUrl: false,
     }),
     { provider: "openai", model: "whisper-1" }
-  );
-});
-
-test("screen context is allowed unless a managed policy turns it off", async () => {
-  const { isScreenContextAllowed } = await load();
-
-  assert.equal(isScreenContextAllowed({ status: "idle", policy: null, appVersion: null }), true);
-  assert.equal(
-    isScreenContextAllowed({ status: "unmanaged", policy: null, appVersion: null }),
-    true
-  );
-  // Fail closed while the managed verdict is unknown.
-  assert.equal(
-    isScreenContextAllowed({ status: "loading", policy: null, appVersion: null }),
-    false
-  );
-  assert.equal(isScreenContextAllowed({ status: "error", policy: null, appVersion: null }), false);
-
-  // The shared fixture omits the field — the old-server contract: allowed.
-  assert.equal(isScreenContextAllowed({ status: "managed", policy, appVersion: null }), true);
-  const withFlag = (screenContextEnabled) => ({
-    status: "managed",
-    policy: { ...policy, features: { ...policy.features, screenContextEnabled } },
-    appVersion: null,
-  });
-  assert.equal(isScreenContextAllowed(withFlag(true)), true);
-  assert.equal(isScreenContextAllowed(withFlag(false)), false);
-
-  // An org-required update denies everything, screen context included.
-  assert.equal(
-    isScreenContextAllowed({
-      status: "managed",
-      policy: { ...policy, minAppVersion: "9.9.9" },
-      appVersion: "1.8.1",
-    }),
-    false
   );
 });
 

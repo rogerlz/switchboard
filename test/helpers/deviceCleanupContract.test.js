@@ -19,7 +19,6 @@ test("explicit device cleanup covers models, credentials, caches, and browser se
   for (const operation of [
     "deleteAllParakeetModels",
     "diarizationManager?.deleteModels",
-    "modelManager.deleteAllModels",
     "environmentManager?.clearAllPersistedData",
     "tokenStore.clear",
     "clearStorageData",

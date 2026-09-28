@@ -14,7 +14,7 @@ import {
   resolveManagedEnterpriseScope,
   managedScopesForConfig,
 } from "../helpers/enterpriseManagedConfig.mjs";
-import { isLlmSelectionAllowed, isTranscriptionSelectionAllowed } from "./policyRules";
+import { isTranscriptionSelectionAllowed } from "./policyRules";
 import { usePolicyStore } from "./policyStore";
 
 interface EnterpriseIdentityState {
@@ -255,31 +255,19 @@ function ensureLifecycleListeners(): void {
   });
 }
 
-// The vision override is the dictation agent's image lane; it has no managed
-// scope of its own (enterprise envelopes predate it), so managed resolution
-// follows the agent scope instead of failing as an unknown scope.
-const MANAGED_SCOPE_ALIASES: Partial<Record<ManagedEnterpriseScope, ManagedEnterpriseScope>> = {
-  dictationAgentVision: "dictationAgent",
-};
-
-function isManagedSelectionAllowedByPolicy(
-  scope: ManagedEnterpriseScope,
-  provider: string
-): boolean {
-  const policy = usePolicyStore.getState();
-  const selection = { mode: "enterprise" as const, provider };
-  return scope === "transcription"
-    ? isTranscriptionSelectionAllowed(policy, selection)
-    : isLlmSelectionAllowed(policy, selection);
+function isManagedSelectionAllowedByPolicy(provider: string): boolean {
+  return isTranscriptionSelectionAllowed(usePolicyStore.getState(), {
+    mode: "enterprise",
+    provider,
+  });
 }
 
 function resolveScope(
   config: ManagedEnterpriseConfig | null,
-  requestedScope: ManagedEnterpriseScope,
+  scope: ManagedEnterpriseScope,
   setupMode: EnterpriseSetupMode,
   scopeHold: false | "unavailable" | "loading"
 ): ManagedEnterpriseScopeResolution {
-  const scope = MANAGED_SCOPE_ALIASES[requestedScope] ?? requestedScope;
   if (!config && scopeHold) {
     return scopeHold === "loading"
       ? {
@@ -301,10 +289,7 @@ function resolveScope(
     scope,
     setupMode
   ) as ManagedEnterpriseScopeResolution;
-  if (
-    resolution.kind === "managed" &&
-    !isManagedSelectionAllowedByPolicy(scope, resolution.provider)
-  ) {
+  if (resolution.kind === "managed" && !isManagedSelectionAllowedByPolicy(resolution.provider)) {
     const required = resolution.mode === "managed_required" || !resolution.allowManualSetup;
     logger.warn("Managed enterprise provider is blocked by workspace policy", {
       provider: resolution.provider,
@@ -338,10 +323,9 @@ function scopeFailsClosed(
     EnterpriseIdentityState,
     "status" | "config" | "accountId" | "workspaceId" | "managedScopes" | "enforcedScopes"
   >,
-  requestedScope: ManagedEnterpriseScope,
+  scope: ManagedEnterpriseScope,
   setupMode: EnterpriseSetupMode
 ): false | "unavailable" | "loading" {
-  const scope = MANAGED_SCOPE_ALIASES[requestedScope] ?? requestedScope;
   if ((state.status === "idle" || state.status === "loading") && !state.config) {
     // Covers both the very first fetch for an identity ("idle", right after
     // app start or a workspace switch, before refresh() has even been

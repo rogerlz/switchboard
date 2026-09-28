@@ -92,18 +92,10 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GH_TOKEN || github.token }}
 
-      - name: Download llama-server binaries
-        run: node scripts/download-llama-server.js --current
-        env:
-          GITHUB_TOKEN: ${{ secrets.GH_TOKEN || github.token }}
-
       - name: Download sherpa-onnx binaries
         run: node scripts/download-sherpa-onnx.js --current
         env:
           GITHUB_TOKEN: ${{ secrets.GH_TOKEN || github.token }}
-
-      - name: Download yt-dlp binary
-        run: node scripts/download-yt-dlp.js --current
 
       - name: Download meeting AEC helper
         run: node scripts/download-meeting-aec-helper.js --current
@@ -187,18 +179,10 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GH_TOKEN || github.token }}
 
-      - name: Download llama-server binaries
-        run: node scripts/download-llama-server.js --current
-        env:
-          GITHUB_TOKEN: ${{ secrets.GH_TOKEN || github.token }}
-
       - name: Download sherpa-onnx binaries
         run: node scripts/download-sherpa-onnx.js --current
         env:
           GITHUB_TOKEN: ${{ secrets.GH_TOKEN || github.token }}
-
-      - name: Download yt-dlp binary
-        run: node scripts/download-yt-dlp.js --current
 
       - name: Download meeting AEC helper
         run: node scripts/download-meeting-aec-helper.js --current
@@ -290,18 +274,10 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GH_TOKEN || github.token }}
 
-      - name: Download llama-server binaries
-        run: node scripts/download-llama-server.js --current --platform darwin --arch ${{ matrix.arch }}
-        env:
-          GITHUB_TOKEN: ${{ secrets.GH_TOKEN || github.token }}
-
       - name: Download sherpa-onnx binaries
         run: node scripts/download-sherpa-onnx.js --current --platform darwin --arch ${{ matrix.arch }}
         env:
           GITHUB_TOKEN: ${{ secrets.GH_TOKEN || github.token }}
-
-      - name: Download yt-dlp binary
-        run: node scripts/download-yt-dlp.js --current --platform darwin --arch ${{ matrix.arch }}
 
       - name: Download meeting AEC helper
         run: node scripts/download-meeting-aec-helper.js --current --platform darwin --arch ${{ matrix.arch }}

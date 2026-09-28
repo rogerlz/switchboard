@@ -1,12 +1,10 @@
-import type { InferenceScope } from "../config/inferenceScopes";
-
 export type ManagedEnterpriseProvider = "bedrock" | "azure";
 export type ManagedEnterpriseProviderMode = "disabled" | "managed_default" | "managed_required";
 export type EnterpriseSetupMode = "auto" | "managed" | "manual";
 
 /** The managed speech-to-text scope; resolved from the Azure `transcription` config section. */
 export type ManagedTranscriptionScope = "transcription";
-export type ManagedEnterpriseScope = InferenceScope | ManagedTranscriptionScope;
+export type ManagedEnterpriseScope = ManagedTranscriptionScope;
 
 export interface ManagedEnterpriseProviderRecord {
   provider: ManagedEnterpriseProvider;
@@ -14,7 +12,7 @@ export interface ManagedEnterpriseProviderRecord {
   allowManualSetup: boolean;
   config: {
     /** Present when the text-processing section is configured. */
-    scopeDefaults?: Partial<Record<InferenceScope, string>>;
+    scopeDefaults?: Partial<Record<string, string>>;
     roleArn?: string;
     region?: string;
     allowedModels?: string[];
@@ -60,14 +58,3 @@ export type ManagedEnterpriseScopeResolution =
       record: ManagedEnterpriseProviderRecord;
     }
   | { kind: "error"; code: string; message: string; messageKey?: string };
-
-export interface ManagedEnterpriseRequestContext {
-  accountId: string;
-  workspaceId: string;
-  authGeneration: number;
-  setupMode: EnterpriseSetupMode;
-  inferenceScope: ManagedEnterpriseScope;
-  provider: ManagedEnterpriseProvider;
-  generation: number;
-  providerVersion: number;
-}

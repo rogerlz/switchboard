@@ -133,16 +133,3 @@ test("buildApiUrl inserts the path before any query or hash", async () => {
     "https://gateway.example.com/v1/chat/completions?api-key=secret#frag"
   );
 });
-
-test("ensureV1Suffix checks the path, not characters after the query", async () => {
-  const { ensureV1Suffix } = await load();
-
-  assert.equal(
-    ensureV1Suffix("https://gateway.example.com/v1?api-key=secret"),
-    "https://gateway.example.com/v1?api-key=secret"
-  );
-  assert.equal(
-    ensureV1Suffix("https://gateway.example.com?api-key=secret"),
-    "https://gateway.example.com/v1?api-key=secret"
-  );
-});

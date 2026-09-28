@@ -34,11 +34,6 @@ test("dynamic prose and identity values keep their own direction", () => {
       /<p\s+dir="auto"[^>]*>\s*\{request\.name \?\? request\.email\}/,
     ],
     ["src/components/settings/WorkspaceMembersTab.tsx", /<bdi dir="ltr">\{inv\.email\}<\/bdi>/],
-    [
-      "src/components/notes/UploadAudioView.tsx",
-      /<p\s+dir="auto"[^>]*>\s*\{downloadProgress\.title\}/,
-    ],
-    ["src/components/notes/UploadAudioView.tsx", /<span\s+dir="auto"[^>]*>\s*\{f\.name\}/],
   ];
 
   for (const [file, pattern] of expectations) {
@@ -58,32 +53,12 @@ test("dynamic prose and identity values keep their own direction", () => {
 test("technical output values remain LTR inside an Arabic document", () => {
   const expectations = [
     ["src/components/DeveloperSection.tsx", /<code\s+dir="ltr"[\s\S]*?\{logPath\}/],
-    [
-      "src/components/TestConnectionButton.tsx",
-      /<code\s+dir="ltr"[^>]*>\s*\{errorInfo\.copyCommand\}/,
-    ],
     ["src/components/ui/TechnicalErrorDetails.tsx", /<pre\s+dir="ltr"[\s\S]*?\{text\}/],
     [
       "src/components/settings/WorkspaceBillingCard.tsx",
       /<span\s+dir="ltr"[^>]*>\s*\{seatsUsed\} \/ \{seatsTotal\}/,
     ],
     ["src/components/settings/WorkspaceMembersTab.tsx", /<bdi dir="ltr">\{member\.email\}<\/bdi>/],
-    [
-      "src/components/EnterpriseProviderConfig.tsx",
-      /<select\s+dir="ltr"\s+value=\{store\.bedrockRegion\}/,
-    ],
-    [
-      "src/components/EnterpriseProviderConfig.tsx",
-      /<select\s+dir="ltr"\s+value=\{store\.vertexLocation\}/,
-    ],
-    [
-      "src/components/notes/UploadAudioView.tsx",
-      /<p\s+dir="ltr"[^>]*font-medium[^>]*>\s*\{file\.name\}/,
-    ],
-    [
-      "src/components/notes/UploadAudioView.tsx",
-      /<p\s+dir="ltr"[^>]*max-w-50[^>]*>\s*\{file\.name\}/,
-    ],
     ["src/components/ui/SidebarModal.tsx", /<span\s+dir="ltr"[\s\S]*?v\{version\}/],
     ["src/components/ui/ModelCardList.tsx", /<span\s+dir="ltr"[\s\S]*?\{model\.label\}/],
   ];
@@ -167,13 +142,4 @@ test("user-authored names and previews detect direction at their display boundar
   for (const [file, pattern] of expectations) {
     assert.match(source(file), pattern, `${file} lost a dynamic-content direction boundary`);
   }
-
-  const meetingCards = source("src/components/UpcomingMeetings.tsx").match(
-    /<p\s+dir="auto"[^>]*>\s*\{event\.summary \|\| t\("upcoming\.untitledEvent"\)\}/g
-  );
-  assert.equal(
-    meetingCards?.length,
-    2,
-    "both calendar event summary displays must detect direction"
-  );
 });

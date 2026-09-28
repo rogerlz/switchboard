@@ -6,7 +6,6 @@ test("per-provider transcription model memory", async (t) => {
   installBrowserGlobals(t, {
     initialStorage: {
       _providerSettingsMigrated: "1",
-      uploadTranscriptionMigrated: "true",
       cloudTranscriptionProvider: "custom",
       cloudTranscriptionModel: "parasail-whisper-v3",
       cloudTranscriptionBaseUrl: "https://stt.parasail.example.com/v1",
@@ -56,9 +55,9 @@ test("per-provider transcription model memory", async (t) => {
     state().switchCloudTranscriptionProvider("dictation", "custom");
     const dictationModel = state().cloudTranscriptionModel;
 
-    state().switchCloudTranscriptionProvider("upload", "groq");
-    assert.equal(state().uploadCloudTranscriptionProvider, "groq");
-    assert.match(state().uploadCloudTranscriptionModel, /^whisper-large-v3/);
+    state().switchCloudTranscriptionProvider("meeting", "deepgram");
+    assert.equal(state().meetingCloudTranscriptionProvider, "deepgram");
+    assert.equal(state().meetingCloudTranscriptionModel, "nova-3");
     assert.equal(state().cloudTranscriptionProvider, "custom", "base scope untouched");
     assert.equal(state().cloudTranscriptionModel, dictationModel, "base scope untouched");
   });
@@ -92,8 +91,6 @@ test("per-provider transcription model memory", async (t) => {
     assert.equal(state().cloudTranscriptionProvider, "groq");
     state().switchCloudTranscriptionProvider("meeting", "openai");
     assert.equal(state().meetingCloudTranscriptionProvider, "openai");
-    state().switchCloudTranscriptionProvider("upload", "custom");
-    assert.equal(state().uploadCloudTranscriptionProvider, "custom");
   });
 
   await t.test("a first switch to openai lands the registry's batch default", () => {
@@ -116,17 +113,16 @@ test("per-provider transcription model memory", async (t) => {
       cloudTranscriptionModel: "corti-transcribe",
     });
     const memory = state().transcriptionModelByProvider;
-    for (const context of ["dictation", "meeting", "upload"]) {
+    for (const context of ["dictation", "meeting"]) {
       assert.equal(memory[`${context}:corti`], "corti-transcribe");
     }
   });
 });
 
-test("unset upload/meeting local providers inherit dictation, and onboarding mirrors them", async (t) => {
+test("an unset meeting local provider inherits dictation, and onboarding mirrors it", async (t) => {
   installBrowserGlobals(t, {
     initialStorage: {
       _providerSettingsMigrated: "1",
-      uploadTranscriptionMigrated: "true",
       localTranscriptionProvider: "nvidia",
       parakeetModel: "parakeet-tdt-0.6b-v3",
     },
@@ -134,29 +130,23 @@ test("unset upload/meeting local providers inherit dictation, and onboarding mir
   const vite = await createRendererServer(t, {
     cachePrefix: "openwhispr-upload-provider-inherit-test-",
   });
-  const {
-    useSettingsStore,
-    selectResolvedUploadTranscription,
-    selectResolvedMeetingTranscription,
-  } = await vite.ssrLoadModule("/stores/settingsStore.ts");
+  const { useSettingsStore, selectResolvedMeetingTranscription } = await vite.ssrLoadModule(
+    "/stores/settingsStore.ts"
+  );
   const state = () => useSettingsStore.getState();
 
   await t.test("a missing scoped key inherits the dictation local provider", () => {
     assert.equal(state().localTranscriptionProvider, "nvidia");
-    assert.equal(state().uploadLocalTranscriptionProvider, "nvidia");
     assert.equal(state().meetingLocalTranscriptionProvider, "nvidia");
-    assert.equal(selectResolvedUploadTranscription(state()).localTranscriptionProvider, "nvidia");
     assert.equal(selectResolvedMeetingTranscription(state()).localTranscriptionProvider, "nvidia");
   });
 
   await t.test(
-    "setCloudTranscriptionForAllScopes writes the dictation local provider into upload and meeting",
+    "setCloudTranscriptionForAllScopes writes the dictation local provider into meeting",
     () => {
       state().setLocalTranscriptionProvider("cohere");
       state().setCloudTranscriptionForAllScopes({ useLocalWhisper: true });
-      assert.equal(state().uploadLocalTranscriptionProvider, "cohere");
       assert.equal(state().meetingLocalTranscriptionProvider, "cohere");
-      assert.equal(localStorage.getItem("uploadLocalTranscriptionProvider"), "cohere");
       assert.equal(localStorage.getItem("meetingLocalTranscriptionProvider"), "cohere");
     }
   );
@@ -169,7 +159,6 @@ test("explicit model click commits the clicked model, not the remembered one", a
   installBrowserGlobals(t, {
     initialStorage: {
       _providerSettingsMigrated: "1",
-      uploadTranscriptionMigrated: "true",
       cloudTranscriptionProvider: "openai",
       cloudTranscriptionModel: "gpt-4o-transcribe",
       cloudTranscriptionBaseUrl: "https://stt.parasail.example.com/v1",
@@ -209,7 +198,6 @@ test("corrupt persisted model memory hydrates as empty, not a crash", async (t) 
   installBrowserGlobals(t, {
     initialStorage: {
       _providerSettingsMigrated: "1",
-      uploadTranscriptionMigrated: "true",
       transcriptionModelByProvider: "{not json",
     },
   });

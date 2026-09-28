@@ -24,11 +24,8 @@ const KNOWN_BYOK_PROVIDER_IDS: Record<PolicyScope, ReadonlySet<string>> = {
     ...modelRegistryData.transcriptionProviders.map((provider) => provider.id),
     "custom",
   ]),
-  llm: new Set([
-    ...modelRegistryData.cloudProviders.map((provider) => provider.id),
-    "custom",
-    "openrouter",
-  ]),
+  // The LLM stack is gone, so no LLM provider id grants anything.
+  llm: new Set(),
 };
 
 const warnedUnknownByokProviderIds = new Set<string>();
@@ -156,16 +153,6 @@ export function isProviderAllowedByPolicy(
   );
 }
 
-/** Whether an enterprise-cloud provider id is allowed. Unmanaged users allow everything. */
-export function isEnterpriseProviderAllowed(
-  state: PolicyDecisionSnapshot,
-  providerId: string
-): boolean {
-  return managedPolicyDecision(state, (policy) =>
-    policy.llm.allowedEnterpriseProviders.includes(providerId)
-  );
-}
-
 /**
  * Whether an enterprise cloud may run managed transcription. The field is
  * absent on servers that predate it; absent means none.
@@ -191,24 +178,6 @@ export function isTranscriptionEnterpriseProviderAllowed(
  */
 export function isEnterpriseTranscriptionOfferable(state: PolicyDecisionSnapshot): boolean {
   return state.status === "managed";
-}
-
-/** Whether the AI agent (dictation, voice, and chat) is allowed. */
-export function isAgentAllowed(state: PolicyDecisionSnapshot): boolean {
-  return managedPolicyDecision(state, (policy) => policy.features.agentEnabled);
-}
-
-/** Whether the agent's web_search tool is allowed. */
-export function isWebSearchAllowed(state: PolicyDecisionSnapshot): boolean {
-  return managedPolicyDecision(state, (policy) => policy.features.webSearchEnabled);
-}
-
-/**
- * Whether the voice agent may attach screen context. Servers that predate the
- * field send none; absent means allowed.
- */
-export function isScreenContextAllowed(state: PolicyDecisionSnapshot): boolean {
-  return managedPolicyDecision(state, (policy) => policy.features.screenContextEnabled !== false);
 }
 
 const warnedUnknownRequiredModelIds = new Set<string>();
@@ -330,20 +299,6 @@ export function resolveEffectivePolicySelection(
   return { mode, provider: selection.provider };
 }
 
-export function isLlmSelectionAllowed(
-  state: PolicyDecisionSnapshot,
-  selection: LlmSelection
-): boolean {
-  if (!isModeAllowedByPolicy(state, "llm", selection.mode)) return false;
-  if (selection.mode === "providers") {
-    return isProviderAllowedByPolicy(state, "llm", selection.provider);
-  }
-  if (selection.mode === "enterprise") {
-    return isEnterpriseProviderAllowed(state, selection.provider);
-  }
-  return true;
-}
-
 export interface TranscriptionSelection {
   mode: InferenceMode;
   provider: string;
@@ -363,7 +318,7 @@ export function isTranscriptionSelectionAllowed(
   return true;
 }
 
-export type TranscriptionPolicyContext = "dictation" | "meeting" | "upload";
+export type TranscriptionPolicyContext = "dictation" | "meeting";
 
 export function getTranscriptionSelection(
   settings: SettingsState,
@@ -373,12 +328,6 @@ export function getTranscriptionSelection(
     return {
       mode: settings.meetingTranscriptionMode,
       provider: settings.meetingCloudTranscriptionProvider || settings.cloudTranscriptionProvider,
-    };
-  }
-  if (context === "upload") {
-    return {
-      mode: settings.uploadTranscriptionMode,
-      provider: settings.uploadCloudTranscriptionProvider || settings.cloudTranscriptionProvider,
     };
   }
   return {
@@ -525,15 +474,6 @@ export function filterByokProviderOptionsByPolicy<T extends { id: string }>(
   if (state.status === "idle" || state.status === "unmanaged") return options;
   if (state.status !== "managed" || !state.policy) return [];
   return options.filter((option) => isProviderAllowedByPolicy(state, scope, option.id));
-}
-
-export function filterEnterpriseProviderOptionsByPolicy<T extends { id: string }>(
-  options: T[],
-  state: PolicyDecisionSnapshot
-): T[] {
-  if (state.status === "idle" || state.status === "unmanaged") return options;
-  if (state.status !== "managed" || !state.policy) return [];
-  return options.filter((option) => isEnterpriseProviderAllowed(state, option.id));
 }
 
 /** Preserve legacy fallback writes only when no managed policy can be overwritten. */

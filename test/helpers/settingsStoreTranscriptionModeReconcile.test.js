@@ -9,9 +9,9 @@ const { createRendererServer, installBrowserGlobals } = require("../lib/renderer
 // first and would otherwise re-derive `transcriptionMode` from the very flag
 // under test.
 const MIGRATED = { _providerSettingsMigrated: "1" };
-// The meeting and upload one-shot copies mirror the dictation keys once and then
-// latch, so seed them done except where a case is about that copy.
-const COPIES_DONE = { meetingFollowsTranscription: "false", uploadTranscriptionMigrated: "true" };
+// The meeting one-shot copy mirrors the dictation keys once and then latches,
+// so seed it done except where a case is about that copy.
+const COPIES_DONE = { meetingFollowsTranscription: "false" };
 
 test("startup repairs transcription routing that disagrees with the selected mode", async (t) => {
   const { storage } = installBrowserGlobals(t);
@@ -66,18 +66,6 @@ test("startup repairs transcription routing that disagrees with the selected mod
     );
   }
 
-  await t.test("the upload scope's cloud mode is repaired too", async () => {
-    const state = await load({
-      ...MIGRATED,
-      ...COPIES_DONE,
-      uploadTranscriptionMode: "providers",
-      uploadUseLocalWhisper: "false",
-      uploadCloudTranscriptionMode: "openwhispr",
-    });
-    assert.equal(state.uploadCloudTranscriptionMode, "byok");
-    assert.equal(storage.getItem("uploadCloudTranscriptionMode"), "byok");
-  });
-
   await t.test("an OpenWhispr Cloud mode never claims a BYOK credential", async () => {
     const state = await load({
       ...MIGRATED,
@@ -103,19 +91,6 @@ test("startup repairs transcription routing that disagrees with the selected mod
     });
   }
 
-  await t.test("the upload scope's local flag is repaired too", async () => {
-    const state = await load({
-      ...MIGRATED,
-      ...COPIES_DONE,
-      transcriptionMode: "local",
-      useLocalWhisper: "false",
-      uploadTranscriptionMode: "local",
-      uploadUseLocalWhisper: "false",
-    });
-    assert.equal(state.uploadUseLocalWhisper, true);
-    assert.equal(storage.getItem("uploadUseLocalWhisper"), "true");
-  });
-
   await t.test("the meeting scope is left alone, because it routes on its own mode", async () => {
     const state = await load({
       ...MIGRATED,
@@ -130,18 +105,6 @@ test("startup repairs transcription routing that disagrees with the selected mod
       false,
       "no write to a key nothing reads"
     );
-  });
-
-  await t.test("a desync copied into the upload scope by its one-shot is repaired", async () => {
-    const state = await load({
-      ...MIGRATED,
-      meetingFollowsTranscription: "false",
-      transcriptionMode: "local",
-      useLocalWhisper: "false",
-    });
-    assert.equal(storage.getItem("uploadTranscriptionMode"), "local", "the copy ran");
-    assert.equal(state.uploadUseLocalWhisper, true);
-    assert.equal(storage.getItem("uploadUseLocalWhisper"), "true");
   });
 
   await t.test("the local rule leaves the cloud mode alone", async () => {
@@ -169,25 +132,10 @@ test("startup repairs transcription routing that disagrees with the selected mod
     });
   }
 
-  await t.test("both rules can fire on one launch", async () => {
-    const state = await load({
-      ...MIGRATED,
-      ...COPIES_DONE,
-      transcriptionMode: "local",
-      useLocalWhisper: "false",
-      uploadTranscriptionMode: "providers",
-      uploadUseLocalWhisper: "false",
-      uploadCloudTranscriptionMode: "openwhispr",
-    });
-    assert.equal(state.useLocalWhisper, true, "dictation repaired toward local");
-    assert.equal(state.uploadCloudTranscriptionMode, "byok", "upload repaired toward BYOK");
-  });
-
   // The only case that lets migrateMeetingFollowFlags run; every other seeds it done.
   await t.test("the meeting one-shot copy still runs, and is still not repaired", async () => {
     await load({
       ...MIGRATED,
-      uploadTranscriptionMigrated: "true",
       transcriptionMode: "local",
       useLocalWhisper: "false",
     });
@@ -218,6 +166,5 @@ test("startup repairs transcription routing that disagrees with the selected mod
     const state = await load({ ...MIGRATED, ...COPIES_DONE, useLocalWhisper: "true" });
     assert.equal(state.useLocalWhisper, true);
     assert.equal(storage.getItem("useLocalWhisper"), "true");
-    assert.equal(storage.getItem("uploadUseLocalWhisper"), null);
   });
 });

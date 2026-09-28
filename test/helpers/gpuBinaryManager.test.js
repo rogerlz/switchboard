@@ -80,7 +80,6 @@ require.cache[require.resolve("../../src/helpers/downloadUtils.js")] = {
 
 const GpuBinaryManager = require("../../src/helpers/gpuBinaryManager.js");
 const WhisperCudaManager = require("../../src/helpers/whisperCudaManager.js");
-const LlamaVulkanManager = require("../../src/helpers/llamaVulkanManager.js");
 const WhisperVulkanManager = require("../../src/helpers/whisperVulkanManager.js");
 
 // CUDA pins real release digests, which a stubbed archive can never hash to. Tests that
@@ -89,6 +88,23 @@ function cudaManagerWithoutDigestPin() {
   const manager = new WhisperCudaManager();
   manager.config.expectedDigests = undefined;
   return manager;
+}
+
+// A generic pack with no pinned digest, for shared pipeline behavior.
+function testPackManager(dirName = "test-pack") {
+  return new GpuBinaryManager({
+    name: "test",
+    dirName,
+    releaseUrl: "https://api.github.com/repos/x/y/releases/latest",
+    assets: {
+      "linux-x64": {
+        assetName: "bin.zip",
+        binaryName: "server",
+        outputName: "server-out",
+        libPattern: /\.so(\.\d+)*$/,
+      },
+    },
+  });
 }
 
 function makeRelease(assetName, overrides = {}) {
@@ -181,20 +197,6 @@ test("CUDA: resolves its exact asset from the pinned tag and installs binary + c
   );
 });
 
-test("llama Vulkan: resolves asset by regex from the pinned tag", async () => {
-  state.release = makeRelease("llama-b9763-bin-ubuntu-vulkan-x64.tar.gz");
-  state.extractedFiles = { "llama-server": "binary", "libvulkan.so.1": "lib" };
-
-  const manager = new LlamaVulkanManager();
-  const result = await manager.download();
-
-  assert.deepEqual(result, { success: true });
-  assert.match(state.fetchedUrls[0], /ggml-org\/llama\.cpp\/releases\/tags\/b9763$/);
-  const packDir = path.join(userDataDir, "bin", "llama-vulkan");
-  assert.ok(fs.existsSync(path.join(packDir, "llama-server-vulkan")), "renamed output");
-  assert.ok(fs.existsSync(path.join(packDir, "libvulkan.so.1")));
-});
-
 test("CUDA: pinned digest rejects an asset that doesn't match (fail closed)", async () => {
   state.release = makeRelease("whisper-server-linux-x64-cuda.zip");
   state.extractedFiles = { "whisper-server-linux-x64-cuda": "binary" };
@@ -243,8 +245,8 @@ test("digest: pinned match installs; API-reported digest is the fallback and als
 });
 
 test("progress: raw (downloaded, total) callback passes straight through", async () => {
-  state.release = makeRelease("llama-b9763-bin-ubuntu-vulkan-x64.tar.gz");
-  state.extractedFiles = { "llama-server": "binary" };
+  state.release = makeRelease("bin.zip");
+  state.extractedFiles = { server: "binary" };
   state.downloadImpl = async (_url, dest, opts) => {
     opts.onProgress(50, 100);
     opts.onProgress(100, 100);
@@ -252,14 +254,14 @@ test("progress: raw (downloaded, total) callback passes straight through", async
   };
 
   const calls = [];
-  await new LlamaVulkanManager().download((downloaded, total) => calls.push([downloaded, total]));
+  await testPackManager().download((downloaded, total) => calls.push([downloaded, total]));
   assert.deepEqual(calls, [
     [50, 100],
     [100, 100],
   ]);
 });
 
-test("cancel semantics: CUDA throws, llama returns { cancelled: true }", async () => {
+test("cancel semantics: CUDA throws", async () => {
   const abortError = () => Object.assign(new Error("Download cancelled"), { isAbort: true });
   state.release = makeRelease("whisper-server-linux-x64-cuda.zip");
   state.downloadImpl = async () => {
@@ -268,10 +270,6 @@ test("cancel semantics: CUDA throws, llama returns { cancelled: true }", async (
   await assert.rejects(() => new WhisperCudaManager().download(), {
     message: "Download cancelled by user",
   });
-
-  state.release = makeRelease("llama-b9763-bin-ubuntu-vulkan-x64.tar.gz");
-  const result = await new LlamaVulkanManager().download();
-  assert.deepEqual(result, { success: false, cancelled: true });
 });
 
 test("cancelDownload aborts only when a download is active", async () => {
@@ -359,21 +357,18 @@ function seedPack(dirName, files) {
 
 test("delete: removes only the pack's own directory; other packs untouched", async () => {
   const cudaDir = seedPack("whisper-cuda", ["whisper-server-linux-x64-cuda", "libggml-cuda.so"]);
-  const llamaDir = seedPack("llama-vulkan", ["llama-server-vulkan", "libggml-base.so"]);
+  const otherDir = seedPack("test-pack", ["server-out", "libggml-base.so"]);
   const vulkanDir = seedPack("whisper-vulkan", ["whisper-server-linux-x64-vulkan"]);
 
   const cudaResult = await new WhisperCudaManager().delete();
   assert.equal(cudaResult.success, true);
   assert.equal(cudaResult.deleted_count, 2);
   assert.ok(!fs.existsSync(cudaDir), "own pack directory removed");
-  assert.ok(fs.existsSync(path.join(llamaDir, "libggml-base.so")), "other packs' libs untouched");
+  assert.ok(fs.existsSync(path.join(otherDir, "libggml-base.so")), "other packs' libs untouched");
 
   const vulkanResult = await new WhisperVulkanManager().delete();
   assert.equal(vulkanResult.deletedCount, 1);
   assert.ok(!fs.existsSync(vulkanDir));
-
-  const llamaResult = await new LlamaVulkanManager().deleteBinary();
-  assert.deepEqual(llamaResult, { success: true, deletedCount: 2 });
 });
 
 test("install isolation: packs sharing lib names cannot clobber each other", async () => {
@@ -381,14 +376,14 @@ test("install isolation: packs sharing lib names cannot clobber each other", asy
   state.extractedFiles = { "whisper-server-linux-x64-cuda": "bin", "libggml-base.so": "cuda-ggml" };
   await cudaManagerWithoutDigestPin().download();
 
-  state.release = makeRelease("llama-b9763-bin-ubuntu-vulkan-x64.tar.gz");
-  state.extractedFiles = { "llama-server": "bin", "libggml-base.so": "llama-ggml" };
-  await new LlamaVulkanManager().download();
+  state.release = makeRelease("bin.zip");
+  state.extractedFiles = { server: "bin", "libggml-base.so": "other-ggml" };
+  await testPackManager().download();
 
   const read = (dir) =>
     fs.readFileSync(path.join(userDataDir, "bin", dir, "libggml-base.so"), "utf8");
   assert.equal(read("whisper-cuda"), "cuda-ggml");
-  assert.equal(read("llama-vulkan"), "llama-ggml");
+  assert.equal(read("test-pack"), "other-ggml");
 });
 
 test("atomic install: a failure after extraction leaves no half-installed pack", async () => {
@@ -424,11 +419,7 @@ test("required libraries: a cached pack is incomplete when a required library is
 });
 
 test("required libraries: an incomplete archive cannot replace a working pack", async () => {
-  const packDir = seedPack("test-pack", [
-    "server-out",
-    "msvcp140.dll",
-    "vcruntime140.dll",
-  ]);
+  const packDir = seedPack("test-pack", ["server-out", "msvcp140.dll", "vcruntime140.dll"]);
   fs.writeFileSync(path.join(packDir, "server-out"), "working-binary");
 
   state.release = makeRelease("bin.zip");
@@ -509,22 +500,19 @@ test("legacy migration: lib-free pack is moved, lib-carrying packs are cleared f
   const binRoot = path.join(userDataDir, "bin");
   fs.mkdirSync(binRoot, { recursive: true });
   const seed = (name) => fs.writeFileSync(path.join(binRoot, name), "x");
-  // Pre-subdirectory flat layout: both lib-carrying packs plus whisper Vulkan
+  // Pre-subdirectory flat layout: the lib-carrying CUDA pack plus whisper Vulkan
   seed("whisper-server-linux-x64-cuda");
   seed("whisper-server-linux-x64-vulkan");
-  seed("llama-server-vulkan");
   seed("libggml-base.so"); // clobbered shared lib — owner unknowable
   seed("libvulkan.so.1");
 
   const cuda = new WhisperCudaManager();
   const vulkan = new WhisperVulkanManager();
-  const llama = new LlamaVulkanManager();
-  const clearedPacks = migrateLegacyBinDir([cuda, vulkan, llama]);
+  const clearedPacks = migrateLegacyBinDir([cuda, vulkan]);
 
   assert.equal(vulkan.isDownloaded(), true, "statically-linked pack migrated in place");
   assert.ok(fs.existsSync(path.join(binRoot, "whisper-vulkan", "whisper-server-linux-x64-vulkan")));
   assert.equal(cuda.isDownloaded(), false, "ambiguous pack needs re-download");
-  assert.equal(llama.isDownloaded(), false);
   assert.deepEqual(
     fs.readdirSync(binRoot).sort(),
     ["whisper-vulkan"],
@@ -532,12 +520,12 @@ test("legacy migration: lib-free pack is moved, lib-carrying packs are cleared f
   );
   assert.deepEqual(
     clearedPacks,
-    ["CUDA whisper", "Vulkan llama"],
+    ["CUDA whisper"],
     "cleared (not migrated) packs are reported for the re-download notice"
   );
 
   // Idempotent on the healed layout — and nothing left to report
-  assert.deepEqual(migrateLegacyBinDir([cuda, vulkan, llama]), []);
+  assert.deepEqual(migrateLegacyBinDir([cuda, vulkan]), []);
   assert.equal(vulkan.isDownloaded(), true);
 });
 
@@ -577,17 +565,6 @@ test("orphan detection: enabled flag with no pack on disk is reported for the no
     process.env.WHISPER_VULKAN_ENABLED = "true";
     assert.deepEqual(detectOrphanedGpuPacks(packs), ["Vulkan whisper"]);
 
-    // The lib-carrying llama Vulkan pack (also deleted by the 1.8.3
-    // migration) is detected through the same shape
-    const llamaPacks = [
-      { manager: new LlamaVulkanManager(), enabledEnvVar: "LLAMA_VULKAN_ENABLED" },
-    ];
-    assert.deepEqual(detectOrphanedGpuPacks(llamaPacks), []);
-    process.env.LLAMA_VULKAN_ENABLED = "true";
-    assert.deepEqual(detectOrphanedGpuPacks(llamaPacks), ["Vulkan llama"]);
-    seedPack("llama-vulkan", ["llama-server-vulkan"]);
-    assert.deepEqual(detectOrphanedGpuPacks(llamaPacks), []);
-
     // Unsupported platform can't re-download the pack — never reported
     const unsupported = new GpuBinaryManager({ name: "none", dirName: "none", assets: {} });
     process.env.NONE_ENABLED = "true";
@@ -598,7 +575,6 @@ test("orphan detection: enabled flag with no pack on disk is reported for the no
   } finally {
     delete process.env.WHISPER_CUDA_ENABLED;
     delete process.env.WHISPER_VULKAN_ENABLED;
-    delete process.env.LLAMA_VULKAN_ENABLED;
     delete process.env.NONE_ENABLED;
   }
 });
