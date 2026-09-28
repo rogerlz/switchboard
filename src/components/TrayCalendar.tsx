@@ -1,13 +1,16 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Check, ChevronLeft, ChevronRight, Mic, Video } from "./icons";
+import { Check, ChevronLeft, ChevronRight, ExternalLink, Mic, RefreshCw, Video } from "./icons";
 import { cn } from "./lib/utils";
 import RsvpButtons from "./RsvpButtons";
+import { useSettingsStore } from "../stores/settingsStore";
 import type { CalendarEvent } from "../types/calendar";
 import { getMeetingJoinUrl } from "../helpers/meetingJoinUrl";
 import {
   buildMonthGrid,
+  formatWorldClock,
   groupEventsByDay,
+  isValidTimeZone,
   isVisibleEvent,
   startOfDay,
   needsRsvp,
@@ -19,7 +22,11 @@ const HIDE_WEEKENDS_KEY = "trayCalendarHideWeekends";
 
 type TrayCalendarApi = {
   trayCalendarGetEvents?: () => Promise<CalendarEvent[]>;
+  trayCalendarRefresh?: () => Promise<CalendarEvent[]>;
+  trayCalendarOpenApp?: () => Promise<void>;
 };
+
+const api = () => window.electronAPI as unknown as TrayCalendarApi | undefined;
 
 function readHideWeekends(): boolean {
   try {
@@ -38,6 +45,9 @@ function joinMeeting(event: CalendarEvent) {
 export default function TrayCalendar() {
   const { t, i18n } = useTranslation();
   const locale = i18n.language;
+  const worldClocks = useSettingsStore((state) => state.worldClocks).filter((clock) =>
+    isValidTimeZone(clock.timeZone)
+  );
   const [events, setEvents] = useState<CalendarEvent[]>([]);
   const [now, setNow] = useState(() => Date.now());
   const [month, setMonth] = useState(() => startOfDay(new Date()));
@@ -46,8 +56,7 @@ export default function TrayCalendar() {
   const groupRefs = useRef(new Map<string, HTMLDivElement>());
 
   const refresh = useCallback(async () => {
-    const api = window.electronAPI as unknown as TrayCalendarApi | undefined;
-    const result = await api?.trayCalendarGetEvents?.();
+    const result = await api()?.trayCalendarGetEvents?.();
     setEvents(Array.isArray(result) ? result : []);
     setNow(Date.now());
   }, []);
@@ -66,13 +75,25 @@ export default function TrayCalendar() {
       window.electronAPI?.onMcalEventsSynced?.(refresh),
       window.electronAPI?.onAcalEventsSynced?.(refresh),
     ];
-    const tick = setInterval(() => setNow(Date.now()), 60 * 1000);
+    const tick = setInterval(() => setNow(Date.now()), 15 * 1000);
     return () => {
       window.removeEventListener("focus", onFocus);
       unsubscribers.forEach((unsubscribe) => unsubscribe?.());
       clearInterval(tick);
     };
   }, [refresh]);
+
+  const [refreshing, setRefreshing] = useState(false);
+  const refreshNow = async () => {
+    setRefreshing(true);
+    try {
+      const result = await api()?.trayCalendarRefresh?.();
+      if (Array.isArray(result)) setEvents(result);
+      setNow(Date.now());
+    } finally {
+      setRefreshing(false);
+    }
+  };
 
   const toggleWeekends = () => {
     const next = !hideWeekends;
@@ -118,6 +139,29 @@ export default function TrayCalendar() {
 
   return (
     <div className="flex h-screen flex-col overflow-hidden bg-background text-foreground select-none">
+      {worldClocks.length > 0 && (
+        <div
+          className="grid border-b border-border px-3 py-1.5 text-center"
+          style={{ gridTemplateColumns: `repeat(${worldClocks.length}, minmax(0, 1fr))` }}
+        >
+          {worldClocks.map((clock) => {
+            const { time, dayOffset } = formatWorldClock(clock.timeZone, now);
+            return (
+              <div key={`${clock.label}-${clock.timeZone}`} className="min-w-0">
+                <div className="truncate text-[10px] text-muted-foreground">{clock.label}</div>
+                <div className="text-[13px] font-semibold tabular-nums">
+                  {time}
+                  {dayOffset !== 0 && (
+                    <sup className="ms-0.5 text-[9px] font-normal text-muted-foreground">
+                      {dayOffset > 0 ? `+${dayOffset}` : dayOffset}
+                    </sup>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
       <div className="px-3 pt-2.5 pb-1.5">
         <div className="mb-2 flex items-center justify-between">
           <span className="text-sm font-semibold">
@@ -251,21 +295,40 @@ export default function TrayCalendar() {
         ))}
       </div>
 
-      <button
-        onClick={toggleWeekends}
-        aria-pressed={hideWeekends}
-        className="flex items-center gap-2 border-t border-border px-3 py-1.5 text-start text-[11px] text-muted-foreground hover:text-foreground"
-      >
-        <span
-          className={cn(
-            "flex h-3.5 w-3.5 items-center justify-center rounded-sm border border-current",
-            hideWeekends && "border-primary bg-primary text-primary-foreground"
-          )}
+      <div className="flex items-center border-t border-border px-3 py-1.5">
+        <button
+          onClick={toggleWeekends}
+          aria-pressed={hideWeekends}
+          className="flex flex-1 items-center gap-2 text-start text-[11px] text-muted-foreground hover:text-foreground"
         >
-          {hideWeekends && <Check size={10} />}
-        </span>
-        {t("trayCalendar.hideWeekends")}
-      </button>
+          <span
+            className={cn(
+              "flex h-3.5 w-3.5 items-center justify-center rounded-sm border border-current",
+              hideWeekends && "border-primary bg-primary text-primary-foreground"
+            )}
+          >
+            {hideWeekends && <Check size={10} />}
+          </span>
+          {t("trayCalendar.hideWeekends")}
+        </button>
+        <button
+          onClick={() => void refreshNow()}
+          disabled={refreshing}
+          aria-label={t("trayCalendar.refresh")}
+          title={t("trayCalendar.refresh")}
+          className="rounded p-1 text-muted-foreground hover:bg-surface-3 hover:text-foreground"
+        >
+          <RefreshCw size={13} className={cn(refreshing && "animate-spin")} />
+        </button>
+        <button
+          onClick={() => void api()?.trayCalendarOpenApp?.()}
+          aria-label={t("trayCalendar.openApp")}
+          title={t("trayCalendar.openApp")}
+          className="rounded p-1 text-muted-foreground hover:bg-surface-3 hover:text-foreground"
+        >
+          <ExternalLink size={13} />
+        </button>
+      </div>
     </div>
   );
 }

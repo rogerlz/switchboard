@@ -1,6 +1,7 @@
 import React, { useState, useCallback, useEffect, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "./ui/button";
+import WorldClocksSettings from "./settings/WorldClocksSettings";
 import { Input } from "./ui/input";
 import { Mic, FolderOpen, Sun, Moon, Monitor, AlertTriangle, Loader2, Info } from "./icons";
 import MicPermissionWarning from "./ui/MicPermissionWarning";
@@ -804,6 +805,8 @@ export default function SettingsPage({ activeSection = "general" }: SettingsPage
                 </SettingsPanelRow>
               </SettingsPanel>
             </div>
+
+            <WorldClocksSettings />
 
             {/* Save Notes as Files */}
             <div>

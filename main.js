@@ -328,7 +328,11 @@ async function startApp() {
   trayManager.setCreateControlPanelCallback(() => windowManager.createControlPanelWindow());
   await trayManager.createTray();
   // Menu-bar calendar popover on left click
-  new (require("./src/helpers/trayCalendar"))(trayManager);
+  new (require("./src/helpers/trayCalendar"))(trayManager, [
+    googleCalendarManager,
+    microsoftCalendarManager,
+    appleCalendarManager,
+  ]);
 }
 
 // App event handlers

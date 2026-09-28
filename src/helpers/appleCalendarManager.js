@@ -95,6 +95,10 @@ class AppleCalendarManager {
     this._requestSync();
   }
 
+  refresh() {
+    this._requestSync();
+  }
+
   _requestSync() {
     try {
       this._helperProcess?.stdin.write("sync\n");

@@ -80,3 +80,27 @@ test("only pending Google invites ask for an RSVP", async () => {
   assert.equal(needsRsvp(google("accepted")), false);
   assert.equal(needsRsvp({ provider: "apple", self_response_status: "needsAction" }), false);
 });
+
+test("world clocks show 24-hour local time and a day offset", async () => {
+  const { formatWorldClock } = await load();
+  const now = Date.UTC(2026, 8, 28, 23, 30); // 00:30 in Lisbon (WEST, UTC+1)
+  assert.deepEqual(formatWorldClock("America/Sao_Paulo", now, "Europe/Lisbon"), {
+    time: "20:30",
+    dayOffset: -1,
+  });
+  assert.deepEqual(formatWorldClock("Europe/Lisbon", now, "Europe/Lisbon"), {
+    time: "00:30",
+    dayOffset: 0,
+  });
+  assert.deepEqual(formatWorldClock("Asia/Tokyo", now, "America/New_York"), {
+    time: "08:30",
+    dayOffset: 1,
+  });
+});
+
+test("time zone helpers validate zones and derive city labels", async () => {
+  const { isValidTimeZone, cityFromTimeZone } = await load();
+  assert.equal(isValidTimeZone("America/Lima"), true);
+  assert.equal(isValidTimeZone("Mars/Olympus"), false);
+  assert.equal(cityFromTimeZone("America/Sao_Paulo"), "Sao Paulo");
+});

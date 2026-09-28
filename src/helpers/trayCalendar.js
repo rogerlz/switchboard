@@ -18,12 +18,18 @@ const REOPEN_GUARD_MS = 300;
 // Menu-bar calendar popover (fork addition): next meeting as the tray title,
 // left click opens a month grid + per-day meeting list with Join.
 class TrayCalendar {
-  constructor(trayManager) {
+  constructor(trayManager, calendarManagers = []) {
     this.trayManager = trayManager;
+    this.calendarManagers = calendarManagers.filter(Boolean);
     this.win = null;
     this.hiddenAt = 0;
 
     ipcMain.handle("tray-calendar-get-events", () => this.getEvents());
+    ipcMain.handle("tray-calendar-refresh", () => this.refresh());
+    ipcMain.handle("tray-calendar-open-app", () => {
+      this.win?.hide();
+      return this.trayManager.showControlPanelFromTray();
+    });
 
     const tray = trayManager.tray;
     if (tray) {
@@ -55,6 +61,18 @@ class TrayCalendar {
       debugLogger.error("Tray calendar events failed", { error: error.message }, "tray");
       return [];
     }
+  }
+
+  // Pulls fresh events from every connected calendar; each sync broadcasts its
+  // own "events synced" signal, which the popover already listens to.
+  async refresh() {
+    await Promise.allSettled(
+      this.calendarManagers.map((manager) =>
+        manager.isConnected?.() === false ? null : manager.refresh()
+      )
+    );
+    this.refreshTitle();
+    return this.getEvents();
   }
 
   refreshTitle() {

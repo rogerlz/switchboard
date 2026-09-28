@@ -53,6 +53,14 @@
         "title": "Identify and label speakers",
         "description": "When off, transcripts show \"You\" and \"Others\""
       }
+    },
+    "worldClocks": {
+      "title": "World clocks",
+      "description": "Up to four clocks across the top of the menu-bar calendar.",
+      "label": "Label",
+      "timeZone": "Time zone",
+      "add": "Add clock",
+      "remove": "Remove clock"
     }
   },
   "tray": {
@@ -894,7 +902,9 @@
     "join": "Join & transcribe"
   },
   "trayCalendar": {
-    "hideWeekends": "Hide weekends"
+    "hideWeekends": "Hide weekends",
+    "refresh": "Refresh calendars",
+    "openApp": "Open Switchboard"
   },
   "rsvp": {
     "accept": "Accept",

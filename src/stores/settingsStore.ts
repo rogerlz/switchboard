@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { DEFAULT_WORLD_CLOCKS, MAX_WORLD_CLOCKS } from "../helpers/trayCalendarModel";
 import logger from "../utils/logger";
 import whisperVadConstants from "../constants/whisperVad.json";
 import type {
@@ -46,6 +47,20 @@ function readLocalProvider(): LocalTranscriptionProvider {
   return stored === "nvidia" || stored === "cohere" ? stored : "whisper";
 }
 
+export type WorldClock = { label: string; timeZone: string };
+
+function readWorldClocks(): WorldClock[] {
+  if (!isBrowser) return DEFAULT_WORLD_CLOCKS;
+  const stored = localStorage.getItem("worldClocks");
+  if (stored === null) return DEFAULT_WORLD_CLOCKS;
+  try {
+    const parsed = JSON.parse(stored);
+    return Array.isArray(parsed) ? parsed.slice(0, MAX_WORLD_CLOCKS) : DEFAULT_WORLD_CLOCKS;
+  } catch {
+    return DEFAULT_WORLD_CLOCKS;
+  }
+}
+
 function readBoolean(key: string, fallback: boolean): boolean {
   if (!isBrowser) return fallback;
   const stored = localStorage.getItem(key);
@@ -89,7 +104,7 @@ const BOOLEAN_SETTINGS = new Set([
   "appleCalendarConnected",
 ]);
 
-const ARRAY_SETTINGS = new Set(["gcalAccounts", "mcalAccounts"]);
+const ARRAY_SETTINGS = new Set(["gcalAccounts", "mcalAccounts", "worldClocks"]);
 
 const NUMERIC_SETTINGS = new Set([
   "whisperVadThreshold",
@@ -172,6 +187,7 @@ export interface SettingsState {
   whisperVadSamplesOverlap: number;
   noteFilesEnabled: boolean;
   noteFilesPath: string;
+  worldClocks: WorldClock[];
 
   meetingTranscriptionMode: InferenceMode;
   meetingWhisperModel: string;
@@ -230,6 +246,7 @@ export interface SettingsState {
   setWhisperVadSamplesOverlap: (value: number) => void;
   setNoteFilesEnabled: (value: boolean) => void;
   setNoteFilesPath: (value: string) => void;
+  setWorldClocks: (clocks: WorldClock[]) => void;
 }
 
 function createStringSetter(key: string) {
@@ -443,6 +460,7 @@ export const useSettingsStore = create<SettingsState>()((set, get) => ({
   ),
   noteFilesEnabled: readBoolean("noteFilesEnabled", false),
   noteFilesPath: readString("noteFilesPath", ""),
+  worldClocks: readWorldClocks(),
 
   meetingTranscriptionMode: (readString("meetingTranscriptionMode", "local") === "providers"
     ? "providers"
@@ -646,6 +664,11 @@ export const useSettingsStore = create<SettingsState>()((set, get) => ({
   },
   setNoteFilesEnabled: createBooleanSetter("noteFilesEnabled"),
   setNoteFilesPath: createStringSetter("noteFilesPath"),
+  setWorldClocks: (clocks) => {
+    const next = clocks.slice(0, MAX_WORLD_CLOCKS);
+    if (isBrowser) localStorage.setItem("worldClocks", JSON.stringify(next));
+    set({ worldClocks: next });
+  },
 }));
 
 export function getSettings(): SettingsState {

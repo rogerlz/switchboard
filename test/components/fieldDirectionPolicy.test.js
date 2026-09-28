@@ -57,6 +57,7 @@ function inventoryByFile(inventory) {
 // consumer require an explicit policy decision in this test.
 const EXPECTED_SHARED_FIELD_DIRECTIONS = {
   "src/components/SettingsPage.tsx": ["ltr", "ltr", "ltr", "ltr", "ltr", "ltr"],
+  "src/components/settings/WorldClocksSettings.tsx": ["auto"],
   "src/components/TranscriptionModelPicker.tsx": ["ltr"],
   "src/components/ui/ApiKeyInput.tsx": ["ltr"],
 };

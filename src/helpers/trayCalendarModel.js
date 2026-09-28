@@ -96,3 +96,47 @@ export function groupEventsByDay(events, fromDay, hideWeekends) {
   }
   return [...groups.values()].sort((a, b) => a.date - b.date);
 }
+
+export const MAX_WORLD_CLOCKS = 4;
+export const DEFAULT_WORLD_CLOCKS = [
+  { label: "Lisbon", timeZone: "Europe/Lisbon" },
+  { label: "São Paulo", timeZone: "America/Sao_Paulo" },
+  { label: "Lima", timeZone: "America/Lima" },
+  { label: "Charlotte", timeZone: "America/New_York" },
+];
+
+export function isValidTimeZone(timeZone) {
+  try {
+    new Intl.DateTimeFormat("en", { timeZone });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** "America/Sao_Paulo" → "Sao Paulo", used as the default clock label. */
+export function cityFromTimeZone(timeZone) {
+  return timeZone.split("/").pop().replace(/_/g, " ");
+}
+
+const ymd = (timeZone, now) =>
+  new Intl.DateTimeFormat("en-CA", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(now);
+
+/** 24-hour time in `timeZone` and how many days it is ahead of (or behind) `localTimeZone`. */
+export function formatWorldClock(timeZone, now = Date.now(), localTimeZone = undefined) {
+  const time = new Intl.DateTimeFormat("en-GB", {
+    timeZone,
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  }).format(now);
+  const dayOffset = Math.round(
+    (Date.parse(ymd(timeZone, now)) - Date.parse(ymd(localTimeZone, now))) / 86400000
+  );
+  return { time, dayOffset };
+}

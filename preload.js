@@ -259,6 +259,8 @@ contextBridge.exposeInMainWorld("electronAPI", {
   gcalRespondToEvent: (eventId, response) =>
     ipcRenderer.invoke("gcal-respond-to-event", eventId, response),
   trayCalendarGetEvents: () => ipcRenderer.invoke("tray-calendar-get-events"),
+  trayCalendarRefresh: () => ipcRenderer.invoke("tray-calendar-refresh"),
+  trayCalendarOpenApp: () => ipcRenderer.invoke("tray-calendar-open-app"),
 
   // Microsoft Calendar
   mcalStartOAuth: () => ipcRenderer.invoke("mcal-start-oauth"),

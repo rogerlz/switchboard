@@ -146,6 +146,10 @@ class GoogleCalendarManager {
     return allCalendars;
   }
 
+  refresh() {
+    return this.syncEvents();
+  }
+
   async syncEvents() {
     const selectedCalendars = this.databaseManager.getSelectedCalendars();
     if (selectedCalendars.length === 0) return;

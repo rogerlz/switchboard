@@ -172,6 +172,10 @@ class MicrosoftCalendarManager {
     return allCalendars;
   }
 
+  refresh() {
+    return this.syncEvents();
+  }
+
   async syncEvents() {
     const selectedCalendars = this.databaseManager.getSelectedMicrosoftCalendars();
     if (selectedCalendars.length === 0) return;
