@@ -2,6 +2,7 @@ import React, { Suspense, useState, useEffect, useCallback } from "react";
 import { useTranslation } from "react-i18next";
 import { useCollapsibleSidebar } from "../hooks/useCollapsibleSidebar";
 import { useSettingsStore } from "../stores/settingsStore";
+import { pickDownloadedLocalModel } from "../helpers/localModelFallback";
 import {
   useIsMeetingMode,
   useIsNarrowWindow,
@@ -71,6 +72,32 @@ export default function ControlPanel({ initialSettingsSection }: ControlPanelPro
     await createNote();
     setActiveView("personal-notes");
   }, [createNote]);
+
+  // A selected local model that isn't on disk (fresh profile, deleted model)
+  // would fail the first recording; switch to one that is downloaded.
+  useEffect(() => {
+    const state = useSettingsStore.getState();
+    if (state.meetingTranscriptionMode !== "local") return;
+    const downloadedIds = (list?: { models?: Array<{ model: string; downloaded?: boolean }> }) =>
+      (list?.models ?? []).filter((entry) => entry.downloaded).map((entry) => entry.model);
+    void Promise.all([
+      window.electronAPI?.listWhisperModels?.(),
+      window.electronAPI?.listParakeetModels?.(),
+    ]).then(([whisper, parakeet]) => {
+      const pick = pickDownloadedLocalModel(
+        {
+          provider: state.meetingLocalTranscriptionProvider,
+          whisperModel: state.meetingWhisperModel,
+          parakeetModel: state.meetingParakeetModel,
+        },
+        { whisper: downloadedIds(whisper), parakeet: downloadedIds(parakeet) }
+      );
+      if (!pick) return;
+      state.setMeetingLocalTranscriptionProvider(pick.provider as "whisper" | "nvidia");
+      if (pick.provider === "nvidia") state.setMeetingParakeetModel(pick.model);
+      else state.setMeetingWhisperModel(pick.model);
+    });
+  }, []);
 
   useEffect(() => {
     const { noteFilesEnabled, noteFilesPath } = useSettingsStore.getState();

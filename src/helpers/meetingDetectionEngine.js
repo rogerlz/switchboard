@@ -432,22 +432,14 @@ class MeetingDetectionEngine {
 
   async handleNotificationResponse(detectionId, action) {
     debugLogger.info("Notification response", { detectionId, action }, "meeting");
+    let joinUrl = null;
     try {
       const detection = this.activeDetections.get(detectionId);
 
       if ((action === "start" || action === "join") && detection) {
-        if (action === "join") {
-          const joinUrl = getMeetingJoinUrl(detection.event);
-          if (joinUrl) {
-            openExternalUrl(joinUrl).catch((error) =>
-              debugLogger.error(
-                "Failed to open meeting link",
-                { error: error.message, joinUrl },
-                "meeting"
-              )
-            );
-          }
-        }
+        // Opened after the note is set up (see the finally below) so the
+        // browser, not the control panel, ends up in front.
+        joinUrl = action === "join" ? getMeetingJoinUrl(detection.event) : null;
 
         const eventSummary = detection.event?.summary || "New note";
 
@@ -514,6 +506,15 @@ class MeetingDetectionEngine {
         "meeting"
       );
     } finally {
+      if (joinUrl) {
+        openExternalUrl(joinUrl).catch((error) =>
+          debugLogger.error(
+            "Failed to open meeting link",
+            { error: error.message, joinUrl },
+            "meeting"
+          )
+        );
+      }
       // One overlay at a time — a response settles every pending detection,
       // including any the responded prompt replaced.
       this.activeDetections.clear();

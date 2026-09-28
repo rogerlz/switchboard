@@ -174,9 +174,10 @@ function EventRow({ event, isNow }: { event: CalendarEvent; isNow: boolean }) {
   const attendees = useMemo(() => parseAttendees(event), [event]);
   const timeRange = formatTimeRange(i18n.language, event.start_time, event.end_time);
 
-  const startNotes = () => {
+  // The note opens first so the browser, opened last, ends up in front.
+  const startNotes = async () => {
+    await window.electronAPI?.joinCalendarMeeting?.(event.id);
     if (joinUrl) openJoinUrl(joinUrl);
-    window.electronAPI?.joinCalendarMeeting?.(event.id);
   };
 
   const joinButton = (

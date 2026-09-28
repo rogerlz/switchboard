@@ -36,10 +36,11 @@ function readHideWeekends(): boolean {
   }
 }
 
-function joinMeeting(event: CalendarEvent) {
+// The note opens first so the browser, opened last, ends up in front.
+async function joinMeeting(event: CalendarEvent) {
   const url = getMeetingJoinUrl(event);
-  if (url) window.electronAPI?.openExternal?.(url);
-  window.electronAPI?.joinCalendarMeeting?.(event.id);
+  await window.electronAPI?.joinCalendarMeeting?.(event.id);
+  if (url) await window.electronAPI?.openExternal?.(url);
 }
 
 export default function TrayCalendar() {
@@ -280,7 +281,7 @@ export default function TrayCalendar() {
                   {!ended && needsRsvp(event) && <RsvpButtons event={event} />}
                   {!ended && !needsRsvp(event) && (
                     <button
-                      onClick={() => joinMeeting(event)}
+                      onClick={() => void joinMeeting(event)}
                       title={hasLink ? t("upcoming.joinAndTranscribe") : t("upcoming.takeNotes")}
                       className="flex shrink-0 items-center gap-1 rounded-full bg-primary px-2.5 py-1 text-xs font-medium text-primary-foreground hover:opacity-90"
                     >
