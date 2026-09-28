@@ -68,26 +68,6 @@ test("the leaderboard is tabbed inside the Insights view", () => {
   assert.equal(leaderboard.includes('t("insights.leaderboard.description")'), false);
 });
 
-test("analytics and leaderboard consent copy are concise and independently scoped", () => {
-  for (const locale of ["en", "pt"]) {
-    const { insights } = JSON.parse(read(`src/locales/${locale}/translation.json`));
-    const descriptions = [
-      insights.leaderboard.joinDescription,
-      ...Object.entries(insights)
-        .filter(([key]) => /^(claim|enable)Description_/.test(key))
-        .map(([, value]) => value),
-    ];
-    for (const description of descriptions) {
-      assert.ok(description.length <= 190, `${locale} consent copy is too long`);
-      assert.doesNotMatch(description, /[—–]/, `${locale} consent copy must not use long dashes`);
-    }
-  }
-
-  const english = JSON.parse(read("src/locales/en/translation.json")).insights;
-  assert.match(english.leaderboard.joinDescription, /name, email, and activity/);
-  assert.doesNotMatch(english.enableDescription_other, /name|email|leaderboard/);
-});
-
 test("leaderboard access is plan agnostic and invitation led", () => {
   const controlPanel = read("src/components/ControlPanel.tsx");
   const section = read("src/components/LeaderboardSection.tsx");

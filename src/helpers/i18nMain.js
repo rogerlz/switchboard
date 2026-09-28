@@ -1,6 +1,6 @@
 const i18next = require("i18next");
 
-const SUPPORTED_UI_LANGUAGES = ["en", "pt"];
+const SUPPORTED_UI_LANGUAGES = ["en"];
 
 function normalizeUiLanguage(language) {
   const base = (language || "").trim().replace(/_/g, "-").toLowerCase().split("-")[0];

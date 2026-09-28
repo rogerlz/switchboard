@@ -88,8 +88,6 @@ export const RETIRED_DEFAULT_PROMPT_HASHES = new Set([
 export const CURRENT_DEFAULT_PROMPT_HASHES = {
   "en/cleanupPrompt": "58ed65fbc679a7bac1483ef850c51ac7932a02d17fab9ca688f4d11f6aa9b7e6",
   "en/translatePrompt": "2acf77e82671cfb27f56210461369cca96da52d68597dd825bb5f3cf7fd4cd47",
-  "pt/cleanupPrompt": "2de91bc76da3682dc819297616966d1e90ba511ca8fcb5232691710e712da619",
-  "pt/translatePrompt": "a108543fd389248279ac251b473697adae1cfe44adcaa9bd5a5cefd2e8a4df63",
 };
 
 export async function hashPromptText(text) {

@@ -174,11 +174,6 @@ interface SettingsPageProps {
   initialSubTab?: string;
 }
 
-const UI_LANGUAGE_OPTIONS: import("./ui/LanguageSelector").LanguageOption[] = [
-  { value: "en", label: "English", flag: "🇺🇸" },
-  { value: "pt", label: "Português", flag: "🇵🇹" },
-];
-
 const RETENTION_DAY_OPTIONS = [1, 7, 14, 30, 60, 90];
 
 const RETENTION_SELECT_CLASS =
@@ -3251,19 +3246,6 @@ export default function SettingsPage({
                 description={t("settings.language.sectionDescription")}
               />
               <SettingsPanel>
-                <SettingsPanelRow>
-                  <SettingsRow
-                    label={t("settings.language.uiLabel")}
-                    description={t("settings.language.uiDescription")}
-                  >
-                    <LanguageSelector
-                      value={uiLanguage}
-                      onChange={setUiLanguage}
-                      options={UI_LANGUAGE_OPTIONS}
-                      className="min-w-32"
-                    />
-                  </SettingsRow>
-                </SettingsPanelRow>
                 <SettingsPanelRow>
                   <SettingsRow
                     label={t("settings.language.transcriptionLabel")}

@@ -68,7 +68,7 @@ test("treats a one-character edit of a retired default as a user customization",
 test("never flags any currently shipped locale default", async () => {
   const { isRetiredDefaultPrompt } = await load();
   const bundles = readLocaleBundles();
-  assert.ok(Object.keys(bundles).length >= 2, "expected locale bundles");
+  assert.ok(Object.keys(bundles).length >= 1, "expected locale bundles");
   for (const [locale, bundle] of Object.entries(bundles)) {
     for (const key of BUNDLE_KEYS) {
       assert.equal(

@@ -1,5 +1,4 @@
 import enPrompts from "./en/prompts.json";
-import ptPrompts from "./pt/prompts.json";
 
 export interface PromptBundle {
   cleanupPrompt: string;
@@ -8,6 +7,5 @@ export interface PromptBundle {
 }
 
 export const en: PromptBundle = enPrompts;
-export const pt: PromptBundle = ptPrompts;
 
-export const PROMPTS_BY_LOCALE = { en, pt } as const;
+export const PROMPTS_BY_LOCALE = { en } as const;

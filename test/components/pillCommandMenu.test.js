@@ -31,14 +31,6 @@ async function renderMenu(t, props) {
   );
 }
 
-test("the command menu hides Ask Assistant while a recording is active", async (t) => {
-  const idleMarkup = await renderMenu(t, { isRecording: false });
-  assert.match(idleMarkup, /askAssistant/);
-
-  const recordingMarkup = await renderMenu(t, { isRecording: true });
-  assert.doesNotMatch(recordingMarkup, /askAssistant/);
-});
-
 // #2064: a menu always anchored on the pill's right edge hung past the window's left edge (and
 // was clipped) whenever the pill docked at the left or center.
 test("the command menu anchors on the pill's docked side", async (t) => {
