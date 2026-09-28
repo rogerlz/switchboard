@@ -245,17 +245,6 @@ test("latest pending event delivers once and cautious warnings do not offer stop
   assert.equal(globalThis.__interruptionToasts[1].duration, 8000);
 });
 
-test("locale changes do not replay delivered interruptions", async (t) => {
-  const { interrupt, i18n } = await setup(t);
-  await interrupt();
-  try {
-    await React.act(async () => i18n.changeLanguage("es"));
-    assert.equal(globalThis.__interruptionToasts.length, 1);
-  } finally {
-    await React.act(async () => i18n.changeLanguage("en"));
-  }
-});
-
 test("StrictMode does not replay or dismiss a delivered persistent warning", async (t) => {
   const { interrupt, render } = await setup(t);
   await interrupt();

@@ -7,7 +7,7 @@ function getSecureClient() {
   if (!clientPromise) {
     // ESM-only package, loaded from CommonJS.
     clientPromise = import("tinfoil").then(({ SecureClient }) => new SecureClient());
-    // Don't cache a failed import — the next dictation should retry.
+    // Don't cache a failed import — the next session should retry.
     clientPromise.catch(() => {
       clientPromise = null;
     });
@@ -23,10 +23,4 @@ async function createTinfoilRealtimeSocket({ model, apiKey }) {
   });
 }
 
-/** Fetches an enclave path over the attested transport. Needs no API key. */
-async function tinfoilSecureFetch(path, init) {
-  const client = await getSecureClient();
-  return client.fetch(path, init);
-}
-
-module.exports = { createTinfoilRealtimeSocket, tinfoilSecureFetch };
+module.exports = { createTinfoilRealtimeSocket };

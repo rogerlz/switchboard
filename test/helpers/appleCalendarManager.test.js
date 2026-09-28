@@ -21,28 +21,22 @@ function loadManager() {
 }
 
 test("an unexpected helper exit schedules a restart while Apple Calendar is connected", () => {
-  const originalPlatform = process.platform;
-  Object.defineProperty(process, "platform", { value: "darwin" });
-  try {
-    const AppleCalendarManager = loadManager();
-    const databaseManager = {
-      getAppleCalendars: () => [{ id: "calendar-1" }],
-    };
-    const manager = new AppleCalendarManager(databaseManager, {});
-    const child = {};
-    let restartCount = 0;
-    manager._helperProcess = child;
-    manager._scheduleHelperRestart = () => {
-      restartCount += 1;
-    };
+  const AppleCalendarManager = loadManager();
+  const databaseManager = {
+    getAppleCalendars: () => [{ id: "calendar-1" }],
+  };
+  const manager = new AppleCalendarManager(databaseManager, {});
+  const child = {};
+  let restartCount = 0;
+  manager._helperProcess = child;
+  manager._scheduleHelperRestart = () => {
+    restartCount += 1;
+  };
 
-    manager._onHelperGone(child);
+  manager._onHelperGone(child);
 
-    assert.equal(manager._helperProcess, null);
-    assert.equal(restartCount, 1);
-  } finally {
-    Object.defineProperty(process, "platform", { value: originalPlatform });
-  }
+  assert.equal(manager._helperProcess, null);
+  assert.equal(restartCount, 1);
 });
 
 test("_mapEvent falls back to a meeting link found in location or notes", () => {

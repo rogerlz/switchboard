@@ -8,7 +8,7 @@ const { downloadFile, createDownloadSignal, checkDiskSpace } = require("./downlo
 const { resolveBinaryPath, gracefulStopProcess } = require("../utils/serverUtils");
 const { getModelsDirForService } = require("./modelDirUtils");
 const { convertToWav } = require("./ffmpegUtils");
-const { getSafeTempDir } = require("./safeTempDir");
+const os = require("os");
 const { applyConfirmedSpeaker } = require("./speakerAssignmentPolicy");
 const sidecarPidFile = require("./sidecarPidFile");
 const {
@@ -76,10 +76,7 @@ class DiarizationManager {
     if (this.cachedBinaryPath) return this.cachedBinaryPath;
 
     const platformArch = `${process.platform}-${process.arch}`;
-    const binaryName =
-      process.platform === "win32"
-        ? `sherpa-onnx-diarize-${platformArch}.exe`
-        : `sherpa-onnx-diarize-${platformArch}`;
+    const binaryName = `sherpa-onnx-diarize-${platformArch}`;
 
     const resolved = resolveBinaryPath(binaryName);
     if (resolved) this.cachedBinaryPath = resolved;
@@ -341,8 +338,7 @@ class DiarizationManager {
 
       const proc = spawn(binaryPath, args, {
         stdio: ["ignore", "pipe", "pipe"],
-        windowsHide: true,
-        detached: process.platform !== "win32",
+        detached: true,
       });
 
       this._processes.add(proc);
@@ -536,7 +532,7 @@ class DiarizationManager {
       throw new Error("Raw PCM file is empty");
     }
 
-    const tempDir = getSafeTempDir();
+    const tempDir = os.tmpdir();
     // Random suffix: concurrent conversions (meeting + upload) must never collide.
     const runId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     const inputWavPath = path.join(tempDir, `ow-diarize-${runId}-input.wav`);

@@ -433,30 +433,6 @@ async function checkDiskSpace(directory, requiredBytes) {
   }
 }
 
-function escapePowerShellSingleQuoted(value) {
-  return String(value).replace(/'/g, "''");
-}
-
-async function extractZipWindows(zipPath, destDir) {
-  try {
-    await runSystemTar(zipPath, destDir);
-    return;
-  } catch (error) {
-    debugLogger.info("tar extraction failed, trying PowerShell", { error: error.message });
-  }
-
-  const command =
-    `Expand-Archive -Force -LiteralPath '${escapePowerShellSingleQuoted(zipPath)}' ` +
-    `-DestinationPath '${escapePowerShellSingleQuoted(destDir)}'`;
-
-  return new Promise((resolve, reject) => {
-    execFile("powershell", ["-NoProfile", "-Command", command], (psError) => {
-      if (psError) reject(new Error(`Zip extraction failed: ${psError.message}`));
-      else resolve();
-    });
-  });
-}
-
 async function extractTarGz(archivePath, destDir) {
   try {
     await runSystemTar(archivePath, destDir);
@@ -472,10 +448,6 @@ async function extractTarGz(archivePath, destDir) {
 function extractArchive(archivePath, destDir) {
   if (archivePath.endsWith(".tar.gz") || archivePath.endsWith(".tgz")) {
     return extractTarGz(archivePath, destDir);
-  }
-
-  if (process.platform === "win32") {
-    return extractZipWindows(archivePath, destDir);
   }
 
   return new Promise((resolve, reject) => {

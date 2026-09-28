@@ -23,10 +23,6 @@ const { reapStaleSidecars, waitForExit } = require("../../src/helpers/sidecarRea
 // anything comfortably above that works.
 const GRACES = { sigtermGraceMs: 1000, sigkillGraceMs: 1000 };
 
-// The reaper matches processes by command line, which tasklist on Windows
-// reports as the bare image name — these process-identity tests are POSIX-only.
-const posixOnly = { skip: process.platform === "win32" };
-
 function createUserDataDir(t) {
   userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "ow-sidecar-reaper-"));
   const dir = userDataDir;
@@ -70,9 +66,12 @@ async function waitUntilDead(pid, timeoutMs = 2000) {
   return !isAlive(pid);
 }
 
-test("kills a responsive stale sidecar and clears its entry", posixOnly, async (t) => {
+test("kills a responsive stale sidecar and clears its entry", async (t) => {
   createUserDataDir(t);
-  const child = await spawnFakeSidecar(t, { scriptName: "whisper-server-fake.js", ignoreSigterm: false });
+  const child = await spawnFakeSidecar(t, {
+    scriptName: "whisper-server-fake.js",
+    ignoreSigterm: false,
+  });
   sidecarPidFile.write("whisper", child.pid);
 
   await reapStaleSidecars(GRACES);
@@ -81,9 +80,12 @@ test("kills a responsive stale sidecar and clears its entry", posixOnly, async (
   assert.deepEqual(sidecarPidFile.readAll(), []);
 });
 
-test("escalates to SIGKILL when a stale sidecar ignores SIGTERM", posixOnly, async (t) => {
+test("escalates to SIGKILL when a stale sidecar ignores SIGTERM", async (t) => {
   createUserDataDir(t);
-  const child = await spawnFakeSidecar(t, { scriptName: "whisper-server-stuck.js", ignoreSigterm: true });
+  const child = await spawnFakeSidecar(t, {
+    scriptName: "whisper-server-stuck.js",
+    ignoreSigterm: true,
+  });
   sidecarPidFile.write("whisper", child.pid);
 
   await reapStaleSidecars(GRACES);
@@ -92,7 +94,7 @@ test("escalates to SIGKILL when a stale sidecar ignores SIGTERM", posixOnly, asy
   assert.deepEqual(sidecarPidFile.readAll(), []);
 });
 
-test("does not kill a reused PID that is no longer the sidecar binary", posixOnly, async (t) => {
+test("does not kill a reused PID that is no longer the sidecar binary", async (t) => {
   createUserDataDir(t);
   const child = await spawnFakeSidecar(t, { scriptName: "other-app.js", ignoreSigterm: false });
   sidecarPidFile.write("whisper", child.pid);
@@ -107,7 +109,10 @@ test("does not kill a reused PID that is no longer the sidecar binary", posixOnl
 // process is gone before spawning a replacement.
 test("waitForExit distinguishes a live process from a dead one", async (t) => {
   createUserDataDir(t);
-  const child = await spawnFakeSidecar(t, { scriptName: "whisper-server-wait.js", ignoreSigterm: false });
+  const child = await spawnFakeSidecar(t, {
+    scriptName: "whisper-server-wait.js",
+    ignoreSigterm: false,
+  });
 
   assert.equal(await waitForExit(child.pid, 400), false);
 
@@ -117,7 +122,10 @@ test("waitForExit distinguishes a live process from a dead one", async (t) => {
 
 test("clears entries for processes that already exited", async (t) => {
   createUserDataDir(t);
-  const child = await spawnFakeSidecar(t, { scriptName: "whisper-server-gone.js", ignoreSigterm: false });
+  const child = await spawnFakeSidecar(t, {
+    scriptName: "whisper-server-gone.js",
+    ignoreSigterm: false,
+  });
   sidecarPidFile.write("whisper", child.pid);
   process.kill(child.pid, "SIGKILL");
   assert.equal(await waitUntilDead(child.pid), true);

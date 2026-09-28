@@ -49,14 +49,8 @@ export function resolveMeetingTranscriptionOptions({
     };
   }
 
-  // These two are reachable from a settings copy the user never made by hand —
-  // the 1.6.10 follow-flag migration carried a dictation choice Note Recording
-  // cannot serve — so they are sentinels that MeetingRecordingMount translates,
-  // not English sentences. Anything after the colon is an argument.
-  if (transcriptionMode === "self-hosted") {
-    throw new Error("unsupportedSelfHosted");
-  }
-
+  // Sentinels that MeetingRecordingMount translates, not English sentences.
+  // Anything after the colon is an argument.
   if (transcriptionMode !== "providers") {
     throw new Error(`Unsupported Note Recording transcription mode: ${transcriptionMode}`);
   }

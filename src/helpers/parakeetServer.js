@@ -11,7 +11,7 @@ const {
   wavToFloat32Samples,
   computeFloat32RMS,
 } = require("./ffmpegUtils");
-const { getSafeTempDir } = require("./safeTempDir");
+const os = require("os");
 const { createAbortError } = require("./abortError");
 const ParakeetWsServer = require("./parakeetWsServer");
 const {
@@ -93,7 +93,7 @@ class ParakeetServerManager {
       );
     }
 
-    const tempDir = getSafeTempDir();
+    const tempDir = os.tmpdir();
     const timestamp = Date.now();
     const tempInputPath = path.join(tempDir, `parakeet-input-${timestamp}.webm`);
     const tempWavPath = path.join(tempDir, `parakeet-${timestamp}.wav`);

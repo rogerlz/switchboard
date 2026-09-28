@@ -20,24 +20,12 @@ class MeetingAecManager {
     this.isStopping = false;
   }
 
-  isSupported() {
-    return (
-      process.platform === "darwin" || process.platform === "linux" || process.platform === "win32"
-    );
-  }
-
   isAvailable() {
     return !!this.resolveBinary();
   }
 
   resolveBinary() {
-    if (!this.isSupported()) {
-      return null;
-    }
-
-    const binaryName = `meeting-aec-helper-${process.platform}-${process.arch}${
-      process.platform === "win32" ? ".exe" : ""
-    }`;
+    const binaryName = `meeting-aec-helper-${process.platform}-${process.arch}`;
     const candidates = new Set([path.join(__dirname, "..", "..", "resources", "bin", binaryName)]);
 
     if (process.resourcesPath) {
@@ -71,14 +59,11 @@ class MeetingAecManager {
     try {
       fs.accessSync(binaryPath, fs.constants.X_OK);
     } catch {
-      if (process.platform !== "win32") {
-        fs.chmodSync(binaryPath, 0o755);
-      }
+      fs.chmodSync(binaryPath, 0o755);
     }
 
     const child = spawn(binaryPath, ["--sample-rate", String(SAMPLE_RATE)], {
       stdio: ["pipe", "pipe", "pipe"],
-      windowsHide: true,
     });
 
     this.process = child;

@@ -1,7 +1,6 @@
 const { getOwnProcessPids } = require("./ownProcessPids");
 
-// Audio capture helpers (macOS audio tap, Linux portal capture, Windows
-// loopback) are plain child processes, so they never appear in the Electron
+// Audio capture helpers (the macOS audio tap) are plain child processes, so they never appear in the Electron
 // process tree — yet the OS attributes their capture to their own pids.
 // Without excluding them, the app's own system-audio capture reads as an
 // external mic user and auto-end can never arm its end detection.

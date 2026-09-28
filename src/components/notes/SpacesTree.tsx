@@ -33,7 +33,6 @@ import { useNoteDragAndDrop, type NoteMoveTarget } from "../../hooks/useNoteDrag
 import { localMutationErrorKey } from "../../lib/localMutationError";
 import { useSettingsStore } from "../../stores/settingsStore";
 import { cn } from "../lib/utils";
-import { getCachedPlatform } from "../../utils/platform";
 import { treeHorizontalIntent, treeRowActionClearanceStyle } from "./treeDirection";
 import { defaultFolderDisplayName } from "./shared";
 import type { FolderItem, NoteItem, SpaceItem } from "../../types/electron";
@@ -127,11 +126,6 @@ interface SpacesTreeProps {
   onMoveNote: (noteId: number, target: NoteMoveTarget) => Promise<void>;
   onCreateFolderAndMove: (noteId: number, folderName: string) => void;
   onNewNote: (spaceId: number, folderId: number | null) => void;
-}
-
-function getFileManagerName(): string {
-  const platform = getCachedPlatform();
-  return platform === "darwin" ? "Finder" : platform === "win32" ? "Explorer" : "Files";
 }
 
 function SectionHeader({
@@ -758,7 +752,7 @@ export default function SpacesTree({
 }: SpacesTreeProps) {
   const { t, i18n } = useTranslation();
   const { toast, dismiss } = useToast();
-  const fileManagerName = getFileManagerName();
+  const fileManagerName = "Finder";
 
   const spaces = useSpaces();
   const folders = useFolders();

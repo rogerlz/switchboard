@@ -3,53 +3,9 @@ const os = require("os");
 const fs = require("fs");
 const path = require("path");
 
-// Same rule as safeTempDir: native whisper/parakeet binaries crash on Windows
-// when model paths contain spaces or non-ASCII (CJK / Cyrillic profile dirs).
-function pathHasProblematicChars(candidate) {
-  return !/^[\x21-\x7E]*$/.test(candidate);
-}
-
 function ensureDir(dir) {
   fs.mkdirSync(dir, { recursive: true });
   return dir;
-}
-
-function getAsciiSafeFallbackRoot() {
-  const candidates = [
-    path.join(process.env.ProgramData || "C:\\ProgramData", "OpenWhispr", "cache"),
-    path.join(process.env.SystemDrive || "C:", "OpenWhispr", "cache"),
-  ];
-
-  for (const candidate of candidates) {
-    if (pathHasProblematicChars(candidate)) continue;
-    try {
-      return ensureDir(candidate);
-    } catch {}
-  }
-
-  return null;
-}
-
-function getPreferredCacheRoot(homeCache) {
-  if (process.env.OPENWHISPR_CACHE_ROOT) {
-    return process.env.OPENWHISPR_CACHE_ROOT;
-  }
-
-  if (process.platform === "win32") {
-    const redirectedProfile = process.env.USERPROFILE;
-    if (redirectedProfile && path.isAbsolute(redirectedProfile)) {
-      return path.join(redirectedProfile, ".cache", "openwhispr");
-    }
-  }
-
-  if (process.platform === "linux") {
-    const xdgCacheHome = process.env.XDG_CACHE_HOME;
-    if (xdgCacheHome && path.isAbsolute(xdgCacheHome)) {
-      return path.join(xdgCacheHome, "openwhispr");
-    }
-  }
-
-  return homeCache;
 }
 
 // Only these subdirs resolve through getCacheRoot(). yt-dlp is read from the
@@ -123,11 +79,7 @@ function migrateLegacyModelDirs(legacyRoot, targetRoot) {
 function getCacheRoot() {
   const homeDir = app?.getPath?.("home") || os.homedir();
   const homeCache = path.join(homeDir, ".cache", "openwhispr");
-  let targetRoot = getPreferredCacheRoot(homeCache);
-
-  if (process.platform === "win32" && pathHasProblematicChars(targetRoot)) {
-    targetRoot = getAsciiSafeFallbackRoot() || homeCache;
-  }
+  const targetRoot = process.env.OPENWHISPR_CACHE_ROOT || homeCache;
 
   if (targetRoot === homeCache) return homeCache;
   return migrateLegacyModelDirs(homeCache, targetRoot) ? targetRoot : homeCache;
@@ -140,5 +92,4 @@ function getModelsDirForService(service) {
 module.exports = {
   getCacheRoot,
   getModelsDirForService,
-  pathHasProblematicChars,
 };

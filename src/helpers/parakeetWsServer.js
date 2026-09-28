@@ -9,7 +9,7 @@ const {
   gracefulStopProcess,
   getAvailableParallelism,
 } = require("../utils/serverUtils");
-const { getSafeTempDir } = require("./safeTempDir");
+const os = require("os");
 const { createAbortError } = require("./abortError");
 const sidecarPidFile = require("./sidecarPidFile");
 const { parseOfflineMessage, createOnlineAccumulator } = require("./parakeetWsResult");
@@ -68,8 +68,7 @@ class ParakeetWsServer {
 
     const platformArch = `${process.platform}-${process.arch}`;
     const prefix = runtime === "online" ? "sherpa-onnx-online-ws" : "sherpa-onnx-ws";
-    const binaryName =
-      process.platform === "win32" ? `${prefix}-${platformArch}.exe` : `${prefix}-${platformArch}`;
+    const binaryName = `${prefix}-${platformArch}`;
 
     const resolved = resolveBinaryPath(binaryName);
     if (resolved) this.cachedBinaryPaths[runtime] = resolved;
@@ -159,9 +158,8 @@ class ParakeetWsServer {
 
     const child = spawn(wsBinary, args, {
       stdio: ["ignore", "pipe", "pipe"],
-      windowsHide: true,
-      cwd: getSafeTempDir(),
-      detached: process.platform !== "win32",
+      cwd: os.tmpdir(),
+      detached: true,
     });
     this.process = child;
     sidecarPidFile.write("parakeet", child.pid);

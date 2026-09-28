@@ -12,61 +12,22 @@ function tarExtractionFlags(archivePath) {
   return "-xf";
 }
 
-function resolveSystemTarExecutable({
-  platform = process.platform,
-  arch = process.arch,
-  env = process.env,
-} = {}) {
-  if (platform !== "win32") return "tar";
-
-  const windowsDir = env.SystemRoot || env.SYSTEMROOT || env.WINDIR || env.windir || "C:\\Windows";
-  // A 32-bit process is redirected from System32 to SysWOW64, where tar.exe
-  // is not normally present. Sysnative is Windows' alias for the native
-  // system directory in that situation.
-  const systemDir = arch === "ia32" && env.PROCESSOR_ARCHITEW6432 ? "Sysnative" : "System32";
-  return path.win32.join(windowsDir, systemDir, "tar.exe");
-}
-
 function runSystemTar(
   archivePath,
   destDir,
-  {
-    platform = process.platform,
-    arch = process.arch,
-    env = process.env,
-    timeoutMs = TIMEOUTS.INSTALL,
-    killGraceMs = TAR_KILL_GRACE_MS,
-    spawnImpl = spawn,
-  } = {}
+  { timeoutMs = TIMEOUTS.INSTALL, killGraceMs = TAR_KILL_GRACE_MS, spawnImpl = spawn } = {}
 ) {
-  // Windows' bundled bsdtar can lack bz2lib and hang while invoking an
-  // external bzip2 from PATH. Callers already provide a bundled JS fallback.
-  if (platform === "win32" && tarExtractionFlags(archivePath) === "-xjf") {
-    return Promise.reject(
-      new Error("Use bundled JavaScript extraction for Windows bzip2 archives")
-    );
-  }
-
   return new Promise((resolve, reject) => {
-    const executable = resolveSystemTarExecutable({ platform, arch, env });
-    // Relative arguments avoid GNU tar interpreting a Windows drive-letter
-    // colon as a remote archive separator on non-standard PATH tar builds.
-    const pathApi = platform === "win32" ? path.win32 : path;
-    const cwd = pathApi.dirname(archivePath);
-    const archiveArg = pathApi.basename(archivePath);
-    const destArg = pathApi.relative(cwd, destDir) || ".";
+    const cwd = path.dirname(archivePath);
+    const archiveArg = path.basename(archivePath);
+    const destArg = path.relative(cwd, destDir) || ".";
     let tarProcess;
 
     try {
-      tarProcess = spawnImpl(
-        executable,
-        [tarExtractionFlags(archivePath), archiveArg, "-C", destArg],
-        {
-          cwd,
-          stdio: ["ignore", "ignore", "pipe"],
-          windowsHide: true,
-        }
-      );
+      tarProcess = spawnImpl("tar", [tarExtractionFlags(archivePath), archiveArg, "-C", destArg], {
+        cwd,
+        stdio: ["ignore", "ignore", "pipe"],
+      });
     } catch (err) {
       reject(new Error(`Failed to start tar process: ${err.message}`));
       return;
@@ -116,7 +77,4 @@ function runSystemTar(
   });
 }
 
-module.exports = {
-  resolveSystemTarExecutable,
-  runSystemTar,
-};
+module.exports = { runSystemTar };

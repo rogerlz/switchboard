@@ -13,33 +13,6 @@ const T_CALL = /\bt\(\s*(['"`])([A-Za-z0-9_.-]+)\1/g;
 // messageKey values are passed to t() as a variable, so the T_CALL scan
 // cannot see them and a typo would render as the raw key string.
 const MESSAGE_KEY = /\bmessageKey\s*[:=]\s*(['"`])([A-Za-z0-9_.-]+)\1/g;
-const INTERPOLATION = /\{\{\s*([\w.]+)/g;
-const ARABIC_PLURAL_CATEGORIES = ["zero", "one", "two", "few", "many", "other"];
-const ARABIC_PLURAL_BASES = [
-  "settingsPage.privacy.retentionDays",
-  "settingsPage.privacy.audioStorageFiles",
-  "notes.spaces.noteCount",
-  "notes.addToFolder.addCount",
-  "notes.overview.meta.folders",
-  "dictionary.wordsReady",
-  "insights.days",
-  "insights.longestStreak",
-  "insights.dayTooltip",
-  "insights.claimDescription",
-  "insights.enableDescription",
-];
-const ARABIC_NUMBER_NEUTRAL_TEMPLATES = {
-  "notes.upload.partialWarningCount":
-    "عدد الأجزاء الصوتية التي تعذر تفريغها: {{failed}} من أصل {{total}}.",
-  "insights.wpmCoverage": "استنادًا إلى نسبة {{count}}% من الكلمات المقاسة",
-  "dictionary.promptLimitNotice":
-    "عدد أحرف قاموسك: {{chars}}. لا تقرأ نماذج Groq وWhisper سوى بضع مئات من الأحرف الأخيرة منه، لذا تعمل القوائم الأقصر بشكل أفضل معها. أما النماذج الأخرى فتحصل على القائمة كاملة.",
-};
-
-const languages = fs
-  .readdirSync(LOCALES)
-  .filter((entry) => fs.statSync(path.join(LOCALES, entry)).isDirectory());
-
 const load = (lang, namespace) =>
   JSON.parse(fs.readFileSync(path.join(LOCALES, lang, `${namespace}.json`), "utf8"));
 
@@ -117,47 +90,6 @@ test("every model registry descriptionKey resolves in en", () => {
 
   const broken = keys.filter((key) => typeof en.get(key) !== "string" || en.get(key) === "");
   assert.deepEqual(broken, [], `Registry descriptionKeys missing in en:\n${broken.join("\n")}`);
-});
-
-test("every en key is present in every other language", () => {
-  for (const namespace of NAMESPACES) {
-    const en = flatten(load("en", namespace));
-    for (const lang of languages) {
-      if (lang === "en") continue;
-      const translated = flatten(load(lang, namespace));
-      // Plural categories are language specific (ru adds _few/_many, zh only has
-      // _other), so a matching plural base counts as covered.
-      const bases = new Set([...translated.keys()].map(stripPlural));
-      const gaps = [...en.keys()].filter(
-        (key) => !translated.has(key) && !bases.has(stripPlural(key))
-      );
-      assert.deepEqual(gaps, [], `${lang}/${namespace} is missing:\n${gaps.join("\n")}`);
-    }
-  }
-});
-
-test("interpolation variables match en in every language", () => {
-  // Compares names, not repeat counts — word order can make a translation
-  // reference the same variable a different number of times.
-  const variables = (value) =>
-    typeof value === "string"
-      ? [...new Set([...value.matchAll(INTERPOLATION)].map((m) => m[1]))].sort()
-      : [];
-
-  for (const namespace of NAMESPACES) {
-    const en = flatten(load("en", namespace));
-    for (const lang of languages) {
-      if (lang === "en") continue;
-      for (const [key, value] of flatten(load(lang, namespace))) {
-        if (!en.has(key)) continue;
-        assert.deepEqual(
-          variables(value),
-          variables(en.get(key)),
-          `${lang}/${namespace} ${key} has different {{variables}} than en`
-        );
-      }
-    }
-  }
 });
 
 test("every messageKey literal resolves in en", () => {

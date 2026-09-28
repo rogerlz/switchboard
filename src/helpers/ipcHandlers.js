@@ -11,20 +11,16 @@ const path = require("path");
 const os = require("os");
 const crypto = require("crypto");
 const debugLogger = require("./debugLogger");
-const { getModelType, isSherpaLocalProvider } = require("./parakeetModelInfo");
+const { isSherpaLocalProvider } = require("./parakeetModelInfo");
 const { broadcastToWindows } = require("./windowBroadcast");
 const { openExternalUrl } = require("./externalUrlOpener");
-const { resolveFailedGpuBackends } = require("./whisper");
 const { BYOK_API_KEYS } = require("../config/secretKeys");
 const { resolveSystemDefaultMicrophone } = require("./systemDefaultMicrophone");
 const autoStart = require("./autoStart");
-const { getRelaunchOptions, getRelaunchWaiter } = require("./autoStartPolicy");
-const { i18nMain, changeLanguage } = require("./i18nMain");
 const { getCortiToken } = require("./cortiAuth");
 const LocalModelDownloadStatus = require("./localModelDownloadStatus");
 const createMeetingTranscriptionLifecycle = require("./meetingTranscriptionLifecycle");
 const liveSpeakerIdentifier = require("./liveSpeakerIdentifier");
-const { supportsLiveSpeakerIdentification } = require("./liveSpeakerIdPolicy");
 const MeetingEchoLeakDetector = require("./meetingEchoLeakDetector");
 const createMeetingSystemAudioWatchdog = require("./meetingSystemAudioWatchdog");
 const {
@@ -59,11 +55,7 @@ const {
   DEFAULT_EXPECTED_SPEAKER_COUNT,
   MAX_SPEAKER_COUNT,
 } = require("../constants/speakerDetection.json");
-const {
-  DEFAULT_WHISPER_VAD_CONFIG,
-  sanitizeWhisperVadConfig,
-  resolveContextSileroEnabled,
-} = require("./whisperVadConfig");
+const { DEFAULT_WHISPER_VAD_CONFIG, sanitizeWhisperVadConfig } = require("./whisperVadConfig");
 
 const {
   ALLOWED_MEETING_PROVIDERS,
@@ -91,17 +83,12 @@ class IPCHandlers {
     this.parakeetManager = managers.parakeetManager;
     this.diarizationManager = managers.diarizationManager;
     this.windowManager = managers.windowManager;
-    this.updateManager = managers.updateManager;
     this.getTrayManager = managers.getTrayManager;
-    this.whisperCudaManager = managers.whisperCudaManager;
-    this.whisperVulkanManager = managers.whisperVulkanManager;
     this.googleCalendarManager = managers.googleCalendarManager;
     this.microsoftCalendarManager = managers.microsoftCalendarManager;
     this.appleCalendarManager = managers.appleCalendarManager;
     this.meetingDetectionEngine = managers.meetingDetectionEngine;
     this.audioTapManager = managers.audioTapManager;
-    this.linuxPortalAudioManager = managers.linuxPortalAudioManager;
-    this.windowsLoopbackAudioManager = managers.windowsLoopbackAudioManager;
     this.meetingAecManager = managers.meetingAecManager;
     this.sessionId = crypto.randomUUID();
     this._meetingMicStreaming = null;
@@ -114,44 +101,16 @@ class IPCHandlers {
     // off until the renderer syncs (see meetingDetectionPreferencePolicy.js).
     this.meetingProcessDetection = true;
     this.activeMeetingSpeakerConfig = null;
-    this.whisperVadSettings = {
-      dictationSileroEnabled: false,
-      noteRecordingSileroEnabled: true,
-      meetingSileroEnabled: true,
-      ...DEFAULT_WHISPER_VAD_CONFIG,
-    };
+    this.whisperVadSettings = { meetingSileroEnabled: true, ...DEFAULT_WHISPER_VAD_CONFIG };
     liveSpeakerIdentifier.setDiarizationManager(this.diarizationManager);
-    this._logDetectedGpus();
-    // Warm the OS default mic answer before the first hotkey press (~2s on Windows).
+    // Warm the OS default mic answer before the first meeting starts.
     resolveSystemDefaultMicrophone();
     this.setupHandlers();
-    if (this.whisperManager?.serverManager) {
-      // Remember the failed backend so it isn't re-attempted (and its model
-      // reload re-paid) on every launch; cleared by retry, re-download, delete.
-      this.whisperManager.serverManager.on("cuda-fallback", () => {
-        this._recordWhisperGpuFailure("cuda");
-        broadcastToWindows("cuda-fallback-notification", {});
-      });
-      this.whisperManager.serverManager.on("gpu-fallback", () => {
-        this._recordWhisperGpuFailure("vulkan");
-        broadcastToWindows("gpu-fallback-notification", {});
-      });
-      // Persist the discrete-GPU pin so later launches spawn pinned directly
-      // instead of paying a second Vulkan cold start. See #1606.
-      this.whisperManager.serverManager.on("vulkan-device-pinned", ({ index }) => {
-        this._syncStartupEnv({ WHISPER_VULKAN_DEVICE: String(index) });
-      });
-      this.whisperManager.serverManager.on("vulkan-device-pin-cleared", () => {
-        this._syncStartupEnv({}, ["WHISPER_VULKAN_DEVICE"]);
-      });
-    }
   }
 
   _getWhisperVadSettings() {
     const current = this.whisperVadSettings || {};
     return {
-      dictationSileroEnabled: current.dictationSileroEnabled === true,
-      noteRecordingSileroEnabled: current.noteRecordingSileroEnabled !== false,
       meetingSileroEnabled: current.meetingSileroEnabled !== false,
       ...sanitizeWhisperVadConfig(current),
     };
@@ -179,8 +138,6 @@ class IPCHandlers {
 
   _setWhisperVadSettings(update = {}) {
     const ALLOWED_KEYS = new Set([
-      "dictationSileroEnabled",
-      "noteRecordingSileroEnabled",
       "meetingSileroEnabled",
       ...Object.keys(require("../constants/whisperVad.json").DEFAULTS),
     ]);
@@ -192,18 +149,9 @@ class IPCHandlers {
     return this._getWhisperVadSettings();
   }
 
-  _resolveWhisperVadOptions(context) {
-    const settings = this._getWhisperVadSettings();
-    const {
-      dictationSileroEnabled,
-      noteRecordingSileroEnabled,
-      meetingSileroEnabled,
-      ...vadConfig
-    } = settings;
-    return {
-      vadEnabled: resolveContextSileroEnabled(settings, context),
-      vadConfig,
-    };
+  _resolveMeetingWhisperVadOptions() {
+    const { meetingSileroEnabled, ...vadConfig } = this._getWhisperVadSettings();
+    return { vadEnabled: meetingSileroEnabled, vadConfig };
   }
 
   _mirrorDeleteFolderIfUnshared(folderName) {
@@ -384,92 +332,6 @@ class IPCHandlers {
     return folder?.name || "Personal";
   }
 
-  async _logDetectedGpus() {
-    const { listNvidiaGpus } = require("../utils/gpuDetection");
-    const gpus = await listNvidiaGpus();
-    if (gpus.length > 0) {
-      debugLogger.info(
-        "NVIDIA GPUs detected",
-        {
-          count: gpus.length,
-          devices: gpus.map((g) => `[${g.index}] ${g.name} (${g.vramMb}MB) ${g.uuid}`),
-        },
-        "gpu"
-      );
-    } else {
-      debugLogger.debug("No NVIDIA GPUs detected", {}, "gpu");
-    }
-  }
-
-  _whisperGpuFailedBackends() {
-    return resolveFailedGpuBackends(process.env.WHISPER_GPU_FAILED);
-  }
-
-  _recordWhisperGpuFailure(backend) {
-    const failed = this._whisperGpuFailedBackends();
-    if (!failed.includes(backend)) failed.push(backend);
-    this._syncStartupEnv({ WHISPER_GPU_FAILED: failed.join(",") });
-  }
-
-  _clearWhisperGpuFailure(backend) {
-    const failed = this._whisperGpuFailedBackends().filter((b) => b !== backend);
-    if (failed.length > 0) {
-      this._syncStartupEnv({ WHISPER_GPU_FAILED: failed.join(",") });
-    } else {
-      this._syncStartupEnv({}, ["WHISPER_GPU_FAILED"]);
-    }
-  }
-
-  // Captured before a handler stops the server to touch pack files (stopServer
-  // clears currentServerModel); tells _applyWhisperGpuPreference what to reload.
-  _whisperReloadModel() {
-    return this.whisperManager.serverManager.isRemote
-      ? null
-      : this.whisperManager.currentServerModel;
-  }
-
-  // Apply a GPU pack change to the loaded server without blocking the caller's
-  // IPC reply (a Vulkan cold start can take minutes); the renderer follows
-  // progress by polling whisper-server-status. Returns whether a reload was
-  // kicked off so the UI shows "activating" only when one is coming.
-  _applyWhisperGpuPreference(modelName) {
-    this.whisperManager.restartServerWithGpuPreference(modelName).catch((err) => {
-      debugLogger.error("whisper-server GPU preference restart failed", { error: err.message });
-    });
-    return !!modelName;
-  }
-
-  _syncStartupEnv(setVars, clearVars = []) {
-    let changed = false;
-    for (const [key, value] of Object.entries(setVars)) {
-      if (process.env[key] !== value) {
-        process.env[key] = value;
-        changed = true;
-      }
-    }
-    for (const key of clearVars) {
-      if (process.env[key]) {
-        delete process.env[key];
-        changed = true;
-      }
-    }
-    if (changed) {
-      debugLogger.debug("Synced startup env vars", {
-        set: Object.keys(setVars),
-        cleared: clearVars.filter((k) => !process.env[k]),
-      });
-      // A swallowed .env write failure here left GPU enablement flags silently
-      // out of sync with the packs on disk (#1340) — log which keys were lost.
-      this.environmentManager.saveAllKeysToEnvFile().catch((err) => {
-        debugLogger.error("Failed to persist startup env vars to .env", {
-          set: Object.keys(setVars),
-          clearRequested: clearVars,
-          error: err.message,
-        });
-      });
-    }
-  }
-
   // Mints a Corti access token from stored BYOK credentials. Shared by the
   // dictation streaming handlers and the meeting realtime-token resolver.
   async _mintStoredCortiToken(options = {}) {
@@ -487,42 +349,8 @@ class IPCHandlers {
   }
 
   setupHandlers() {
-    ipcMain.handle("onboarding-set-window-mode", (_event, mode) =>
-      this.windowManager.setOnboardingWindowMode(mode)
-    );
-
-    ipcMain.handle("onboarding-set-active", (_event, active) => {
-      if (typeof active !== "boolean") return false;
-      return this.windowManager.setOnboardingActive(active);
-    });
-
-    ipcMain.handle("window-minimize", () => {
-      if (this.windowManager.controlPanelWindow) {
-        this.windowManager.controlPanelWindow.minimize();
-      }
-    });
-
-    ipcMain.handle("window-maximize", () => {
-      if (this.windowManager.controlPanelWindow) {
-        if (this.windowManager.controlPanelWindow.isMaximized()) {
-          this.windowManager.controlPanelWindow.unmaximize();
-        } else {
-          this.windowManager.controlPanelWindow.maximize();
-        }
-      }
-    });
-
-    ipcMain.handle("window-close", () => {
-      if (this.windowManager.controlPanelWindow) {
-        this.windowManager.controlPanelWindow.close();
-      }
-    });
-
-    ipcMain.handle("window-is-maximized", () => {
-      if (this.windowManager.controlPanelWindow) {
-        return this.windowManager.controlPanelWindow.isMaximized();
-      }
-      return false;
+    ipcMain.handle("control-panel-ready", () => {
+      this.windowManager.setControlPanelReady(true);
     });
 
     ipcMain.handle("snap-to-meeting-mode", () => {
@@ -604,13 +432,9 @@ class IPCHandlers {
     ipcMain.handle("db-create-folder", async (event, name, spaceId) => {
       const result = this.databaseManager.createFolder(name, spaceId);
       if (result?.success && result?.folder) {
-        setImmediate(() => {
-          broadcastToWindows("folder-created", result.folder);
-          if (this._noteFilesEnabled) {
-            const markdownMirror = require("./markdownMirror");
-            markdownMirror.ensureFolder(result.folder.name);
-          }
-        });
+        if (this._noteFilesEnabled) {
+          setImmediate(() => require("./markdownMirror").ensureFolder(result.folder.name));
+        }
       }
       return result;
     });
@@ -619,7 +443,7 @@ class IPCHandlers {
       const folderName = this._noteFilesEnabled ? this._getFolderName(id) : null;
       const result = this.databaseManager.deleteFolder(id);
       if (result?.success) {
-        // Other accounts' notes were released to the space root; their mirror
+        // Notes left from a signed-in session were released to the space root; their mirror
         // files leave with the folder directory, so rewrite the live ones.
         for (const note of result.relocatedNotes ?? []) {
           if (!note.deleted_at) this._asyncMirrorWrite(note);
@@ -636,13 +460,9 @@ class IPCHandlers {
       const oldName = this._noteFilesEnabled ? this._getFolderName(id) : null;
       const result = this.databaseManager.renameFolder(id, name);
       if (result?.success && result?.folder) {
-        setImmediate(() => {
-          broadcastToWindows("folder-renamed", result.folder);
-          if (this._noteFilesEnabled && oldName) {
-            const markdownMirror = require("./markdownMirror");
-            markdownMirror.renameFolder(oldName, name);
-          }
-        });
+        if (this._noteFilesEnabled && oldName) {
+          setImmediate(() => require("./markdownMirror").renameFolder(oldName, name));
+        }
       }
       return result;
     });
@@ -744,19 +564,9 @@ class IPCHandlers {
       }
     });
 
-    ipcMain.handle("read-clipboard", () => clipboard.readText());
-
     ipcMain.handle("write-clipboard", (_event, text) => {
       clipboard.writeText(text);
       return { success: true };
-    });
-
-    ipcMain.handle("check-whisper-installation", async (event) => {
-      return this.whisperManager.checkWhisperInstallation();
-    });
-
-    ipcMain.handle("get-audio-diagnostics", async () => {
-      return this.whisperManager.getDiagnostics();
     });
 
     ipcMain.handle("download-whisper-model", async (event, modelName) => {
@@ -803,10 +613,6 @@ class IPCHandlers {
       }
     });
 
-    ipcMain.handle("check-model-status", async (event, modelName) => {
-      return this.whisperManager.checkModelStatus(modelName);
-    });
-
     ipcMain.handle("list-whisper-models", async (event) => {
       return this.whisperManager.listWhisperModels();
     });
@@ -821,223 +627,6 @@ class IPCHandlers {
 
     ipcMain.handle("cancel-whisper-download", async (event) => {
       return this.whisperManager.cancelDownload();
-    });
-
-    ipcMain.handle("whisper-server-start", async (event, modelName) => {
-      return this.whisperManager.startServer(
-        modelName,
-        this.whisperManager.resolveGpuStartOptions()
-      );
-    });
-
-    ipcMain.handle("whisper-server-stop", async () => {
-      return this.whisperManager.stopServer();
-    });
-
-    ipcMain.handle("whisper-server-status", async () => {
-      return this.whisperManager.getServerStatus();
-    });
-
-    ipcMain.handle("detect-gpu", async () => {
-      const { detectNvidiaGpu } = require("../utils/gpuDetection");
-      return detectNvidiaGpu();
-    });
-
-    ipcMain.handle("list-gpus", async () => {
-      const { listNvidiaGpus } = require("../utils/gpuDetection");
-      return listNvidiaGpus();
-    });
-
-    ipcMain.handle("set-gpu-device-index", async (_event, purpose, uuid) => {
-      if (purpose !== "transcription") {
-        return { success: false };
-      }
-      // Empty string clears the pinned GPU; otherwise require an nvidia-smi UUID. See #531.
-      if (typeof uuid !== "string" || (uuid !== "" && !uuid.startsWith("GPU-"))) {
-        return { success: false };
-      }
-      const key = "TRANSCRIPTION_GPU_UUID";
-      const oldUuid = process.env[key] || "";
-      process.env[key] = uuid;
-      this.environmentManager.saveAllKeysToEnvFile().catch((err) => {
-        debugLogger.error("Failed to persist GPU UUID", { error: err.message }, "gpu");
-      });
-
-      if (oldUuid !== uuid) {
-        try {
-          if (this.whisperManager?.serverManager?.process) {
-            debugLogger.info(
-              "Restarting whisper-server for GPU change",
-              { from: oldUuid, to: uuid },
-              "gpu"
-            );
-            await this.whisperManager.restartServerWithGpuPreference();
-          }
-        } catch (err) {
-          debugLogger.error(
-            "Failed to restart server after GPU change",
-            { error: err.message, purpose },
-            "gpu"
-          );
-        }
-      }
-
-      return { success: true };
-    });
-
-    ipcMain.handle("get-gpu-device-index", async (_event, purpose) => {
-      if (purpose !== "transcription") {
-        return "";
-      }
-      return process.env.TRANSCRIPTION_GPU_UUID || "";
-    });
-
-    ipcMain.handle("get-cuda-whisper-status", async () => {
-      const { detectNvidiaGpu } = require("../utils/gpuDetection");
-      const gpuInfo = await detectNvidiaGpu();
-      if (!this.whisperCudaManager) {
-        return { downloaded: false, downloading: false, path: null, gpuInfo };
-      }
-      return {
-        downloaded: this.whisperCudaManager.isDownloaded(),
-        downloading: this.whisperCudaManager.isDownloading(),
-        path: this.whisperCudaManager.getCudaBinaryPath(),
-        gpuInfo,
-        gpuFailed: this._whisperGpuFailedBackends().includes("cuda"),
-      };
-    });
-
-    ipcMain.handle("download-cuda-whisper-binary", async (event) => {
-      if (!this.whisperCudaManager) {
-        return { success: false, error: "CUDA not supported on this platform" };
-      }
-      try {
-        const reloadModel = this._whisperReloadModel();
-        // Stop the server first: swapping in a pack a running binary is loaded
-        // from EBUSYs on Windows (same rule as the Vulkan handler below)
-        await this.whisperManager.stopServer().catch(() => {});
-        await this.whisperCudaManager.download((downloaded, total) => {
-          if (!event.sender.isDestroyed()) {
-            event.sender.send("cuda-download-progress", {
-              downloadedBytes: downloaded,
-              totalBytes: total,
-              percentage: total > 0 ? Math.round((downloaded / total) * 100) : 0,
-            });
-          }
-        });
-        this._syncStartupEnv({ WHISPER_CUDA_ENABLED: "true" });
-        this._clearWhisperGpuFailure("cuda");
-        return { success: true, willRestart: this._applyWhisperGpuPreference(reloadModel) };
-      } catch (error) {
-        debugLogger.error("CUDA binary download failed", {
-          error: error.message,
-          stack: error.stack,
-        });
-        return { success: false, error: error.message };
-      }
-    });
-
-    ipcMain.handle("cancel-cuda-whisper-download", async () => {
-      if (!this.whisperCudaManager) return { success: false };
-      return this.whisperCudaManager.cancelDownload();
-    });
-
-    ipcMain.handle("delete-cuda-whisper-binary", async () => {
-      if (!this.whisperCudaManager) return { success: false };
-      const reloadModel = this._whisperReloadModel();
-      // Stop the server first so the running binary can be deleted on Windows
-      await this.whisperManager.stopServer().catch(() => {});
-      const result = await this.whisperCudaManager.delete();
-      if (result.success) {
-        this._syncStartupEnv({}, ["WHISPER_CUDA_ENABLED"]);
-        this._clearWhisperGpuFailure("cuda");
-        this._applyWhisperGpuPreference(reloadModel);
-      }
-      return result;
-    });
-
-    ipcMain.handle("get-vulkan-whisper-status", async () => {
-      const { detectVulkanGpu } = require("../utils/vulkanDetection");
-      const { detectNvidiaGpu } = require("../utils/gpuDetection");
-      const [vulkan, gpuInfo] = await Promise.all([detectVulkanGpu(), detectNvidiaGpu()]);
-      return {
-        downloaded: this.whisperVulkanManager?.isDownloaded() ?? false,
-        downloading: this.whisperVulkanManager?.isDownloading() ?? false,
-        vulkan,
-        hasNvidiaGpu: gpuInfo.hasNvidiaGpu,
-        gpuFailed: this._whisperGpuFailedBackends().includes("vulkan"),
-      };
-    });
-
-    ipcMain.handle("download-vulkan-whisper-binary", async (event) => {
-      if (!this.whisperVulkanManager) {
-        return { success: false, error: "Vulkan not supported on this platform" };
-      }
-      try {
-        const reloadModel = this._whisperReloadModel();
-        // Stop the server first: overwriting a running binary EBUSYs on Windows
-        await this.whisperManager.stopServer().catch(() => {});
-        await this.whisperVulkanManager.download((downloaded, total) => {
-          if (!event.sender.isDestroyed()) {
-            event.sender.send("vulkan-whisper-download-progress", {
-              downloadedBytes: downloaded,
-              totalBytes: total,
-              percentage: total > 0 ? Math.round((downloaded / total) * 100) : 0,
-            });
-          }
-        });
-        this._syncStartupEnv({ WHISPER_VULKAN_ENABLED: "true" });
-        this._clearWhisperGpuFailure("vulkan");
-        return { success: true, willRestart: this._applyWhisperGpuPreference(reloadModel) };
-      } catch (error) {
-        debugLogger.error("Vulkan whisper binary download failed", {
-          error: error.message,
-          stack: error.stack,
-        });
-        return { success: false, error: error.message };
-      }
-    });
-
-    ipcMain.handle("cancel-vulkan-whisper-download", async () => {
-      if (!this.whisperVulkanManager) return { success: false };
-      return { success: this.whisperVulkanManager.cancelDownload() };
-    });
-
-    ipcMain.handle("delete-vulkan-whisper-binary", async () => {
-      if (!this.whisperVulkanManager) return { success: false };
-      const reloadModel = this._whisperReloadModel();
-      // Stop the server first so the running binary can be deleted on Windows
-      await this.whisperManager.stopServer().catch(() => {});
-      const { deletedCount } = await this.whisperVulkanManager.delete();
-      this._syncStartupEnv({}, ["WHISPER_VULKAN_ENABLED", "WHISPER_VULKAN_DEVICE"]);
-      this._clearWhisperGpuFailure("vulkan");
-      this._applyWhisperGpuPreference(reloadModel);
-      return { success: true, deletedCount };
-    });
-
-    // One-time "GPU pack needs re-downloading" notice recorded by the
-    // legacy-layout migration before any window existed. See #1606.
-    ipcMain.handle("get-gpu-pack-migration-notice", () => {
-      return require("./gpuPackMigrationNotice").read();
-    });
-
-    ipcMain.handle("dismiss-gpu-pack-migration-notice", () => {
-      require("./gpuPackMigrationNotice").clear();
-      return { success: true };
-    });
-
-    // Clears the remembered GPU failure and reloads the server with the GPU
-    // backend re-enabled (Retry on the "GPU could not be activated" state)
-    ipcMain.handle("whisper-gpu-retry", async () => {
-      this._syncStartupEnv({}, ["WHISPER_GPU_FAILED"]);
-      return {
-        success: true,
-        willRestart: this._applyWhisperGpuPreference(this._whisperReloadModel()),
-      };
-    });
-
-    ipcMain.handle("check-ffmpeg-availability", async (event) => {
-      return this.whisperManager.checkFFmpegAvailability();
     });
 
     ipcMain.handle("check-parakeet-installation", async () => {
@@ -1095,10 +684,6 @@ class IPCHandlers {
       }
     });
 
-    ipcMain.handle("check-parakeet-model-status", async (_event, modelName) => {
-      return this.parakeetManager.checkModelStatus(modelName);
-    });
-
     ipcMain.handle("list-parakeet-models", async () => {
       return this.parakeetManager.listParakeetModels();
     });
@@ -1115,112 +700,11 @@ class IPCHandlers {
       return this.parakeetManager.cancelDownload();
     });
 
-    ipcMain.handle("get-parakeet-diagnostics", async () => {
-      return this.parakeetManager.getDiagnostics();
-    });
-
-    ipcMain.handle("parakeet-server-start", async (event, modelName) => {
-      const result = await this.parakeetManager.startServer(modelName);
-      // Persisting a provider that failed to start would wedge every launch
-      // into a failing pre-warm.
-      if (result.success) {
-        process.env.LOCAL_TRANSCRIPTION_PROVIDER =
-          getModelType(modelName) === "cohere-transcribe" ? "cohere" : "nvidia";
-        process.env.PARAKEET_MODEL = modelName;
-        await this.environmentManager.saveAllKeysToEnvFile();
-      }
-      return result;
-    });
-
-    ipcMain.handle("parakeet-server-stop", async () => {
-      const result = await this.parakeetManager.stopServer();
-      delete process.env.LOCAL_TRANSCRIPTION_PROVIDER;
-      delete process.env.PARAKEET_MODEL;
-      await this.environmentManager.saveAllKeysToEnvFile();
-      return result;
-    });
-
-    ipcMain.handle("parakeet-server-status", async () => {
-      return this.parakeetManager.getServerStatus();
-    });
-
-    // Diarization model management
-    ipcMain.handle("download-diarization-models", async (event) => {
-      try {
-        const result = await this.diarizationManager.downloadModels((progressData) => {
-          if (!event.sender.isDestroyed()) {
-            event.sender.send("diarization-download-progress", progressData);
-          }
-        });
-        return result;
-      } catch (error) {
-        if (!event.sender.isDestroyed()) {
-          event.sender.send("diarization-download-progress", {
-            type: "error",
-            error: error.message,
-            code: error.code || "DOWNLOAD_FAILED",
-          });
-        }
-        return {
-          success: false,
-          error: error.message,
-          code: error.code || "DOWNLOAD_FAILED",
-        };
-      }
-    });
-
-    ipcMain.handle("get-diarization-model-status", async () => {
-      return {
-        available: this.diarizationManager?.isAvailable() ?? false,
-        modelsDownloaded:
-          (this.diarizationManager?.isModelDownloaded() ?? false) &&
-          (this.diarizationManager?.isVadModelDownloaded() ?? false),
-      };
-    });
-
-    ipcMain.handle("delete-diarization-models", async () => {
-      try {
-        await this.diarizationManager.deleteModels();
-        return { success: true };
-      } catch (error) {
-        debugLogger.error("Failed to delete diarization models", { error: error.message });
-        return { success: false, error: error.message };
-      }
-    });
-
-    ipcMain.handle("cancel-diarization-download", async () => {
-      return this.diarizationManager.cancelDownload();
-    });
-
     // Under `npm run dev` the Vite server dies with Electron, so a relaunched dev
     // instance would have no renderer: just quit there.
     ipcMain.handle("relaunch-app", async () => {
       if (process.env.NODE_ENV === "development") return app.quit();
-      // Once Squirrel.Mac holds a downloaded update it installs it on this quit regardless
-      // of any flag, so the updater owns that restart instead of racing app.relaunch().
-      if (this.updateManager.hasStagedUpdate()) {
-        const { success } = await this.updateManager
-          .installUpdate()
-          .catch(() => ({ success: false }));
-        if (success) return;
-      }
-      this.updateManager.deferInstallOnQuit();
-      const { launcherPath, args } = getRelaunchOptions({
-        argv: process.argv,
-        appImagePath: process.env.APPIMAGE,
-      });
-      if (launcherPath) {
-        const waiter = getRelaunchWaiter({ launcherPath, args, pid: process.pid });
-        require("child_process")
-          .spawn(waiter.file, waiter.args, {
-            detached: true,
-            stdio: "ignore",
-            cwd: path.dirname(launcherPath), // never inside the directory being removed
-          })
-          .unref();
-      } else {
-        app.relaunch({ args });
-      }
+      app.relaunch();
       app.quit();
     });
 
@@ -1434,79 +918,8 @@ class IPCHandlers {
       return this.environmentManager.saveCortiClientSecret(key);
     });
 
-    ipcMain.handle("get-custom-transcription-key", async () => {
-      return this.environmentManager.getCustomTranscriptionKey();
-    });
-
-    ipcMain.handle("save-custom-transcription-key", async (event, key) => {
-      return this.environmentManager.saveCustomTranscriptionKey(key);
-    });
-
-    ipcMain.handle("get-ui-language", async () => {
-      return this.environmentManager.getUiLanguage();
-    });
-
-    ipcMain.handle("save-ui-language", async (event, language) => {
-      return this.environmentManager.saveUiLanguage(language);
-    });
-
-    ipcMain.handle("set-ui-language", async (event, language) => {
-      const result = this.environmentManager.saveUiLanguage(language);
-      process.env.UI_LANGUAGE = result.language;
-      changeLanguage(result.language);
-      this.windowManager?.refreshLocalizedUi?.();
-      this.getTrayManager?.()?.updateTrayMenu?.();
-      return { success: true, language: result.language };
-    });
-
     ipcMain.handle("save-all-keys-to-env", async () => {
       return this.environmentManager.saveAllKeysToEnvFile();
-    });
-
-    ipcMain.handle("sync-startup-preferences", async (event, prefs) => {
-      const setVars = {};
-      const clearVars = [];
-
-      if (prefs.useLocalWhisper && prefs.model) {
-        // Local mode with model selected - set provider and model for pre-warming
-        setVars.LOCAL_TRANSCRIPTION_PROVIDER = prefs.localTranscriptionProvider;
-        if (prefs.language) setVars.DICTATION_LANGUAGE = prefs.language;
-        if (isSherpaLocalProvider(prefs.localTranscriptionProvider)) {
-          setVars.PARAKEET_MODEL = prefs.model;
-          clearVars.push("LOCAL_WHISPER_MODEL");
-          this.whisperManager.stopServer().catch((err) => {
-            debugLogger.error("Failed to stop whisper-server on provider switch", {
-              error: err.message,
-            });
-          });
-        } else {
-          setVars.LOCAL_WHISPER_MODEL = prefs.model;
-          clearVars.push("PARAKEET_MODEL");
-          this.parakeetManager.stopServer().catch((err) => {
-            debugLogger.error("Failed to stop parakeet-server on provider switch", {
-              error: err.message,
-            });
-          });
-        }
-      } else if (prefs.useLocalWhisper) {
-        // Local mode enabled but no model selected - clear pre-warming vars
-        clearVars.push("LOCAL_TRANSCRIPTION_PROVIDER", "PARAKEET_MODEL", "LOCAL_WHISPER_MODEL");
-      } else {
-        // Cloud mode - stop local servers to free RAM
-        clearVars.push("LOCAL_TRANSCRIPTION_PROVIDER", "PARAKEET_MODEL", "LOCAL_WHISPER_MODEL");
-        this.whisperManager.stopServer().catch((err) => {
-          debugLogger.error("Failed to stop whisper-server on cloud switch", {
-            error: err.message,
-          });
-        });
-        this.parakeetManager.stopServer().catch((err) => {
-          debugLogger.error("Failed to stop parakeet-server on cloud switch", {
-            error: err.message,
-          });
-        });
-      }
-
-      this._syncStartupEnv(setVars, clearVars);
     });
 
     ipcMain.handle("get-log-level", async () => {
@@ -1519,44 +932,15 @@ class IPCHandlers {
     });
 
     const SYSTEM_SETTINGS_URLS = {
-      darwin: {
-        microphone: "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone",
-        sound: "x-apple.systempreferences:com.apple.preference.sound?input",
-        systemAudio:
-          "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture",
-        screenRecording:
-          "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture",
-        calendars: "x-apple.systempreferences:com.apple.preference.security?Privacy_Calendars",
-        loginItems: "x-apple.systempreferences:com.apple.LoginItems-Settings.extension",
-      },
-      win32: {
-        microphone: "ms-settings:privacy-microphone",
-        sound: "ms-settings:sound",
-        loginItems: "ms-settings:startupapps",
-      },
+      microphone: "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone",
+      sound: "x-apple.systempreferences:com.apple.preference.sound?input",
+      systemAudio: "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture",
+      calendars: "x-apple.systempreferences:com.apple.preference.security?Privacy_Calendars",
+      loginItems: "x-apple.systempreferences:com.apple.LoginItems-Settings.extension",
     };
 
     const openSystemSettings = async (settingType) => {
-      const platform = process.platform;
-      const urls = SYSTEM_SETTINGS_URLS[platform];
-      const url = urls?.[settingType];
-
-      if (!url) {
-        // Platform doesn't support this settings URL
-        const messages = {
-          microphone: i18nMain.t("systemSettings.microphone"),
-          sound: i18nMain.t("systemSettings.sound"),
-          systemAudio: i18nMain.t("systemSettings.systemAudio"),
-          screenRecording: i18nMain.t("systemSettings.screenRecording"),
-          loginItems: i18nMain.t("systemSettings.loginItems"),
-        };
-        return {
-          success: false,
-          error:
-            messages[settingType] || `${settingType} settings are not available on this platform.`,
-        };
-      }
-
+      const url = SYSTEM_SETTINGS_URLS[settingType];
       try {
         await shell.openExternal(url);
         return { success: true };
@@ -1577,17 +961,11 @@ class IPCHandlers {
     ipcMain.handle("open-calendar-privacy-settings", () => openSystemSettings("calendars"));
 
     ipcMain.handle("request-microphone-access", async () => {
-      if (process.platform !== "darwin") {
-        return { granted: true, status: "granted" };
-      }
       const granted = await systemPreferences.askForMediaAccess("microphone");
       return { granted };
     });
 
     ipcMain.handle("check-microphone-access", () => {
-      if (process.platform !== "darwin") {
-        return { granted: true, status: "granted" };
-      }
       const status = systemPreferences.getMediaAccessStatus("microphone");
       return { granted: status === "granted", status };
     });
@@ -1596,77 +974,11 @@ class IPCHandlers {
       granted: false,
       status: "unsupported",
       mode: "unsupported",
-      supportsPersistentGrant: false,
-      supportsPersistentPortalGrant: false,
-      supportsNativeCapture: false,
-      supportsOnboardingGrant: false,
-      requiresRuntimeSharePrompt: false,
       strategy: "unsupported",
-      restoreTokenAvailable: false,
-      portalVersion: null,
       ...partial,
     });
 
-    const getLinuxSystemAudioAccess = async () => {
-      const capability = await this.linuxPortalAudioManager?.getCapability().catch((error) => ({
-        available: false,
-        supportsPersistentGrant: false,
-        supportsPersistentPortalGrant: false,
-        supportsSystemAudio: false,
-        supportsNativeCapture: false,
-        portalVersion: null,
-        error: error.message,
-      }));
-      const available = !!capability?.available;
-      const supportsSystemAudio = !!capability?.supportsSystemAudio;
-      const supportsNativeCapture = !!capability?.supportsNativeCapture;
-      const granted = available && supportsSystemAudio && supportsNativeCapture;
-      const helperError =
-        typeof capability?.error === "string" &&
-        !capability.error.includes("helper binary not found")
-          ? capability.error
-          : undefined;
-
-      return buildSystemAudioAccess({
-        granted,
-        status: granted ? "granted" : "unknown",
-        mode: granted ? "loopback" : "unsupported",
-        supportsNativeCapture,
-        strategy: granted ? "pipewire-loopback" : "unsupported",
-        portalVersion: capability?.portalVersion ?? null,
-        error: helperError,
-      });
-    };
-
-    // System audio is always capturable on Windows: via the native WASAPI
-    // process-loopback helper when available (hears every output device),
-    // otherwise via Chromium's default-device loopback in the renderer.
-    const getWindowsSystemAudioAccess = async ({ refreshCapability = false } = {}) => {
-      const capability = await this.windowsLoopbackAudioManager
-        ?.getCapability({ force: refreshCapability })
-        .catch(() => ({
-          available: false,
-        }));
-      const helperAvailable = !!capability?.available;
-
-      return buildSystemAudioAccess({
-        granted: true,
-        status: "granted",
-        mode: "loopback",
-        supportsNativeCapture: helperAvailable,
-        strategy: helperAvailable ? "wasapi-loopback" : "loopback",
-      });
-    };
-
     const getSystemAudioAccess = async () => {
-      if (process.platform === "win32") {
-        return getWindowsSystemAudioAccess();
-      }
-
-      if (process.platform === "linux") {
-        return getLinuxSystemAudioAccess();
-      }
-
       if (!this.audioTapManager?.isSupported()) {
         return buildSystemAudioAccess();
       }
@@ -1683,14 +995,6 @@ class IPCHandlers {
     ipcMain.handle("check-system-audio-access", () => getSystemAudioAccess());
 
     ipcMain.handle("request-system-audio-access", async () => {
-      if (process.platform === "win32") {
-        return getWindowsSystemAudioAccess();
-      }
-
-      if (process.platform === "linux") {
-        return getLinuxSystemAudioAccess();
-      }
-
       if (!this.audioTapManager?.isSupported()) {
         return buildSystemAudioAccess();
       }
@@ -1972,7 +1276,6 @@ class IPCHandlers {
       meetingMicDiarizationPath = null;
       meetingMicDiarizationStartedAt = null;
       meetingSystemAudioHeard = false;
-      meetingSystemAudioDegraded = false;
       meetingDiarizationSegments = [];
       const { pcmPath, startedAt, diarizedSource, cleanupPcmPaths } = resolveDiarizationInput({
         systemPcmPath,
@@ -2355,43 +1658,14 @@ class IPCHandlers {
       );
     };
 
-    const getMeetingSystemAudioCapabilityMode = () => {
-      if (this.audioTapManager?.isSupported()) return "native";
-      if (process.platform === "win32") return "loopback";
-      if (process.platform === "linux") return "loopback";
-      return "unsupported";
-    };
+    const getMeetingSystemAudioCapabilityMode = () =>
+      this.audioTapManager?.isSupported() ? "native" : "unsupported";
 
     const getMeetingSystemAudioMode = () => getMeetingSystemAudioCapabilityMode();
 
-    const getMeetingSystemAudioPlan = async ({ refreshWindowsCapability = false } = {}) => {
+    const getMeetingSystemAudioPlan = () => {
       const mode = getMeetingSystemAudioMode();
-      if (mode === "unsupported") {
-        return { mode, strategy: "unsupported" };
-      }
-
-      if (mode === "native") {
-        return { mode, strategy: "native" };
-      }
-
-      if (process.platform === "linux") {
-        const linuxAccess = await getLinuxSystemAudioAccess();
-        return {
-          mode: linuxAccess.mode,
-          strategy: linuxAccess.strategy || "unsupported",
-        };
-      }
-
-      if (process.platform === "win32") {
-        const windowsAccess = await getWindowsSystemAudioAccess({
-          refreshCapability: refreshWindowsCapability,
-        });
-        return { mode: windowsAccess.mode, strategy: windowsAccess.strategy };
-      }
-
-      // Unreachable today (loopback implies win32 or linux, both handled
-      // above), but callers destructure the result, so never return undefined.
-      return { mode, strategy: "unsupported" };
+      return { mode, strategy: mode };
     };
 
     const hasNativeMeetingSystemAudio = () => getMeetingSystemAudioMode() === "native";
@@ -2530,7 +1804,6 @@ class IPCHandlers {
     let meetingMicDiarizationPath = null;
     let meetingMicDiarizationStartedAt = null;
     let meetingSystemAudioHeard = false;
-    let meetingSystemAudioDegraded = false;
     let meetingDiarizationSegments = [];
     let meetingLiveSpeakerActive = false;
     let meetingLiveSpeakerState = null;
@@ -2798,10 +2071,7 @@ class IPCHandlers {
     const startLiveSpeakerIdentification = async (win, systemAudioMode) => {
       await stopLiveSpeakerIdentification();
 
-      if (
-        !supportsLiveSpeakerIdentification(systemAudioMode) ||
-        !liveSpeakerIdentifier.isAvailable()
-      ) {
+      if (systemAudioMode !== "native" || !liveSpeakerIdentifier.isAvailable()) {
         return false;
       }
 
@@ -2946,7 +2216,7 @@ class IPCHandlers {
             language: meetingLocalLanguage,
           });
         } else {
-          const vadOptions = this._resolveWhisperVadOptions("meeting");
+          const vadOptions = this._resolveMeetingWhisperVadOptions();
           result = await this.whisperManager.transcribeLocalWhisper(wav, {
             model: meetingLocalModel,
             language: meetingLocalLanguage,
@@ -3136,7 +2406,6 @@ class IPCHandlers {
       meetingDiarizationStartedAt = null;
       dropMeetingMicDiarizationCapture();
       meetingSystemAudioHeard = false;
-      meetingSystemAudioDegraded = false;
       meetingDiarizationSegments = [];
       meetingLocalWin = null;
       meetingLocalTranscript = "";
@@ -3253,12 +2522,6 @@ class IPCHandlers {
       stopMeetingSystemAudioWatchdog();
       if (this.audioTapManager) {
         await this.audioTapManager.stop().catch(() => {});
-      }
-      if (this.linuxPortalAudioManager) {
-        await this.linuxPortalAudioManager.stop().catch(() => {});
-      }
-      if (this.windowsLoopbackAudioManager) {
-        await this.windowsLoopbackAudioManager.stop().catch(() => {});
       }
       await stopMeetingAec();
       await stopLiveSpeakerIdentification().catch(() => {});
@@ -3378,7 +2641,7 @@ class IPCHandlers {
       };
 
       try {
-        const systemAudioPlan = await getMeetingSystemAudioPlan({ refreshWindowsCapability: true });
+        const systemAudioPlan = getMeetingSystemAudioPlan();
         let { mode: systemAudioMode, strategy: systemAudioStrategy } = systemAudioPlan;
         const requestedConnectionKey = getMeetingConnectionKey(options);
         meetingEchoLeakDetector.reset();
@@ -3514,9 +2777,8 @@ class IPCHandlers {
           // identification.startTime counts samples from the first chunk the
           // identifier sees, so the wall-clock anchor has to be the arrival of
           // that chunk. Stamping it when identification starts is only correct
-          // when capture is already running (the macOS tap); the Windows
-          // loopback helper can take seconds to hand over its first buffer, and
-          // a stale anchor shifts every label earlier by that gap.
+          // when capture is already running; a helper that takes seconds to hand
+          // over its first buffer would shift every label earlier by that gap.
           meetingLiveSpeakerStartedAt ??= receivedAt;
           void liveSpeakerIdentifier.feedAudio(outboundBuffer);
         }
@@ -3589,42 +2851,18 @@ class IPCHandlers {
       }
     };
 
-    // The Windows helper reports capture_silent when its own stream is silent
-    // while a render endpoint is playing: activation succeeded but no audio
-    // will ever arrive, so hand the live session to Chromium's renderer
-    // loopback. The silence watchdog stays armed in case that fails too.
-    const degradeMeetingSystemAudioToLoopback = async (event) => {
-      if (meetingSystemAudioDegraded || meetingSystemAudioHeard) return;
-      meetingSystemAudioDegraded = true;
-      debugLogger.warn(
-        "Windows system audio helper captured only silence, switching to renderer loopback",
-        {},
-        "meeting"
-      );
-      await this.windowsLoopbackAudioManager?.stop().catch(() => {});
-      const win = BrowserWindow.fromWebContents(event.sender);
-      if (win && !win.isDestroyed()) {
-        win.webContents.send("meeting-system-audio-degraded");
-      }
-    };
-
     const startManagedMeetingSystemAudio = (event, manager, warningLabel, onWarningCode) => {
       const win = BrowserWindow.fromWebContents(event.sender);
-      const timeline =
-        manager === this.audioTapManager ? require("./meetingAudioTimeline")() : null;
+      const timeline = require("./meetingAudioTimeline")();
       let captureStarted = false;
       const startCapture = () => {
-        if (captureStarted) timeline?.markRestart();
+        if (captureStarted) timeline.markRestart();
         captureStarted = true;
         return manager.start({
           onChunk: (chunk) => {
-            if (timeline) {
-              timeline.write(chunk, (buffer, synthetic, capturedAt) =>
-                sendMeetingAudio(buffer, "system", synthetic, capturedAt)
-              );
-            } else {
-              sendMeetingAudio(chunk, "system");
-            }
+            timeline.write(chunk, (buffer, synthetic, capturedAt) =>
+              sendMeetingAudio(buffer, "system", synthetic, capturedAt)
+            );
           },
           onError: (error) => {
             if (win && !win.isDestroyed()) {
@@ -3700,51 +2938,7 @@ class IPCHandlers {
         }
       }
 
-      if (systemAudioStrategy === "wasapi-loopback") {
-        try {
-          await startManagedMeetingSystemAudio(
-            event,
-            this.windowsLoopbackAudioManager,
-            "Windows system audio warning",
-            (code) => {
-              if (code === "capture_silent") {
-                void degradeMeetingSystemAudioToLoopback(event);
-              }
-            }
-          );
-          return { systemAudioMode, systemAudioStrategy };
-        } catch (error) {
-          debugLogger.warn(
-            `Windows system audio helper failed ${context}, falling back to renderer loopback`,
-            { error: error.message },
-            "meeting"
-          );
-          // The renderer captures via Chromium's display-media loopback when
-          // it sees the downgraded strategy in the start result.
-          return { systemAudioMode, systemAudioStrategy: "loopback" };
-        }
-      }
-
-      if (systemAudioStrategy !== "pipewire-loopback") {
-        return { systemAudioMode, systemAudioStrategy };
-      }
-
-      try {
-        await startManagedMeetingSystemAudio(
-          event,
-          this.linuxPortalAudioManager,
-          "Linux PipeWire system audio warning"
-        );
-        return { systemAudioMode, systemAudioStrategy };
-      } catch (error) {
-        debugLogger.warn(
-          `Linux PipeWire helper failed ${context}, falling back to mic-only`,
-          { error: error.message },
-          "meeting"
-        );
-        await fallBackToMicOnly("PipeWire");
-        return { systemAudioMode: "unsupported", systemAudioStrategy: "unsupported" };
-      }
+      return { systemAudioMode, systemAudioStrategy };
     };
 
     ipcMain.on("meeting-transcription-send", (_event, audioBuffer, source) => {
@@ -3764,12 +2958,6 @@ class IPCHandlers {
       try {
         if (this.audioTapManager) {
           await this.audioTapManager.stop();
-        }
-        if (this.linuxPortalAudioManager) {
-          await this.linuxPortalAudioManager.stop().catch(() => {});
-        }
-        if (this.windowsLoopbackAudioManager) {
-          await this.windowsLoopbackAudioManager.stop().catch(() => {});
         }
 
         flushPendingMeetingMicChunks(true);
@@ -3988,34 +3176,7 @@ class IPCHandlers {
       }
     });
 
-    ipcMain.handle("check-for-updates", async () => {
-      return { updateAvailable: false, message: "Updates disabled in this fork" }; // fork
-    });
-
-    ipcMain.handle("download-update", async () => {
-      return this.updateManager.downloadUpdate();
-    });
-
-    ipcMain.handle("install-update", async () => {
-      return this.updateManager.installUpdate();
-    });
-
-    ipcMain.handle("get-app-version", async () => {
-      return this.updateManager.getAppVersion();
-    });
-
-    ipcMain.handle("get-update-status", async () => {
-      return this.updateManager.getUpdateStatus();
-    });
-
-    ipcMain.handle("get-update-info", async () => {
-      return this.updateManager.getUpdateInfo();
-    });
-
-    ipcMain.handle("set-auto-updates-enabled", async (_event, enabled) => {
-      this.updateManager.setAutoUpdatesEnabled(enabled === true);
-      return { success: true };
-    });
+    ipcMain.handle("get-app-version", () => ({ version: app.getVersion() }));
 
     // Google Calendar
     ipcMain.handle("gcal-start-oauth", async () => {
@@ -4041,43 +3202,9 @@ class IPCHandlers {
       }
     });
 
-    ipcMain.handle("gcal-get-connection-status", async () => {
-      try {
-        return this.googleCalendarManager.getConnectionStatus();
-      } catch (error) {
-        return { connected: false, email: null };
-      }
-    });
-
-    ipcMain.handle("gcal-get-calendars", async () => {
-      try {
-        return { success: true, calendars: this.googleCalendarManager.getCalendars() };
-      } catch (error) {
-        return { success: false, calendars: [] };
-      }
-    });
-
-    ipcMain.handle("gcal-set-calendar-selection", async (_event, calendarId, isSelected) => {
-      try {
-        await this.googleCalendarManager.setCalendarSelection(calendarId, isSelected);
-        return { success: true };
-      } catch (error) {
-        return { success: false, error: error.message };
-      }
-    });
-
     ipcMain.handle("gcal-set-primary-only", async (_event, value) => {
       try {
         await this.googleCalendarManager.setPrimaryOnly(value);
-        return { success: true };
-      } catch (error) {
-        return { success: false, error: error.message };
-      }
-    });
-
-    ipcMain.handle("gcal-sync-events", async () => {
-      try {
-        await this.googleCalendarManager.syncEvents();
         return { success: true };
       } catch (error) {
         return { success: false, error: error.message };
@@ -4125,19 +3252,6 @@ class IPCHandlers {
           "calendar"
         );
         return { success: false, error: error.message };
-      }
-    });
-
-    ipcMain.handle("mcal-get-connection-status", async () => {
-      try {
-        return this.microsoftCalendarManager.getConnectionStatus();
-      } catch (error) {
-        debugLogger.error(
-          "Microsoft Calendar connection status failed",
-          { error: error.message },
-          "calendar"
-        );
-        return { connected: false, accounts: [] };
       }
     });
 
@@ -4247,14 +3361,6 @@ class IPCHandlers {
       }
     });
 
-    ipcMain.handle("whisper-vad-get-config", async () => {
-      try {
-        return { success: true, config: this._getWhisperVadSettings() };
-      } catch (error) {
-        return { success: false, error: error.message };
-      }
-    });
-
     ipcMain.handle("whisper-vad-set-config", async (_event, payload) => {
       try {
         const config = this._setWhisperVadSettings(payload || {});
@@ -4308,8 +3414,6 @@ class IPCHandlers {
         return { success: false, error: error.message };
       }
     });
-
-    ipcMain.handle("start-manual-meeting", () => this.windowManager.startManualMeeting());
 
     ipcMain.handle("get-meeting-notification-data", async () => {
       return this.windowManager?._pendingNotificationData ?? null;
@@ -4561,11 +3665,6 @@ class IPCHandlers {
         return { success: true, profileId: resolvedProfileId };
       }
     );
-
-    ipcMain.handle("remove-speaker-mapping", async (_event, noteId, speakerId) => {
-      this.databaseManager.removeSpeakerMapping(noteId, speakerId);
-      return { success: true };
-    });
 
     ipcMain.handle("get-speaker-profiles", async () => {
       return this.databaseManager.getSpeakerProfiles();

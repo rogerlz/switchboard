@@ -184,9 +184,7 @@ async function parkPartialRequest(redirectUri, server) {
 
   return {
     complete: (path) => {
-      socket.end(
-        `${path} HTTP/1.1\r\nHost: ${hostname}:${port}\r\nConnection: close\r\n\r\n`
-      );
+      socket.end(`${path} HTTP/1.1\r\nHost: ${hostname}:${port}\r\nConnection: close\r\n\r\n`);
       return status;
     },
     destroy: () => socket.destroy(),
@@ -244,13 +242,8 @@ test("a provider error query still fails the flow immediately", async () => {
 });
 
 test("a late state mismatch cannot reject a valid callback already in progress", async () => {
-  const {
-    flow,
-    getRedirectUri,
-    getState,
-    callbackStarted,
-    releaseHandleCallback,
-  } = startBlockedFlow();
+  const { flow, getRedirectUri, getState, callbackStarted, releaseHandleCallback } =
+    startBlockedFlow();
   const redirectUri = await waitForListen(getRedirectUri);
   const flowOutcome = flow.then(
     () => "resolved",
@@ -284,13 +277,8 @@ test("a late state mismatch cannot reject a valid callback already in progress",
 });
 
 test("a late malformed request cannot reject a valid callback already in progress", async () => {
-  const {
-    flow,
-    getRedirectUri,
-    getState,
-    callbackStarted,
-    releaseHandleCallback,
-  } = startBlockedFlow();
+  const { flow, getRedirectUri, getState, callbackStarted, releaseHandleCallback } =
+    startBlockedFlow();
   const redirectUri = await waitForListen(getRedirectUri);
   const flowOutcome = flow.then(
     () => "resolved",

@@ -1,7 +1,6 @@
 import { useEffect } from "react";
-import { getCachedPlatform } from "../utils/platform";
 
-// Matches OnboardingShell's 48px drag strip — the frameless window's titlebar.
+// The frameless window's titlebar strip.
 const DRAG_STRIP_HEIGHT_PX = 48;
 // A press has to travel before it becomes a drag. Without this, a plain click
 // on the titlebar starts a tracked drag whose first tick runs the DragManager's
@@ -23,14 +22,10 @@ const INTERACTIVE_SELECTOR = [
 ].join(", ");
 
 /**
- * Manual titlebar drag for the control panel window, macOS only. That window
- * is transparent there (for the compact onboarding frame's rounded corners),
- * and Electron ignores `-webkit-app-region: drag` entirely on a transparent
- * window — the hiddenInset titlebar's native drag dies with it, leaving
- * onboarding and the panel with no way to move the window. Windows/Linux keep
- * an opaque window where app-region works, so the fallback stays off there
- * rather than second-guessing the real drag regions (its 48px band would
- * overshoot ControlPanel's own 40px strips).
+ * Manual titlebar drag for the control panel window. The window is
+ * transparent, and Electron ignores `-webkit-app-region: drag` entirely on a
+ * transparent window — the hiddenInset titlebar's native drag dies with it,
+ * leaving the panel with no way to move the window.
  *
  * A press in the top strip that isn't aimed at an interactive control, once it
  * travels past the threshold, moves the native window through the shared
@@ -38,7 +33,7 @@ const INTERACTIVE_SELECTOR = [
  */
 export function useControlPanelWindowDrag(enabled) {
   useEffect(() => {
-    if (!enabled || getCachedPlatform() !== "darwin") return undefined;
+    if (!enabled) return undefined;
     const api = window.electronAPI;
     if (!api?.startControlPanelDrag) return undefined;
 

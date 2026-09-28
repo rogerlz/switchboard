@@ -9,9 +9,7 @@ const { useDirection } = require("@radix-ui/react-direction");
 const { installBrowserGlobals, installHookDom } = require("../lib/rendererTestHarness");
 
 test("the app provider supplies the active i18n direction through real Radix context", async () => {
-  const { I18nDirectionProvider } = await import(
-    "../../src/components/I18nDirectionProvider.tsx"
-  );
+  const { I18nDirectionProvider } = await import("../../src/components/I18nDirectionProvider.tsx");
   const i18n = createInstance();
   await i18n.init({
     lng: "ar",
@@ -27,11 +25,7 @@ test("the app provider supplies the active i18n direction through real Radix con
       React.createElement(
         I18nextProvider,
         { i18n },
-        React.createElement(
-          I18nDirectionProvider,
-          null,
-          React.createElement(DirectionProbe)
-        )
+        React.createElement(I18nDirectionProvider, null, React.createElement(DirectionProbe))
       )
     );
 
@@ -47,9 +41,7 @@ test("Radix direction reacts to language changes without remounting the app", as
   });
   installBrowserGlobals(t);
   const container = installHookDom(t);
-  const { I18nDirectionProvider } = await import(
-    "../../src/components/I18nDirectionProvider.tsx"
-  );
+  const { I18nDirectionProvider } = await import("../../src/components/I18nDirectionProvider.tsx");
   const i18n = createInstance();
   await i18n.init({
     lng: "ar",
@@ -69,11 +61,7 @@ test("Radix direction reacts to language changes without remounting the app", as
       React.createElement(
         I18nextProvider,
         { i18n },
-        React.createElement(
-          I18nDirectionProvider,
-          null,
-          React.createElement(DirectionProbe)
-        )
+        React.createElement(I18nDirectionProvider, null, React.createElement(DirectionProbe))
       )
     );
   });

@@ -253,14 +253,7 @@
     {
       "id": "openai",
       "name": "OpenAI",
-      "baseUrl": "https://api.openai.com/v1",
       "models": [
-        {
-          "id": "gpt-transcribe",
-          "name": "GPT Transcribe",
-          "description": "Newest, most accurate transcription",
-          "descriptionKey": "models.descriptions.transcription.openai_gpt_transcribe"
-        },
         {
           "id": "gpt-4o-mini-transcribe",
           "name": "GPT-4o Mini Transcribe",
@@ -274,85 +267,12 @@
           "description": "Most accurate transcription",
           "descriptionKey": "models.descriptions.transcription.openai_gpt_4o_transcribe",
           "streaming": true
-        },
-        {
-          "id": "whisper-1",
-          "name": "Whisper",
-          "description": "Original Whisper model",
-          "descriptionKey": "models.descriptions.transcription.openai_whisper_1"
-        }
-      ]
-    },
-    {
-      "id": "groq",
-      "name": "Groq",
-      "baseUrl": "https://api.groq.com/openai/v1",
-      "models": [
-        {
-          "id": "whisper-large-v3",
-          "name": "Whisper Large v3",
-          "description": "High accuracy speech recognition",
-          "descriptionKey": "models.descriptions.transcription.groq_whisper_large_v3"
-        },
-        {
-          "id": "whisper-large-v3-turbo",
-          "name": "Whisper Large v3 Turbo",
-          "description": "216x real-time speed",
-          "descriptionKey": "models.descriptions.transcription.groq_whisper_large_v3_turbo"
-        }
-      ]
-    },
-    {
-      "id": "xai",
-      "name": "xAI",
-      "baseUrl": "https://api.x.ai/v1",
-      "models": [
-        {
-          "id": "grok-stt",
-          "name": "Grok STT",
-          "description": "High-accuracy speech recognition by xAI",
-          "descriptionKey": "models.descriptions.transcription.xai_grok_stt"
-        }
-      ]
-    },
-    {
-      "id": "mistral",
-      "name": "Mistral",
-      "baseUrl": "https://api.mistral.ai/v1",
-      "models": [
-        {
-          "id": "voxtral-mini-latest",
-          "name": "Voxtral Mini",
-          "description": "Fast multilingual transcription",
-          "descriptionKey": "models.descriptions.transcription.mistral_voxtral_mini_latest"
-        }
-      ]
-    },
-    {
-      "id": "gemini",
-      "name": "Gemini",
-      "baseUrl": "https://generativelanguage.googleapis.com/v1beta",
-      "batchModel": "gemini-3.5-transcribe",
-      "models": [
-        {
-          "id": "gemini-3.5-transcribe",
-          "name": "Gemini 3.5 Transcribe",
-          "description": "Google's Gemini speech-to-text",
-          "descriptionKey": "models.descriptions.transcription.gemini_3_5_transcribe"
-        },
-        {
-          "id": "gemini-3.5-transcribe-live",
-          "name": "Gemini 3.5 Transcribe Live",
-          "description": "Realtime streaming speech-to-text",
-          "descriptionKey": "models.descriptions.transcription.gemini_3_5_transcribe_live",
-          "streaming": true
         }
       ]
     },
     {
       "id": "corti",
       "name": "Corti",
-      "baseUrl": "https://api.us.corti.app/v2",
       "models": [
         {
           "id": "corti-transcribe",
@@ -366,8 +286,6 @@
     {
       "id": "tinfoil",
       "name": "Tinfoil",
-      "baseUrl": "https://inference.tinfoil.sh/v1",
-      "batchModel": "voxtral-small-24b",
       "models": [
         {
           "id": "voxtral-mini-4b-realtime",
@@ -381,7 +299,6 @@
     {
       "id": "deepgram",
       "name": "Deepgram",
-      "baseUrl": "https://api.deepgram.com/v1",
       "models": [
         {
           "id": "nova-3",
@@ -395,7 +312,6 @@
     {
       "id": "assemblyai",
       "name": "AssemblyAI",
-      "baseUrl": "https://api.assemblyai.com/v2",
       "models": [
         {
           "id": "universal-3-5-pro",

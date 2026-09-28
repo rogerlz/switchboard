@@ -176,7 +176,6 @@ export default function IntegrationsView() {
   const { request: requestSystemAudioAccess } = systemAudio;
   const hasAccounts = gcalAccounts.length > 0;
   const needsSystemAudioGrant = !systemAudio.granted && canManageSystemAudioInApp(systemAudio);
-  const isMac = window.electronAPI?.getPlatform?.() === "darwin";
 
   const startOAuth = useCallback(async () => {
     setIsConnecting(true);
@@ -325,7 +324,6 @@ export default function IntegrationsView() {
   }, [setMcalAccounts]);
 
   useEffect(() => {
-    if (!isMac) return;
     window.electronAPI?.acalGetConnectionStatus?.().then((status) => {
       if (status) {
         setAppleCalendarConnected(status.connected);
@@ -337,7 +335,7 @@ export default function IntegrationsView() {
       setAppleSourceNames(data.sourceNames ?? []);
     });
     return () => unsub?.();
-  }, [isMac, setAppleCalendarConnected]);
+  }, [setAppleCalendarConnected]);
 
   return (
     <div className={cn(PAGE_CONTENT_WIDTH_CLASS, "px-6 py-6 space-y-5")}>
@@ -382,17 +380,15 @@ export default function IntegrationsView() {
             onAddAnother={handleMicrosoftConnect}
           />
 
-          {isMac && (
-            <ProviderRow
-              icon={appleCalendarIcon}
-              i18nKey="integrations.appleCalendar"
-              connected={appleCalendarConnected}
-              isConnecting={isAppleConnecting}
-              onConnect={handleAppleConnect}
-            />
-          )}
+          <ProviderRow
+            icon={appleCalendarIcon}
+            i18nKey="integrations.appleCalendar"
+            connected={appleCalendarConnected}
+            isConnecting={isAppleConnecting}
+            onConnect={handleAppleConnect}
+          />
 
-          {isMac && appleCalendarConnected && (
+          {appleCalendarConnected && (
             <SettingsPanelRow>
               <div className="group flex items-center gap-3 ps-12">
                 <CalendarDays className="h-3.5 w-3.5 text-muted-foreground/70 shrink-0" />

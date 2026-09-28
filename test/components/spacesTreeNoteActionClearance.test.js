@@ -74,7 +74,6 @@ async function renderTree(t, direction) {
       "/stores/settingsStore": `
         export const useSettingsStore = (selector) => selector({ noteFilesEnabled: true });
       `,
-      "/utils/platform": 'export const getCachedPlatform = () => "darwin";',
       "/ui/dropdown-menu": `
         export const DropdownMenu = ({ children }) => children;
         export const DropdownMenuTrigger = ({ children }) => children;

@@ -59,7 +59,6 @@ function installDotenvStub(t) {
   });
 }
 
-
 test("device cleanup clears persisted settings and encrypted secret files", async (t) => {
   const userDataDirectory = fs.mkdtempSync(
     path.join(os.tmpdir(), "openwhispr-device-settings-cleanup-")

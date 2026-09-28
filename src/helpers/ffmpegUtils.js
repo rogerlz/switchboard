@@ -1,6 +1,5 @@
 const { spawn } = require("child_process");
 const fs = require("fs");
-const os = require("os");
 const path = require("path");
 const debugLogger = require("./debugLogger");
 const { createAbortError } = require("./abortError");
@@ -11,12 +10,7 @@ function getFFmpegPath() {
   if (cachedFFmpegPath) return cachedFFmpegPath;
 
   try {
-    let ffmpegPath = require("ffmpeg-static");
-    ffmpegPath = path.normalize(ffmpegPath);
-
-    if (process.platform === "win32" && !ffmpegPath.endsWith(".exe")) {
-      ffmpegPath += ".exe";
-    }
+    const ffmpegPath = path.normalize(require("ffmpeg-static"));
 
     // Try unpacked ASAR path first (production builds unpack ffmpeg-static)
     const unpackedPath = ffmpegPath.includes("app.asar")
@@ -24,15 +18,13 @@ function getFFmpegPath() {
       : null;
 
     if (unpackedPath && fs.existsSync(unpackedPath)) {
-      if (process.platform !== "win32") {
+      try {
+        fs.accessSync(unpackedPath, fs.constants.X_OK);
+      } catch {
         try {
-          fs.accessSync(unpackedPath, fs.constants.X_OK);
-        } catch {
-          try {
-            fs.chmodSync(unpackedPath, 0o755);
-          } catch (chmodErr) {
-            debugLogger.warn("Failed to chmod FFmpeg", { error: chmodErr.message });
-          }
+          fs.chmodSync(unpackedPath, 0o755);
+        } catch (chmodErr) {
+          debugLogger.warn("Failed to chmod FFmpeg", { error: chmodErr.message });
         }
       }
       cachedFFmpegPath = unpackedPath;
@@ -42,13 +34,11 @@ function getFFmpegPath() {
     // Try original path (development or if not in ASAR). An in-asar path passes
     // existsSync but can never be spawned, so fall through to system FFmpeg instead.
     if (!unpackedPath && fs.existsSync(ffmpegPath)) {
-      if (process.platform !== "win32") {
-        try {
-          fs.accessSync(ffmpegPath, fs.constants.X_OK);
-        } catch {
-          debugLogger.debug("FFmpeg exists but not executable", { ffmpegPath });
-          throw new Error("Not executable");
-        }
+      try {
+        fs.accessSync(ffmpegPath, fs.constants.X_OK);
+      } catch {
+        debugLogger.debug("FFmpeg exists but not executable", { ffmpegPath });
+        throw new Error("Not executable");
       }
       cachedFFmpegPath = ffmpegPath;
       return ffmpegPath;
@@ -57,35 +47,15 @@ function getFFmpegPath() {
     debugLogger.debug("Bundled FFmpeg not available", { error: err.message });
   }
 
-  const systemCandidates =
-    process.platform === "darwin"
-      ? ["/opt/homebrew/bin/ffmpeg", "/usr/local/bin/ffmpeg"]
-      : process.platform === "win32"
-        ? ["C:\\ffmpeg\\bin\\ffmpeg.exe"]
-        : ["/usr/bin/ffmpeg", "/usr/local/bin/ffmpeg"];
-
-  for (const candidate of systemCandidates) {
-    if (fs.existsSync(candidate)) {
-      cachedFFmpegPath = candidate;
-      return candidate;
-    }
-  }
-
-  const pathEnv = process.env.PATH || "";
-  const pathSep = process.platform === "win32" ? ";" : ":";
-  const pathDirs = pathEnv.split(pathSep).map((entry) => entry.replace(/^"|"$/g, ""));
-  const pathBinary = process.platform === "win32" ? "ffmpeg.exe" : "ffmpeg";
-
-  for (const dir of pathDirs) {
+  const pathDirs = (process.env.PATH || "").split(":").map((entry) => entry.replace(/^"|"$/g, ""));
+  for (const dir of ["/opt/homebrew/bin", "/usr/local/bin", ...pathDirs]) {
     if (!dir) continue;
-    const candidate = path.join(dir, pathBinary);
+    const candidate = path.join(dir, "ffmpeg");
     if (!fs.existsSync(candidate)) continue;
-    if (process.platform !== "win32") {
-      try {
-        fs.accessSync(candidate, fs.constants.X_OK);
-      } catch {
-        continue;
-      }
+    try {
+      fs.accessSync(candidate, fs.constants.X_OK);
+    } catch {
+      continue;
     }
     cachedFFmpegPath = candidate;
     return candidate;
@@ -131,7 +101,6 @@ function runFFmpegConversion(args, outputPath, { signal } = {}) {
 
     const proc = spawn(ffmpegPath, [...args, "-y", outputPath], {
       stdio: ["ignore", "pipe", "pipe"],
-      windowsHide: true,
     });
 
     let stderr = "";
@@ -202,63 +171,7 @@ function convertToWav(inputPath, outputPath, options = {}) {
   );
 }
 
-// Mono 16 kHz MP3 with any video stream dropped: the same shape as the cloud
-// chunks, accepted by every provider, and small enough for their upload caps.
-function convertToMp3(inputPath, outputPath, options = {}) {
-  const { audioBitrate = "64k", signal } = options;
-
-  debugLogger.debug("Re-encoding audio to MP3 with FFmpeg", {
-    input: inputPath,
-    output: outputPath,
-    audioBitrate,
-  });
-
-  return runFFmpegConversion(
-    [
-      "-i",
-      inputPath,
-      "-vn",
-      "-c:a",
-      "libmp3lame",
-      "-b:a",
-      audioBitrate,
-      "-ar",
-      "16000",
-      "-ac",
-      "1",
-    ],
-    outputPath,
-    { signal }
-  );
-}
-
 let reencodeSequence = 0;
-
-// Buffer in, buffer out. convertToWav works on paths, but retry paths hold
-// recordings in memory and should not repeat the temp-file handling.
-async function convertBufferToWav(audioBuffer, options = {}) {
-  const { getSafeTempDir } = require("./safeTempDir");
-  const tempDir = getSafeTempDir();
-  // process.pid is constant within a process and Date.now() only has
-  // millisecond resolution, so concurrent retries need a sequence suffix.
-  const stamp = `${Date.now()}-${process.pid}-${++reencodeSequence}`;
-  const inputPath = path.join(tempDir, `ow-reencode-${stamp}.input`);
-  const outputPath = path.join(tempDir, `ow-reencode-${stamp}.wav`);
-
-  try {
-    fs.writeFileSync(inputPath, audioBuffer);
-    await convertToWav(inputPath, outputPath, { sampleRate: 16000, channels: 1, ...options });
-    return fs.readFileSync(outputPath);
-  } finally {
-    for (const filePath of [inputPath, outputPath]) {
-      try {
-        if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
-      } catch {
-        // A stale temp file should not hide the transcription result or error.
-      }
-    }
-  }
-}
 
 function parseWavFormat(wavBuffer) {
   if (!isWavFormat(wavBuffer)) return null;
@@ -352,205 +265,12 @@ function computeFloat32RMS(float32Buffer) {
   return Math.sqrt(sumSquares / numSamples);
 }
 
-function parseFfmpegDuration(stderr) {
-  const match = stderr?.match(/Duration:\s*(\d+):([0-5]\d):([0-5]\d(?:\.\d+)?)/);
-  if (!match) return null;
-  return Number(match[1]) * 3600 + Number(match[2]) * 60 + Number(match[3]);
-}
-
-function splitAudioFile(inputPath, outputDir, options = {}) {
-  const { segmentDuration = 600, audioBitrate = "128k", signal } = options;
-
-  return new Promise((resolve, reject) => {
-    if (signal?.aborted) {
-      reject(createAbortError());
-      return;
-    }
-
-    const ffmpegPath = getFFmpegPath();
-    if (!ffmpegPath) {
-      reject(new Error("FFmpeg not found - required for audio splitting"));
-      return;
-    }
-
-    const outputPattern = path.join(outputDir, "chunk-%03d.mp3");
-
-    const args = [
-      "-i",
-      inputPath,
-      "-f",
-      "segment",
-      "-segment_time",
-      String(segmentDuration),
-      "-c:a",
-      "libmp3lame",
-      "-b:a",
-      audioBitrate,
-      "-ar",
-      "16000",
-      "-ac",
-      "1",
-      "-y",
-      outputPattern,
-    ];
-
-    debugLogger.debug("Splitting audio with FFmpeg", {
-      input: inputPath,
-      outputDir,
-      segmentDuration,
-      audioBitrate,
-    });
-
-    const proc = spawn(ffmpegPath, args, {
-      stdio: ["ignore", "pipe", "pipe"],
-      windowsHide: true,
-    });
-
-    let stderr = "";
-
-    const onAbort = () => {
-      try {
-        proc.kill("SIGKILL");
-      } catch {
-        // an uncaught throw here would escape the abort dispatch
-      }
-      reject(createAbortError());
-    };
-    signal?.addEventListener("abort", onAbort, { once: true });
-
-    proc.stderr.on("data", (data) => {
-      stderr += data.toString();
-    });
-
-    proc.on("error", (error) => {
-      signal?.removeEventListener("abort", onAbort);
-      if (signal?.aborted) return;
-      reject(new Error(`FFmpeg split error: ${error.message}`));
-    });
-
-    // The kill lands here as a non-zero exit; returning early keeps a cancel
-    // from being logged and reported as an ffmpeg failure.
-    proc.on("close", (code) => {
-      signal?.removeEventListener("abort", onAbort);
-      if (signal?.aborted) return;
-      if (code !== 0) {
-        const stderrPreview = stderr.slice(-500).trim();
-        debugLogger.debug("FFmpeg split failed", { code, stderr: stderrPreview });
-        reject(
-          new Error(
-            `FFmpeg split exited with code ${code}${stderrPreview ? `: ${stderrPreview}` : ""}`
-          )
-        );
-        return;
-      }
-
-      const chunks = fs
-        .readdirSync(outputDir)
-        .filter((f) => f.startsWith("chunk-") && f.endsWith(".mp3"))
-        .sort()
-        .map((f) => path.join(outputDir, f));
-
-      if (chunks.length === 0) {
-        reject(new Error("FFmpeg split produced no output files"));
-        return;
-      }
-
-      const durationSeconds = parseFfmpegDuration(stderr);
-      debugLogger.debug("FFmpeg split complete", { chunkCount: chunks.length, durationSeconds });
-      resolve({ chunkPaths: chunks, durationSeconds });
-    });
-  });
-}
-
-async function mergeAudioSegments(segments) {
-  if (!Array.isArray(segments) || segments.length === 0) {
-    throw new Error("At least one audio segment is required");
-  }
-  if (segments.length === 1) return Buffer.from(segments[0].buffer);
-
-  const ffmpegPath = getFFmpegPath();
-  if (!ffmpegPath) throw new Error("FFmpeg not found - required for audio segment recovery");
-
-  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "openwhispr-audio-merge-"));
-  const outputPath = path.join(tempDir, "merged.webm");
-  try {
-    const inputPaths = segments.map((segment, index) => {
-      const mimeType = segment.mimeType || "audio/webm";
-      const extension = mimeType.includes("ogg")
-        ? "ogg"
-        : mimeType.includes("mp4")
-          ? "m4a"
-          : "webm";
-      const inputPath = path.join(tempDir, `segment-${index}.${extension}`);
-      fs.writeFileSync(inputPath, Buffer.from(segment.buffer));
-      return inputPath;
-    });
-
-    const filters = inputPaths.map(
-      (_, index) =>
-        `[${index}:a]aresample=16000,aformat=sample_fmts=fltp:channel_layouts=mono[s${index}]`
-    );
-    filters.push(
-      `${inputPaths.map((_, index) => `[s${index}]`).join("")}concat=n=${inputPaths.length}:v=0:a=1[out]`
-    );
-
-    await new Promise((resolve, reject) => {
-      const args = inputPaths.flatMap((inputPath) => ["-i", inputPath]);
-      args.push(
-        "-filter_complex",
-        filters.join(";"),
-        "-map",
-        "[out]",
-        "-c:a",
-        "libopus",
-        "-b:a",
-        "64k",
-        "-y",
-        outputPath
-      );
-      const proc = spawn(ffmpegPath, args, {
-        stdio: ["ignore", "pipe", "pipe"],
-        windowsHide: true,
-      });
-      let stderr = "";
-      proc.stderr.on("data", (data) => {
-        stderr += data.toString();
-      });
-      proc.on("error", (error) => reject(new Error(`FFmpeg process error: ${error.message}`)));
-      proc.on("close", (code) => {
-        if (code !== 0) {
-          const preview = stderr.slice(-500).trim();
-          reject(
-            new Error(`FFmpeg audio merge exited with code ${code}${preview ? `: ${preview}` : ""}`)
-          );
-          return;
-        }
-        resolve();
-      });
-    });
-
-    return fs.readFileSync(outputPath);
-  } finally {
-    fs.rmSync(tempDir, { recursive: true, force: true });
-  }
-}
-
-function clearCache() {
-  cachedFFmpegPath = null;
-}
-
 module.exports = {
   getFFmpegPath,
   isWavFormat,
   parseWavFormat,
   isPcm16Mono16kWav,
   convertToWav,
-  convertBufferToWav,
-  convertToMp3,
-  splitAudioFile,
-  parseFfmpegDuration,
   wavToFloat32Samples,
   computeFloat32RMS,
-  mergeAudioSegments,
-  clearCache,
 };

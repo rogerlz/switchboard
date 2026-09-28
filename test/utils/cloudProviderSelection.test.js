@@ -15,8 +15,6 @@ test("an unavailable provider falls back to the first offered one", async () => 
       selectedProvider: "groq",
       selectedModel: "whisper-large-v3",
       allowedProviders,
-      customAllowed: false,
-      hasCustomUrl: false,
     }),
     { provider: "openai", model: "whisper-1" }
   );
@@ -25,8 +23,6 @@ test("an unavailable provider falls back to the first offered one", async () => 
       selectedProvider: "mistral",
       selectedModel: "voxtral-mini",
       allowedProviders,
-      customAllowed: false,
-      hasCustomUrl: false,
     }),
     null
   );
@@ -36,21 +32,17 @@ test("an unavailable provider falls back to the first offered one", async () => 
       selectedProvider: "openai",
       selectedModel: "whisper-large-v3",
       allowedProviders,
-      customAllowed: false,
-      hasCustomUrl: false,
     }),
     { provider: "openai", model: "whisper-1" }
   );
 
-  assert.deepEqual(
+  assert.equal(
     reconcileCloudProviderSelection({
       selectedProvider: "groq",
       selectedModel: "whisper-large-v3",
       allowedProviders: [],
-      customAllowed: true,
-      hasCustomUrl: false,
     }),
-    { provider: "custom", model: "whisper-large-v3" }
+    null
   );
 });
 
@@ -70,23 +62,8 @@ test("a browsed provider resolves for display without leaking the committed mode
       selectedProvider: "groq",
       selectedModel: "whisper-1",
       allowedProviders,
-      customAllowed: false,
-      hasCustomUrl: false,
     }),
     { provider: "groq", model: "whisper-large-v3" }
-  );
-
-  // Browsing the Custom tab is always a valid input (null = no correction);
-  // the caller must echo the browsed input, not the committed pair.
-  assert.equal(
-    reconcileCloudProviderSelection({
-      selectedProvider: "custom",
-      selectedModel: "whisper-1",
-      allowedProviders,
-      customAllowed: true,
-      hasCustomUrl: false,
-    }),
-    null
   );
 
   // A browsed provider this scope does not offer falls back.
@@ -95,8 +72,6 @@ test("a browsed provider resolves for display without leaking the committed mode
       selectedProvider: "xai",
       selectedModel: "whisper-1",
       allowedProviders,
-      customAllowed: false,
-      hasCustomUrl: false,
     }),
     { provider: "openai", model: "whisper-1" }
   );

@@ -10,7 +10,6 @@ const modelRegistryData = require("../../src/models/modelRegistryData.json");
 // MeetingRecordingMount looks up. A healed legacy profile can reach any of them,
 // so an untranslated one would show a bare sentinel in the failure toast.
 const SENTINEL_KEYS = {
-  unsupportedSelfHosted: "unsupportedSelfHosted",
   unsupportedProvider: "unsupportedProvider",
   noProviderSelected: "noProviderSelected",
 };
@@ -82,19 +81,6 @@ test("BYOK OpenAI routes to its own realtime client", async () => {
       mode: "byok",
       language: "en",
     }
-  );
-});
-
-test("self-hosted mode never follows a stale Tinfoil provider", async () => {
-  const { resolveMeetingTranscriptionOptions } = await load();
-
-  assert.throws(
-    () =>
-      resolveMeetingTranscriptionOptions({
-        ...baseOptions,
-        transcriptionMode: "self-hosted",
-      }),
-    { message: "unsupportedSelfHosted" }
   );
 });
 

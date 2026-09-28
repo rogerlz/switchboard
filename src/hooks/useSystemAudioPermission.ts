@@ -1,10 +1,8 @@
 import { useState, useCallback, useEffect, useRef } from "react";
-import { getCachedPlatform } from "../utils/platform";
 import type { SystemAudioAccessResult } from "../types/electron";
 import { DEFAULT_SYSTEM_AUDIO_ACCESS } from "../utils/systemAudioAccess";
 
 export function useSystemAudioPermission() {
-  const isMacOS = getCachedPlatform() === "darwin";
   const [access, setAccess] = useState<SystemAudioAccessResult | null>(null);
   const [isChecking, setIsChecking] = useState(false);
   const checkingRef = useRef(false);
@@ -24,14 +22,10 @@ export function useSystemAudioPermission() {
 
   useEffect(() => {
     check();
-  }, [check]);
-
-  useEffect(() => {
-    if (!isMacOS) return;
     const handleFocus = () => check();
     window.addEventListener("focus", handleFocus);
     return () => window.removeEventListener("focus", handleFocus);
-  }, [isMacOS, check]);
+  }, [check]);
 
   const openSettings = useCallback(async () => {
     await window.electronAPI?.openSystemAudioSettings?.();
@@ -43,17 +37,7 @@ export function useSystemAudioPermission() {
       (await window.electronAPI?.checkSystemAudioAccess?.()) ??
       DEFAULT_SYSTEM_AUDIO_ACCESS;
 
-    if (currentAccess.mode === "loopback") {
-      setAccess(currentAccess);
-      return currentAccess.granted;
-    }
-
-    if (currentAccess.mode === "portal") {
-      if (!currentAccess.supportsOnboardingGrant) {
-        setAccess(currentAccess);
-        return currentAccess.granted;
-      }
-    } else if (currentAccess.mode !== "native") {
+    if (currentAccess.mode !== "native") {
       setAccess(currentAccess);
       return false;
     }
@@ -71,34 +55,14 @@ export function useSystemAudioPermission() {
     }
   }, [access]);
 
-  const granted = access?.granted ?? false;
-  const status = access?.status ?? "unknown";
-  const mode = access?.mode ?? "unsupported";
-  const supportsPersistentGrant = access?.supportsPersistentGrant ?? false;
-  const supportsPersistentPortalGrant = access?.supportsPersistentPortalGrant ?? false;
-  const supportsNativeCapture = access?.supportsNativeCapture ?? false;
-  const supportsOnboardingGrant = access?.supportsOnboardingGrant ?? false;
-  const requiresRuntimeSharePrompt = access?.requiresRuntimeSharePrompt ?? false;
-  const strategy = access?.strategy ?? "unsupported";
-  const restoreTokenAvailable = access?.restoreTokenAvailable ?? false;
-  const portalVersion = access?.portalVersion ?? null;
-
   return {
-    granted,
-    status,
-    mode,
-    supportsPersistentGrant,
-    supportsPersistentPortalGrant,
-    supportsNativeCapture,
-    supportsOnboardingGrant,
-    requiresRuntimeSharePrompt,
-    strategy,
-    restoreTokenAvailable,
-    portalVersion,
+    granted: access?.granted ?? false,
+    status: access?.status ?? "unknown",
+    mode: access?.mode ?? "unsupported",
+    strategy: access?.strategy ?? "unsupported",
     isChecking,
     request,
     openSettings,
     check,
-    isMacOS,
   };
 }

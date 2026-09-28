@@ -125,18 +125,3 @@ test("a live macOS initial scan still reports already-running meeting apps", asy
   );
   detector.stop();
 });
-
-test("a polling scan that completes after stop() cannot revive a stopped detector", async (t) => {
-  const { detector, releaseScan } = loadDetector("linux");
-  t.after(() => detector.stop());
-  const detected = [];
-  detector.on("meeting-process-detected", (event) => detected.push(event.processKey));
-
-  detector.start();
-  detector.stop();
-  releaseScan(["zoom"]);
-  await settle();
-
-  assert.deepEqual(detector.getDetectedProcesses(), []);
-  assert.deepEqual(detected, []);
-});

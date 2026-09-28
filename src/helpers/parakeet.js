@@ -17,11 +17,7 @@ const { getModelsDirForService } = require("./modelDirUtils");
 const { assertParakeetSupported, getParakeetCapability } = require("./parakeetCapability");
 
 const modelRegistryData = require("../models/modelRegistryData.json");
-const {
-  getModelRuntime,
-  getRequiredModelFiles,
-  isSherpaLocalProvider,
-} = require("./parakeetModelInfo");
+const { getModelRuntime, getRequiredModelFiles } = require("./parakeetModelInfo");
 
 function getParakeetModelConfig(modelName) {
   const modelInfo = modelRegistryData.parakeetModels[modelName];
@@ -82,66 +78,14 @@ class ParakeetManager {
     return 0;
   }
 
-  async initializeAtStartup(settings = {}) {
-    const startTime = Date.now();
-
+  async initializeAtStartup() {
+    this.isInitialized = true;
     try {
-      this.isInitialized = true;
-
       await cleanupStaleDownloads(this.getModelsDir());
-
       await this.logDependencyStatus();
-
-      const { localTranscriptionProvider, parakeetModel, language } = settings;
-      const capability = getParakeetCapability();
-
-      if (
-        capability.supported &&
-        isSherpaLocalProvider(localTranscriptionProvider) &&
-        parakeetModel &&
-        this.serverManager.isAvailable(getModelRuntime(parakeetModel))
-      ) {
-        if (this.serverManager.isModelDownloaded(parakeetModel)) {
-          debugLogger.info("Pre-warming parakeet server", { model: parakeetModel });
-
-          try {
-            const serverStartTime = Date.now();
-            await this.serverManager.startServer(parakeetModel, language);
-            debugLogger.info("Parakeet server pre-warmed successfully", {
-              model: parakeetModel,
-              startupTimeMs: Date.now() - serverStartTime,
-            });
-          } catch (err) {
-            debugLogger.warn("Parakeet server pre-warm failed (will start on first use)", {
-              error: err.message,
-              model: parakeetModel,
-            });
-          }
-        } else {
-          debugLogger.debug("Skipping parakeet server pre-warm: model not downloaded", {
-            model: parakeetModel,
-          });
-        }
-      } else {
-        debugLogger.debug("Skipping parakeet server pre-warm", {
-          reason: !capability.supported
-            ? capability.message
-            : !isSherpaLocalProvider(localTranscriptionProvider)
-              ? "provider not sherpa-based"
-              : !parakeetModel
-                ? "no model selected"
-                : "server binary not available",
-        });
-      }
     } catch (error) {
       debugLogger.warn("Parakeet initialization error", { error: error.message });
-      this.isInitialized = true;
     }
-
-    debugLogger.info("Parakeet initialization complete", {
-      totalTimeMs: Date.now() - startTime,
-      binaryAvailable: this.serverManager.hasAnyWsBinary(),
-    });
   }
 
   async logDependencyStatus() {
@@ -209,10 +153,6 @@ class ParakeetManager {
 
   async stopServer() {
     await this.serverManager.stopServer();
-  }
-
-  getServerStatus() {
-    return this.serverManager.getServerStatus();
   }
 
   supportsOnlineStreaming(modelName) {
@@ -704,35 +644,6 @@ class ParakeetManager {
     } catch (error) {
       return { success: false, error: error.message };
     }
-  }
-
-  async getDiagnostics() {
-    const diagnostics = {
-      platform: process.platform,
-      arch: process.arch,
-      resourcesPath: process.resourcesPath || null,
-      isPackaged: !!process.resourcesPath && !process.resourcesPath.includes("node_modules"),
-      sherpaOnnx: { available: false, path: null },
-      modelsDir: this.getModelsDir(),
-      models: [],
-    };
-    const binaryPath =
-      this.serverManager.getBinaryPath("offline") || this.serverManager.getBinaryPath("online");
-    if (binaryPath) {
-      diagnostics.sherpaOnnx = { available: true, path: binaryPath };
-    }
-
-    try {
-      const modelsDir = this.getModelsDir();
-      if (fs.existsSync(modelsDir)) {
-        const entries = fs.readdirSync(modelsDir, { withFileTypes: true });
-        diagnostics.models = entries
-          .filter((e) => e.isDirectory() && this.serverManager.isModelDownloaded(e.name))
-          .map((e) => e.name);
-      }
-    } catch {}
-
-    return diagnostics;
   }
 }
 

@@ -1,37 +1,25 @@
 // electron-builder afterPack hook
 //
-// Runs after electron-builder assembles the output directory but before the
-// final installer (DMG/NSIS/AppImage) is created. Operates only on the output
-// directory — never touches source node_modules/.
+// Runs after electron-builder assembles the .app but before the DMG is
+// created. Operates only on the output directory — never touches source
+// node_modules/.
 //
 // 1. Strips non-target platform/arch binaries from onnxruntime-node
 //    (saves 150–180 MB per build).
-// 2. Wraps the Linux binary in a shell script that forces XWayland, reads
-//    user flags from ~/.config/open-whispr-flags.conf, and falls back to
-//    --no-sandbox where the Chromium sandbox cannot work (AppImage/tar.gz
-//    on distros that restrict unprivileged user namespaces).
-// 3. Fails the build if required binaries (ffmpeg-static, ps-list vendor exe,
-//    onnx worker script) are missing from app.asar.unpacked/.
+// 2. Fails the build if required files (ffmpeg-static, onnx worker script)
+//    are missing from app.asar.unpacked/.
+// 3. Registers Mach-O resources for signing.
 
 const fs = require("fs");
 const path = require("path");
 const { execFileSync } = require("child_process");
 const { Arch } = require("app-builder-lib");
-const { buildLinuxWrapperScript } = require("./lib/linux-launcher");
-const {
-  WINDOWS_ONNXRUNTIME_PRIVATE_NAME,
-  WINDOWS_ONNXRUNTIME_UPSTREAM_NAME,
-} = require("./download-sherpa-onnx");
 
 // ---------------------------------------------------------------------------
 // macOS resource binary signing
 // ---------------------------------------------------------------------------
 
 function resolveAppPath(context) {
-  if (context.electronPlatformName !== "darwin") {
-    return context.appOutDir;
-  }
-
   if (context.appOutDir.endsWith(".app")) {
     return context.appOutDir;
   }
@@ -40,9 +28,7 @@ function resolveAppPath(context) {
 }
 
 function resolveResourcesDir(context) {
-  return context.electronPlatformName === "darwin"
-    ? path.join(resolveAppPath(context), "Contents", "Resources")
-    : path.join(context.appOutDir, "resources");
+  return path.join(resolveAppPath(context), "Contents", "Resources");
 }
 
 function collectFiles(rootDir, skipDirs = new Set()) {
@@ -114,10 +100,6 @@ function isMachOBinary(filePath) {
 }
 
 function registerMacResourceBinariesForSigning(context) {
-  if (context.electronPlatformName !== "darwin") {
-    return;
-  }
-
   const resourcesDir = resolveResourcesDir(context);
   const frameworks = collectFrameworks(resourcesDir);
   const skipDirs = new Set(frameworks);
@@ -143,7 +125,7 @@ function registerMacResourceBinariesForSigning(context) {
 // ---------------------------------------------------------------------------
 
 function stripOnnxruntimeBinaries(context) {
-  const platform = context.electronPlatformName; // darwin | linux | win32
+  const platform = context.electronPlatformName;
   const archName = Arch[context.arch]; // x64 | arm64 | ia32 | universal
 
   // Resolve the resources directory inside the packed output
@@ -196,32 +178,8 @@ function stripOnnxruntimeBinaries(context) {
   }
 }
 
-// ---------------------------------------------------------------------------
-// Linux XWayland wrapper
-// ---------------------------------------------------------------------------
-
-function wrapLinuxBinary(context) {
-  if (context.electronPlatformName !== "linux") return;
-
-  const appDir = context.appOutDir;
-  const binaryName = context.packager.executableName;
-  const binaryPath = path.join(appDir, binaryName);
-  const realBinaryPath = path.join(appDir, binaryName + "-app");
-
-  fs.renameSync(binaryPath, realBinaryPath);
-
-  fs.writeFileSync(binaryPath, buildLinuxWrapperScript(binaryName), { mode: 0o755 });
-}
-
 function verifyMeetingAecHelper(context) {
-  const platform = context.electronPlatformName;
-  const archName = Arch[context.arch];
-
-  if (!["darwin", "linux", "win32"].includes(platform)) {
-    return;
-  }
-
-  const binaryName = `meeting-aec-helper-${platform}-${archName}${platform === "win32" ? ".exe" : ""}`;
+  const binaryName = `meeting-aec-helper-darwin-${Arch[context.arch]}`;
   const resourcesDir = resolveResourcesDir(context);
   const binaryPath = path.join(resourcesDir, "bin", binaryName);
 
@@ -230,41 +188,14 @@ function verifyMeetingAecHelper(context) {
     return;
   }
 
-  if (platform !== "win32") {
-    fs.chmodSync(binaryPath, 0o755);
-  }
-}
-
-// download-sherpa-onnx.js renames the bundled ONNX Runtime so the Windows
-// loader can never resolve it to C:\Windows\System32\onnxruntime.dll (#2054).
-// A stray onnxruntime.dll or a missing private DLL means that step was skipped
-// (stale cache, older marker) and Parakeet would die at startup for the user.
-function verifyWindowsOnnxRuntimePrivatized(binDir) {
-  const strayPath = path.join(binDir, WINDOWS_ONNXRUNTIME_UPSTREAM_NAME);
-  if (fs.existsSync(strayPath)) {
-    throw new Error(
-      `afterPack: ${WINDOWS_ONNXRUNTIME_UPSTREAM_NAME} must not ship (${strayPath}) — download-sherpa-onnx.js renames it to ${WINDOWS_ONNXRUNTIME_PRIVATE_NAME}; re-run the sherpa download with --force`
-    );
-  }
-  const privatePath = path.join(binDir, WINDOWS_ONNXRUNTIME_PRIVATE_NAME);
-  if (!fs.existsSync(privatePath)) {
-    throw new Error(
-      `afterPack: missing ${privatePath} — the bundled ONNX Runtime was not extracted and renamed; Parakeet would die at startup on Windows`
-    );
-  }
+  fs.chmodSync(binaryPath, 0o755);
 }
 
 function verifyUnpackedBinaries(context) {
   const unpackedDir = path.join(resolveResourcesDir(context), "app.asar.unpacked");
   const unpackedModulesDir = path.join(unpackedDir, "node_modules");
 
-  const isWindows = context.electronPlatformName === "win32";
-
-  const ffmpegPath = path.join(
-    unpackedModulesDir,
-    "ffmpeg-static",
-    isWindows ? "ffmpeg.exe" : "ffmpeg"
-  );
+  const ffmpegPath = path.join(unpackedModulesDir, "ffmpeg-static", "ffmpeg");
   if (!fs.existsSync(ffmpegPath)) {
     throw new Error(
       `afterPack: missing ${ffmpegPath} — ffmpeg-static was not unpacked from app.asar (asarUnpack/packaging failure); the packed app cannot spawn FFmpeg`
@@ -278,21 +209,6 @@ function verifyUnpackedBinaries(context) {
     );
   }
 
-  // electron-builder strips *.exe from node_modules on non-Windows targets,
-  // so the ps-list vendor executable only exists in Windows builds.
-  if (isWindows) {
-    const psListVendorDir = path.join(unpackedModulesDir, "ps-list", "vendor");
-    const hasFastlist =
-      fs.existsSync(psListVendorDir) &&
-      fs.readdirSync(psListVendorDir).some((name) => /^fastlist-.*\.exe$/.test(name));
-    if (!hasFastlist) {
-      throw new Error(
-        `afterPack: no fastlist-*.exe in ${psListVendorDir} — ps-list vendor executable was not unpacked from app.asar (asarUnpack/packaging failure); Windows process detection would break`
-      );
-    }
-    verifyWindowsOnnxRuntimePrivatized(path.join(resolveResourcesDir(context), "bin"));
-  }
-
   console.log("  afterPack: verified unpacked bundled binaries");
 }
 
@@ -302,10 +218,7 @@ function verifyUnpackedBinaries(context) {
 
 exports.default = async function (context) {
   stripOnnxruntimeBinaries(context);
-  wrapLinuxBinary(context);
   verifyMeetingAecHelper(context);
   verifyUnpackedBinaries(context);
   registerMacResourceBinariesForSigning(context);
 };
-
-exports.verifyWindowsOnnxRuntimePrivatized = verifyWindowsOnnxRuntimePrivatized;

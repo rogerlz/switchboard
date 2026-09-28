@@ -95,8 +95,7 @@ async function setup(t) {
     );
   const deleteNote = (id) => listeners.noteDeleted?.({ id });
   const tick = (ms) => React.act(async () => t.mock.timers.tick(ms));
-  const savedTranscripts = () =>
-    writes.filter(([, patch]) => typeof patch.transcript === "string");
+  const savedTranscripts = () => writes.filter(([, patch]) => typeof patch.transcript === "string");
   return { start, say, deleteNote, tick, writes, savedTranscripts };
 }
 

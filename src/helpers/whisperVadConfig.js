@@ -21,21 +21,9 @@ function sanitizeWhisperVadConfig(input = {}) {
   return out;
 }
 
-function resolveContextSileroEnabled(settings = {}, context = "dictation") {
-  // Dictation is opt-in: VAD on pause-heavy dictations can strip the speech and
-  // leave Whisper decoding near-silence seeded with the dictionary prompt, which
-  // replaces the transcript with dictionary words (#1454). Long-form contexts
-  // (notes, meetings) keep VAD to skip extended silence.
-  if (context === "dictation") return settings?.dictationSileroEnabled === true;
-  if (context === "noteRecording") return settings?.noteRecordingSileroEnabled !== false;
-  if (context === "meeting") return settings?.meetingSileroEnabled !== false;
-  return true;
-}
-
 module.exports = {
   DEFAULT_WHISPER_VAD_CONFIG,
   VAD_LIMITS,
   clampVadField,
   sanitizeWhisperVadConfig,
-  resolveContextSileroEnabled,
 };

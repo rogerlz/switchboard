@@ -28,9 +28,7 @@ class AudioTapManager {
   }
 
   isSupported() {
-    return (
-      process.platform === "darwin" && compareVersions(process.getSystemVersion(), "14.2") >= 0
-    );
+    return compareVersions(process.getSystemVersion(), "14.2") >= 0;
   }
 
   isAvailable() {

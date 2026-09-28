@@ -122,7 +122,7 @@ const notificationWindowFor = (index) => createdWindows[index];
 
 function createNormalWindowManager() {
   const manager = new WindowManager();
-  manager.setOnboardingActive(false);
+  manager.setControlPanelReady(true);
   return manager;
 }
 
@@ -169,7 +169,7 @@ test.beforeEach(() => {
 
 test("an unmounted control panel suppresses meeting prompts", async () => {
   const manager = new WindowManager();
-  manager.setOnboardingActive(true);
+  manager.setControlPanelReady(false);
 
   assert.equal(await manager.showMeetingNotification({ detectionId: "onboarding" }), false);
   assert.deepEqual(createdWindows, []);
@@ -432,7 +432,7 @@ test("manual meeting starts fail closed until the control panel has mounted", as
   const engine = { startManualMeeting: async () => (starts += 1) };
 
   const unmounted = new WindowManager();
-  unmounted.setOnboardingActive(true);
+  unmounted.setControlPanelReady(false);
   unmounted.meetingDetectionEngine = engine;
   await unmounted.startManualMeeting();
   assert.equal(starts, 0);

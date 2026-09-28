@@ -4,12 +4,6 @@ const fs = require("fs");
 const debugLogger = require("./debugLogger");
 const dockManager = require("./dockManager");
 const { i18nMain } = require("./i18nMain");
-const { windowsTrayIdentity } = require("../../package.json");
-
-// Permanent identity for signed production Windows builds; keep across releases.
-// Windows binds an unsigned executable's GUID to its path, so only builds from the
-// signed config, which sets windowsTrayIdentity, may use it.
-const WINDOWS_PRODUCTION_TRAY_GUID = "9afd9bd5-53da-42ef-8334-6e2b494c66fe";
 
 // macOS saves the menu-bar position under this GUID, so changing it resets every
 // user's placement. Electron lowercases the GUID before handing it to macOS, so
@@ -85,8 +79,6 @@ class TrayManager {
     return !!win && !win.isDestroyed() && win.isVisible() && !win.isMinimized();
   }
 
-  // On Linux a window parked on another workspace still reports as visible, so
-  // the first click hides it and the next re-shows it on the current workspace.
   async toggleControlPanelFromTray() {
     if (this.isControlPanelVisible()) {
       this.windowManager?.hideControlPanelToTray();
@@ -141,25 +133,13 @@ class TrayManager {
         return;
       }
 
-      if (process.platform === "darwin") {
-        // The position key is an undocumented AppKit default, so placement is best
-        // effort. Position 0 starts the icon as far right as macOS allows, beside
-        // the system icons. A registered default only fills in for a missing value,
-        // so once the user drags the icon, their saved position wins.
-        systemPreferences.registerDefaults({ [MACOS_TRAY_POSITION_KEY]: 0 });
-        this.tray = new Tray(trayIcon, MACOS_TRAY_GUID);
-        this.tray.setIgnoreDoubleClickEvents(true);
-      } else if (
-        process.platform === "win32" &&
-        process.env.OPENWHISPR_CHANNEL === "production" &&
-        windowsTrayIdentity === true
-      ) {
-        // Other channels have their own profile and single-instance lock, so they can
-        // run beside production and must not claim its GUID.
-        this.tray = new Tray(trayIcon, WINDOWS_PRODUCTION_TRAY_GUID);
-      } else {
-        this.tray = new Tray(trayIcon);
-      }
+      // The position key is an undocumented AppKit default, so placement is best
+      // effort. Position 0 starts the icon as far right as macOS allows, beside
+      // the system icons. A registered default only fills in for a missing value,
+      // so once the user drags the icon, their saved position wins.
+      systemPreferences.registerDefaults({ [MACOS_TRAY_POSITION_KEY]: 0 });
+      this.tray = new Tray(trayIcon, MACOS_TRAY_GUID);
+      this.tray.setIgnoreDoubleClickEvents(true);
 
       this.updateTrayMenu();
       this.setupTrayEventHandlers();
@@ -169,55 +149,24 @@ class TrayManager {
   }
 
   async loadTrayIcon() {
-    const platform = process.platform;
-    const isDevelopment = process.env.NODE_ENV === "development";
-
-    const candidatePaths = [];
-
-    if (platform === "darwin") {
-      if (isDevelopment) {
-        candidatePaths.push(path.join(__dirname, "..", "assets", "iconTemplate@3x.png"));
-      } else {
-        candidatePaths.push(
-          path.join(process.resourcesPath, "src", "assets", "iconTemplate@3x.png"),
-          path.join(process.resourcesPath, "assets", "iconTemplate@3x.png"),
-          path.join(
-            process.resourcesPath,
-            "app.asar.unpacked",
-            "src",
-            "assets",
-            "iconTemplate@3x.png"
-          ),
-          path.join(__dirname, "..", "..", "src", "assets", "iconTemplate@3x.png"),
-          path.join(app.getAppPath(), "src", "assets", "iconTemplate@3x.png")
-        );
-      }
-    } else {
-      const fileName = platform === "win32" ? "icon.ico" : "icon.png";
-      if (isDevelopment) {
-        candidatePaths.push(
-          path.join(__dirname, "..", "assets", fileName),
-          path.join(__dirname, "..", "assets", "icon.png")
-        );
-      } else {
-        candidatePaths.push(
-          path.join(process.resourcesPath, "src", "assets", fileName),
-          path.join(process.resourcesPath, "assets", fileName),
-          path.join(process.resourcesPath, "app.asar.unpacked", "src", "assets", fileName),
-          path.join(__dirname, "..", "..", "src", "assets", fileName),
-          path.join(app.getAppPath(), "src", "assets", fileName)
-        );
-      }
-    }
+    const fileName = "iconTemplate@3x.png";
+    const candidatePaths =
+      process.env.NODE_ENV === "development"
+        ? [path.join(__dirname, "..", "assets", fileName)]
+        : [
+            path.join(process.resourcesPath, "src", "assets", fileName),
+            path.join(process.resourcesPath, "assets", fileName),
+            path.join(process.resourcesPath, "app.asar.unpacked", "src", "assets", fileName),
+            path.join(__dirname, "..", "..", "src", "assets", fileName),
+            path.join(app.getAppPath(), "src", "assets", fileName),
+          ];
 
     for (const testPath of candidatePaths) {
       try {
         if (fs.existsSync(testPath)) {
           const icon = nativeImage.createFromPath(testPath);
           if (icon && !icon.isEmpty()) {
-            if (platform === "darwin") {
-              icon.setTemplateImage(true);
-            }
+            icon.setTemplateImage(true);
             debugLogger.debug("Using tray icon", { path: testPath }, "tray");
             return icon;
           }
@@ -236,36 +185,18 @@ class TrayManager {
   }
 
   createFallbackIcon() {
-    try {
-      // Create a simple 16x16 PNG icon programmatically
-      const { createCanvas } = require("canvas");
-      const canvas = createCanvas(16, 16);
-      const ctx = canvas.getContext("2d");
+    // A minimal 16x16 black square PNG
+    const pngData = Buffer.from([
+      0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d, 0x49, 0x48, 0x44,
+      0x52, 0x00, 0x00, 0x00, 0x10, 0x00, 0x00, 0x00, 0x10, 0x08, 0x02, 0x00, 0x00, 0x00, 0x90,
+      0x91, 0x68, 0x36, 0x00, 0x00, 0x00, 0x0c, 0x49, 0x44, 0x41, 0x54, 0x28, 0x53, 0x63, 0x08,
+      0x05, 0x00, 0x00, 0x02, 0x00, 0x01, 0xe5, 0x27, 0xde, 0xfc, 0x00, 0x00, 0x00, 0x00, 0x49,
+      0x45, 0x4e, 0x44, 0xae, 0x42, 0x60, 0x82,
+    ]);
 
-      ctx.fillStyle = "#000000";
-      ctx.beginPath();
-      ctx.arc(8, 8, 6, 0, 2 * Math.PI);
-      ctx.fill();
-
-      const buffer = canvas.toBuffer("image/png");
-      const fallbackIcon = nativeImage.createFromBuffer(buffer);
-      debugLogger.info("Created fallback tray icon", undefined, "tray");
-      return fallbackIcon;
-    } catch (fallbackError) {
-      debugLogger.warn("Canvas not available, creating minimal fallback icon", undefined, "tray");
-      // Create a minimal 16x16 black square PNG as fallback
-      const pngData = Buffer.from([
-        0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d, 0x49, 0x48, 0x44,
-        0x52, 0x00, 0x00, 0x00, 0x10, 0x00, 0x00, 0x00, 0x10, 0x08, 0x02, 0x00, 0x00, 0x00, 0x90,
-        0x91, 0x68, 0x36, 0x00, 0x00, 0x00, 0x0c, 0x49, 0x44, 0x41, 0x54, 0x28, 0x53, 0x63, 0x08,
-        0x05, 0x00, 0x00, 0x02, 0x00, 0x01, 0xe5, 0x27, 0xde, 0xfc, 0x00, 0x00, 0x00, 0x00, 0x49,
-        0x45, 0x4e, 0x44, 0xae, 0x42, 0x60, 0x82,
-      ]);
-
-      const fallbackIcon = nativeImage.createFromBuffer(pngData);
-      debugLogger.info("Created minimal fallback tray icon", undefined, "tray");
-      return fallbackIcon;
-    }
+    const fallbackIcon = nativeImage.createFromBuffer(pngData);
+    debugLogger.info("Created minimal fallback tray icon", undefined, "tray");
+    return fallbackIcon;
   }
 
   buildContextMenuTemplate() {
@@ -308,12 +239,6 @@ class TrayManager {
   setupTrayEventHandlers() {
     if (!this.tray) {
       return;
-    }
-
-    if (process.platform !== "darwin") {
-      this.tray.on("click", () => {
-        void this.toggleControlPanelFromTray();
-      });
     }
 
     this.tray.on("destroyed", () => {

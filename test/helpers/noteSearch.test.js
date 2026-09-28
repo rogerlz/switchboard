@@ -90,7 +90,6 @@ function createSearchDatabase() {
 
   const manager = Object.create(DatabaseManager.prototype);
   manager.db = sqlite;
-  manager.activeAccountId = null;
   return { manager, sqlite };
 }
 

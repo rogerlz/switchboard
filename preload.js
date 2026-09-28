@@ -6,12 +6,7 @@ const { contextBridge, ipcRenderer } = require("electron");
 // src/config/secretKeys.js (the main process derives its plumbing from that).
 const BYOK_KEY_BRIDGES = [
   { base: "openai", get: "getOpenAIKey", save: "saveOpenAIKey" },
-  { base: "gemini", get: "getGeminiKey", save: "saveGeminiKey" },
-  { base: "groq", get: "getGroqKey", save: "saveGroqKey" },
-  { base: "xai", get: "getXaiKey", save: "saveXaiKey" },
-  { base: "mistral", get: "getMistralKey", save: "saveMistralKey" },
   { base: "tinfoil", get: "getTinfoilKey", save: "saveTinfoilKey" },
-  { base: "corti", get: "getCortiKey", save: "saveCortiKey" },
   { base: "deepgram", get: "getDeepgramKey", save: "saveDeepgramKey" },
   { base: "assemblyai", get: "getAssemblyAIKey", save: "saveAssemblyAIKey" },
 ];
@@ -44,8 +39,7 @@ const registerListener = (channel, handlerFactory) => {
 };
 
 contextBridge.exposeInMainWorld("electronAPI", {
-  setOnboardingWindowMode: (mode) => ipcRenderer.invoke("onboarding-set-window-mode", mode),
-  setOnboardingActive: (active) => ipcRenderer.invoke("onboarding-set-active", active),
+  controlPanelReady: () => ipcRenderer.invoke("control-panel-ready"),
 
   // Note functions
   saveNote: (title, content, noteType, sourceFile, audioDuration, folderId, spaceId) =>
@@ -115,89 +109,24 @@ contextBridge.exposeInMainWorld("electronAPI", {
   // BYOK API keys (get/save for every provider in the secretKeys manifest)
   ...secretKeyApi,
 
-  readClipboard: () => ipcRenderer.invoke("read-clipboard"),
   writeClipboard: (text) => ipcRenderer.invoke("write-clipboard", text),
 
-  // Local Whisper functions (whisper.cpp)
-  checkWhisperInstallation: () => ipcRenderer.invoke("check-whisper-installation"),
   downloadWhisperModel: (modelName) => ipcRenderer.invoke("download-whisper-model", modelName),
   onWhisperDownloadProgress: registerListener("whisper-download-progress"),
-  checkModelStatus: (modelName) => ipcRenderer.invoke("check-model-status", modelName),
   listWhisperModels: () => ipcRenderer.invoke("list-whisper-models"),
   deleteWhisperModel: (modelName) => ipcRenderer.invoke("delete-whisper-model", modelName),
   deleteAllWhisperModels: () => ipcRenderer.invoke("delete-all-whisper-models"),
   cancelWhisperDownload: () => ipcRenderer.invoke("cancel-whisper-download"),
-  checkFFmpegAvailability: () => ipcRenderer.invoke("check-ffmpeg-availability"),
-  getAudioDiagnostics: () => ipcRenderer.invoke("get-audio-diagnostics"),
-
-  // Whisper server functions (faster repeated transcriptions)
-  whisperServerStart: (modelName) => ipcRenderer.invoke("whisper-server-start", modelName),
-  whisperServerStop: () => ipcRenderer.invoke("whisper-server-stop"),
-  whisperServerStatus: () => ipcRenderer.invoke("whisper-server-status"),
-  whisperGpuRetry: () => ipcRenderer.invoke("whisper-gpu-retry"),
-
-  // CUDA GPU acceleration
-  listGpus: () => ipcRenderer.invoke("list-gpus"),
-  setGpuDeviceIndex: (purpose, uuid) => ipcRenderer.invoke("set-gpu-device-index", purpose, uuid),
-  getGpuDeviceIndex: (purpose) => ipcRenderer.invoke("get-gpu-device-index", purpose),
-  detectGpu: () => ipcRenderer.invoke("detect-gpu"),
-  getCudaWhisperStatus: () => ipcRenderer.invoke("get-cuda-whisper-status"),
-  downloadCudaWhisperBinary: () => ipcRenderer.invoke("download-cuda-whisper-binary"),
-  cancelCudaWhisperDownload: () => ipcRenderer.invoke("cancel-cuda-whisper-download"),
-  deleteCudaWhisperBinary: () => ipcRenderer.invoke("delete-cuda-whisper-binary"),
-  onCudaDownloadProgress: registerListener(
-    "cuda-download-progress",
-    (callback) => (_event, data) => callback(data)
-  ),
-  onCudaFallbackNotification: registerListener(
-    "cuda-fallback-notification",
-    (callback) => () => callback()
-  ),
-
-  // Vulkan GPU acceleration (whisper on AMD/Intel GPUs)
-  getVulkanWhisperStatus: () => ipcRenderer.invoke("get-vulkan-whisper-status"),
-  downloadVulkanWhisperBinary: () => ipcRenderer.invoke("download-vulkan-whisper-binary"),
-  cancelVulkanWhisperDownload: () => ipcRenderer.invoke("cancel-vulkan-whisper-download"),
-  deleteVulkanWhisperBinary: () => ipcRenderer.invoke("delete-vulkan-whisper-binary"),
-  onVulkanWhisperDownloadProgress: registerListener(
-    "vulkan-whisper-download-progress",
-    (callback) => (_event, data) => callback(data)
-  ),
-  onGpuFallbackNotification: registerListener(
-    "gpu-fallback-notification",
-    (callback) => () => callback()
-  ),
-
-  // One-time "GPU pack needs re-downloading" notice from the legacy-layout migration
-  getGpuPackMigrationNotice: () => ipcRenderer.invoke("get-gpu-pack-migration-notice"),
-  dismissGpuPackMigrationNotice: () => ipcRenderer.invoke("dismiss-gpu-pack-migration-notice"),
 
   // Local Parakeet (NVIDIA) functions
   checkParakeetInstallation: () => ipcRenderer.invoke("check-parakeet-installation"),
   downloadParakeetModel: (modelName) => ipcRenderer.invoke("download-parakeet-model", modelName),
   onParakeetDownloadProgress: registerListener("parakeet-download-progress"),
-  checkParakeetModelStatus: (modelName) =>
-    ipcRenderer.invoke("check-parakeet-model-status", modelName),
   listParakeetModels: () => ipcRenderer.invoke("list-parakeet-models"),
   deleteParakeetModel: (modelName) => ipcRenderer.invoke("delete-parakeet-model", modelName),
   deleteAllParakeetModels: () => ipcRenderer.invoke("delete-all-parakeet-models"),
   cancelParakeetDownload: () => ipcRenderer.invoke("cancel-parakeet-download"),
-  getParakeetDiagnostics: () => ipcRenderer.invoke("get-parakeet-diagnostics"),
 
-  // Parakeet server functions (faster repeated transcriptions)
-  parakeetServerStart: (modelName) => ipcRenderer.invoke("parakeet-server-start", modelName),
-  parakeetServerStop: () => ipcRenderer.invoke("parakeet-server-stop"),
-  parakeetServerStatus: () => ipcRenderer.invoke("parakeet-server-status"),
-
-  // Diarization (speaker identification) functions
-  downloadDiarizationModels: () => ipcRenderer.invoke("download-diarization-models"),
-  getDiarizationModelStatus: () => ipcRenderer.invoke("get-diarization-model-status"),
-  deleteDiarizationModels: () => ipcRenderer.invoke("delete-diarization-models"),
-  cancelDiarizationDownload: () => ipcRenderer.invoke("cancel-diarization-download"),
-  onDiarizationDownloadProgress: registerListener(
-    "diarization-download-progress",
-    (callback) => (_event, data) => callback(data)
-  ),
   onMeetingDiarizationComplete: registerListener(
     "meeting-diarization-complete",
     (callback) => (_event, data) => callback(data)
@@ -207,22 +136,14 @@ contextBridge.exposeInMainWorld("electronAPI", {
   getSpeakerMappings: (noteId) => ipcRenderer.invoke("get-speaker-mappings", noteId),
   setSpeakerMapping: (noteId, speakerId, displayName, email, profileId) =>
     ipcRenderer.invoke("set-speaker-mapping", noteId, speakerId, displayName, email, profileId),
-  removeSpeakerMapping: (noteId, speakerId) =>
-    ipcRenderer.invoke("remove-speaker-mapping", noteId, speakerId),
   getSpeakerProfiles: () => ipcRenderer.invoke("get-speaker-profiles"),
   attachSpeakerEmail: (profileId, email) =>
     ipcRenderer.invoke("attach-speaker-email", profileId, email),
   saveNoteSpeakerEmbeddings: (noteId, embeddings) =>
     ipcRenderer.invoke("save-note-speaker-embeddings", noteId, embeddings),
 
-  // Window control functions
-  windowMinimize: () => ipcRenderer.invoke("window-minimize"),
-  windowMaximize: () => ipcRenderer.invoke("window-maximize"),
-  windowClose: () => ipcRenderer.invoke("window-close"),
-  windowIsMaximized: () => ipcRenderer.invoke("window-is-maximized"),
   snapToMeetingMode: () => ipcRenderer.invoke("snap-to-meeting-mode"),
   restoreFromMeetingMode: () => ipcRenderer.invoke("restore-from-meeting-mode"),
-  getPlatform: () => process.platform,
 
   // Cleanup function
   cleanupApp: () => ipcRenderer.invoke("cleanup-app"),
@@ -232,21 +153,7 @@ contextBridge.exposeInMainWorld("electronAPI", {
   setNotificationInteractivity: (interactive) =>
     ipcRenderer.invoke("set-notification-interactivity", interactive),
 
-  // Update functions
-  checkForUpdates: () => ipcRenderer.invoke("check-for-updates"),
-  downloadUpdate: () => ipcRenderer.invoke("download-update"),
-  installUpdate: () => ipcRenderer.invoke("install-update"),
   getAppVersion: () => ipcRenderer.invoke("get-app-version"),
-  getUpdateStatus: () => ipcRenderer.invoke("get-update-status"),
-  getUpdateInfo: () => ipcRenderer.invoke("get-update-info"),
-  setAutoUpdatesEnabled: (enabled) => ipcRenderer.invoke("set-auto-updates-enabled", enabled),
-
-  // Update event listeners
-  onUpdateAvailable: registerListener("update-available"),
-  onUpdateNotAvailable: registerListener("update-not-available"),
-  onUpdateDownloaded: registerListener("update-downloaded"),
-  onUpdateDownloadProgress: registerListener("update-download-progress"),
-  onUpdateError: registerListener("update-error"),
 
   // External link opener
   openExternal: (url) => ipcRenderer.invoke("open-external", url),
@@ -254,22 +161,13 @@ contextBridge.exposeInMainWorld("electronAPI", {
   // Local transcription model download status (whisper, parakeet)
   modelGetActiveDownloads: () => ipcRenderer.invoke("model-get-active-downloads"),
 
-  getUiLanguage: () => ipcRenderer.invoke("get-ui-language"),
-  saveUiLanguage: (language) => ipcRenderer.invoke("save-ui-language", language),
-  setUiLanguage: (language) => ipcRenderer.invoke("set-ui-language", language),
-
   // Corti API
   getCortiClientId: () => ipcRenderer.invoke("get-corti-client-id"),
   saveCortiClientId: (key) => ipcRenderer.invoke("save-corti-client-id", key),
   getCortiClientSecret: () => ipcRenderer.invoke("get-corti-client-secret"),
   saveCortiClientSecret: (key) => ipcRenderer.invoke("save-corti-client-secret", key),
 
-  // Custom endpoint API keys
-  getCustomTranscriptionKey: () => ipcRenderer.invoke("get-custom-transcription-key"),
-  saveCustomTranscriptionKey: (key) => ipcRenderer.invoke("save-custom-transcription-key", key),
-
   saveAllKeysToEnv: () => ipcRenderer.invoke("save-all-keys-to-env"),
-  syncStartupPreferences: (prefs) => ipcRenderer.invoke("sync-startup-preferences", prefs),
 
   getLogLevel: () => ipcRenderer.invoke("get-log-level"),
   log: (entry) => ipcRenderer.invoke("app-log", entry),
@@ -332,10 +230,6 @@ contextBridge.exposeInMainWorld("electronAPI", {
     "meeting-system-audio-silent",
     (callback) => (_event, data) => callback(data)
   ),
-  onMeetingSystemAudioDegraded: registerListener(
-    "meeting-system-audio-degraded",
-    (callback) => () => callback()
-  ),
   onMeetingSystemAudioInterrupted: registerListener(
     "meeting-system-audio-interrupted",
     (callback) => (_event, data) => callback(data)
@@ -358,12 +252,7 @@ contextBridge.exposeInMainWorld("electronAPI", {
   // Google Calendar
   gcalStartOAuth: () => ipcRenderer.invoke("gcal-start-oauth"),
   gcalDisconnect: (email) => ipcRenderer.invoke("gcal-disconnect", email),
-  gcalGetConnectionStatus: () => ipcRenderer.invoke("gcal-get-connection-status"),
-  gcalGetCalendars: () => ipcRenderer.invoke("gcal-get-calendars"),
-  gcalSetCalendarSelection: (calendarId, isSelected) =>
-    ipcRenderer.invoke("gcal-set-calendar-selection", calendarId, isSelected),
   gcalSetPrimaryOnly: (value) => ipcRenderer.invoke("gcal-set-primary-only", value),
-  gcalSyncEvents: () => ipcRenderer.invoke("gcal-sync-events"),
   gcalGetUpcomingEvents: (windowMinutes) =>
     ipcRenderer.invoke("gcal-get-upcoming-events", windowMinutes),
   gcalGetEvent: (eventId) => ipcRenderer.invoke("gcal-get-event", eventId),
@@ -372,7 +261,6 @@ contextBridge.exposeInMainWorld("electronAPI", {
   // Microsoft Calendar
   mcalStartOAuth: () => ipcRenderer.invoke("mcal-start-oauth"),
   mcalDisconnect: (email) => ipcRenderer.invoke("mcal-disconnect", email),
-  mcalGetConnectionStatus: () => ipcRenderer.invoke("mcal-get-connection-status"),
   mcalSetPrimaryOnly: (value) => ipcRenderer.invoke("mcal-set-primary-only", value),
 
   // Apple Calendar (macOS EventKit)
@@ -423,7 +311,6 @@ contextBridge.exposeInMainWorld("electronAPI", {
     ipcRenderer.invoke("meeting-set-speaker-diarization-enabled", { enabled }),
   setMeetingSessionSpeakerConfig: (config) =>
     ipcRenderer.invoke("meeting-set-session-speaker-config", config),
-  getWhisperVadConfig: () => ipcRenderer.invoke("whisper-vad-get-config"),
   setWhisperVadConfig: (config) => ipcRenderer.invoke("whisper-vad-set-config", config),
   onMeetingNotificationData: registerListener(
     "meeting-notification-data",
@@ -438,7 +325,6 @@ contextBridge.exposeInMainWorld("electronAPI", {
   meetingNotificationRespond: (detectionId, action) =>
     ipcRenderer.invoke("meeting-notification-respond", detectionId, action),
   joinCalendarMeeting: (eventId) => ipcRenderer.invoke("join-calendar-meeting", eventId),
-  startManualMeeting: () => ipcRenderer.invoke("start-manual-meeting"),
   getPendingMeetingNoteNavigation: () => ipcRenderer.invoke("get-pending-meeting-note-navigation"),
   onMeetingNoteNavigationPending: registerListener(
     "meeting-note-navigation-pending",

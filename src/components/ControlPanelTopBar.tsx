@@ -2,11 +2,7 @@ import React from "react";
 import { useTranslation } from "react-i18next";
 import { ChevronLeft, PanelLeftClose, Search } from "./icons";
 import { Button } from "./ui/button";
-import WindowControls from "./WindowControls";
 import { cn } from "./lib/utils";
-import { getCachedPlatform } from "../utils/platform";
-
-const platform = getCachedPlatform();
 
 // Controls inside the drag region must opt out or the click starts a window drag.
 const noDragStyle = { WebkitAppRegion: "no-drag" } as React.CSSProperties;
@@ -42,7 +38,7 @@ export default function ControlPanelTopBar({
   const { t } = useTranslation();
   // With the sidebar out of the way the container's start edge sits under the
   // macOS traffic lights, so the leading controls shift past them.
-  const clearTrafficLights = platform === "darwin" && (sidebarCollapsed || isSidePanelLayout);
+  const clearTrafficLights = sidebarCollapsed || isSidePanelLayout;
 
   return (
     <header
@@ -109,7 +105,7 @@ export default function ControlPanelTopBar({
             dir="ltr"
             className="shrink-0 rounded-full bg-foreground/6 px-1.5 py-px font-sans text-[10px] font-medium text-muted-foreground/70 dark:bg-white/8"
           >
-            {platform === "darwin" ? "⌘ + K" : "Ctrl + K"}
+            ⌘ + K
           </kbd>
         </button>
       )}
@@ -119,16 +115,10 @@ export default function ControlPanelTopBar({
           <div
             data-no-window-drag=""
             style={noDragStyle}
-            // macOS keeps no window controls here, so the actions take the far
-            // end; elsewhere they sit beside the search, left of the controls.
-            className={cn("flex items-center", platform === "darwin" && "ms-auto")}
+            // macOS keeps no window controls here, so the actions take the far end.
+            className="flex items-center ms-auto"
           >
             {actions}
-          </div>
-        )}
-        {platform !== "darwin" && (
-          <div data-no-window-drag="" style={noDragStyle} className="ms-auto">
-            <WindowControls />
           </div>
         )}
       </div>

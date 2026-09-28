@@ -1,5 +1,4 @@
 const { app } = require("electron");
-const { resolveDockVisibility } = require("./dockPolicy");
 
 // Single owner of the macOS Dock icon. Every caller that wants the icon shown
 // or hidden goes through here, and the icon simply tracks the control panel.
@@ -29,13 +28,9 @@ class DockManager {
   }
 
   _applyVisibility() {
-    const visible = resolveDockVisibility({
-      platform: process.platform,
-      controlPanelVisible: this._controlPanelVisible,
-    });
-    if (visible === null || !app.dock) return;
+    if (!app.dock) return;
 
-    if (visible) {
+    if (this._controlPanelVisible) {
       app.dock.show();
     } else {
       // Electron swallows dock.hide() within 1s of a dock.show() (see DockHide

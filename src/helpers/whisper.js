@@ -16,8 +16,6 @@ const { getModelsDirForService } = require("./modelDirUtils");
 
 const modelRegistryData = require("../models/modelRegistryData.json");
 
-const CACHE_TTL_MS = 30000;
-
 function getWhisperModelConfig(modelName) {
   const modelInfo = modelRegistryData.whisperModels[modelName];
   if (!modelInfo) return null;
@@ -32,86 +30,13 @@ function getValidModelNames() {
   return Object.keys(modelRegistryData.whisperModels);
 }
 
-// WHISPER_GPU_FAILED holds a comma-separated list of backends that fell back
-// to CPU on this machine (e.g. "cuda" or "cuda,vulkan")
-function resolveFailedGpuBackends(value) {
-  return String(value || "")
-    .split(",")
-    .map((entry) => entry.trim())
-    .filter(Boolean);
-}
-
-function shouldRewarmOnWake({
-  isRemote,
-  useCuda,
-  useVulkan,
-  modelName,
-  transcribing,
-  rewarmInFlight,
-}) {
-  // Only re-warm a running local GPU whisper-server: sleep evicts its model from
-  // VRAM. Skip remote/CPU servers, and skip while a transcription (already warming
-  // the server) or another re-warm is in flight. See #766.
-  return !isRemote && !!(useCuda || useVulkan) && !!modelName && !transcribing && !rewarmInFlight;
-}
-
 class WhisperManager {
   constructor() {
-    this.cachedFFmpegPath = null;
     this.currentDownloadProcess = null;
-    this.ffmpegAvailabilityCache = { result: null, expiresAt: 0 };
     this.isInitialized = false;
     // Server manager for HTTP-based transcription
     this.serverManager = new WhisperServerManager();
-    this.currentServerModel = null;
     this.cachedVadModelPath = undefined;
-    this._transcribing = false;
-    this._rewarmInFlight = false;
-    this._cudaBinaryManager = null;
-    this._vulkanBinaryManager = null;
-  }
-
-  setGpuBinaryManagers({ cuda, vulkan }) {
-    this._cudaBinaryManager = cuda || null;
-    this._vulkanBinaryManager = vulkan || null;
-  }
-
-  // The GPU backend for every server start is resolved fresh from the current
-  // env + installed packs, so enabling or removing a pack applies immediately
-  // instead of after an app restart. A pack on disk implies intent: the user
-  // downloaded it, so it engages unless WHISPER_*_ENABLED is explicitly set to
-  // "false" (case-insensitive; an opt-out that survives without deleting the
-  // pack). Requiring the flag to be present stranded downloaded packs on
-  // silent CPU whenever the .env line was lost (#1340). WHISPER_GPU_FAILED
-  // lists backends that crashed on this machine (persisted by ipcHandlers
-  // when the server falls back to CPU); they stay off until the user retries
-  // or re-downloads, so a doomed backend isn't re-attempted — and its model
-  // reload re-paid — on every launch.
-  resolveGpuStartOptions() {
-    const failed = resolveFailedGpuBackends(process.env.WHISPER_GPU_FAILED);
-    const useCuda =
-      (process.env.WHISPER_CUDA_ENABLED || "").toLowerCase() !== "false" &&
-      !failed.includes("cuda") &&
-      !!this._cudaBinaryManager?.isDownloaded();
-    const useVulkan =
-      !useCuda &&
-      (process.env.WHISPER_VULKAN_ENABLED || "").toLowerCase() !== "false" &&
-      !failed.includes("vulkan") &&
-      !!this._vulkanBinaryManager?.isDownloaded();
-    return { useCuda, useVulkan };
-  }
-
-  // Re-resolve GPU options and reload the server in place. Used after a GPU
-  // pack download, delete, or failure-retry so the change takes effect without
-  // an app restart. Callers that had to stop the server before touching pack
-  // files pass the model they captured first; no-op when none was loaded.
-  async restartServerWithGpuPreference(modelName = this.currentServerModel) {
-    if (!modelName || this.serverManager.isRemote) return { success: true, restarted: false };
-
-    const options = { ...this.serverManager.lastStartOptions, ...this.resolveGpuStartOptions() };
-    await this.stopServer();
-    const result = await this.startServer(modelName, options);
-    return { ...result, restarted: true };
   }
 
   getModelsDir() {
@@ -153,79 +78,13 @@ class WhisperManager {
     return resolved;
   }
 
-  async initializeAtStartup(settings = {}) {
-    const startTime = Date.now();
-
+  async initializeAtStartup() {
+    this.isInitialized = true;
     try {
-      this.isInitialized = true;
-
       await cleanupStaleDownloads(this.getModelsDir());
-
-      // Pre-warm whisper-server if local mode enabled (eliminates 2-5s cold-start delay)
-      const { localTranscriptionProvider, whisperModel } = settings;
-      const { useCuda, useVulkan } = this.resolveGpuStartOptions();
-
-      if (
-        localTranscriptionProvider === "whisper" &&
-        whisperModel &&
-        this.serverManager.isAvailable()
-      ) {
-        const modelPath = this.getModelPath(whisperModel);
-
-        if (fs.existsSync(modelPath)) {
-          debugLogger.info("Pre-warming whisper-server", {
-            model: whisperModel,
-            modelPath,
-            cuda: useCuda,
-            vulkan: useVulkan,
-          });
-
-          try {
-            const serverStartTime = Date.now();
-            await this.serverManager.start(modelPath, { useCuda, useVulkan });
-            this.currentServerModel = whisperModel;
-
-            debugLogger.info("whisper-server pre-warmed successfully", {
-              model: whisperModel,
-              startupTimeMs: Date.now() - serverStartTime,
-              port: this.serverManager.port,
-            });
-          } catch (err) {
-            debugLogger.warn("Server pre-warm failed (will start on first use)", {
-              error: err.message,
-              model: whisperModel,
-            });
-            // Non-fatal: server will start on first transcription
-          }
-        } else {
-          debugLogger.debug("Skipping server pre-warm: model not downloaded", {
-            model: whisperModel,
-            modelPath,
-          });
-        }
-      } else {
-        debugLogger.debug("Skipping server pre-warm", {
-          reason:
-            localTranscriptionProvider !== "whisper"
-              ? "provider not whisper"
-              : !whisperModel
-                ? "no model selected"
-                : "server binary not available",
-        });
-      }
     } catch (error) {
-      debugLogger.warn("Whisper initialization error", {
-        error: error.message,
-      });
-      this.isInitialized = true; // Mark initialized even on error
+      debugLogger.warn("Whisper initialization error", { error: error.message });
     }
-
-    debugLogger.info("Whisper initialization complete", {
-      totalTimeMs: Date.now() - startTime,
-      serverRunning: this.serverManager.ready,
-    });
-
-    // Log dependency status for debugging
     await this.logDependencyStatus();
   }
 
@@ -296,7 +155,6 @@ class WhisperManager {
 
     try {
       await this.serverManager.start(modelPath, options);
-      this.currentServerModel = modelName;
       debugLogger.info("whisper-server started", {
         model: modelName,
         port: this.serverManager.port,
@@ -310,61 +168,6 @@ class WhisperManager {
 
   async stopServer() {
     await this.serverManager.stop();
-    this.currentServerModel = null;
-  }
-
-  async onWakeFromSleep() {
-    const sm = this.serverManager;
-    const modelName = this.currentServerModel;
-    if (
-      !shouldRewarmOnWake({
-        isRemote: sm.isRemote,
-        useCuda: sm.useCuda,
-        useVulkan: sm.useVulkan,
-        modelName,
-        transcribing: this._transcribing,
-        rewarmInFlight: this._rewarmInFlight,
-      })
-    ) {
-      return false;
-    }
-
-    // Replay the last start options (VAD, threads) so the reloaded server
-    // matches the signature the next dictation will use; a bare start would
-    // otherwise be rejected by start()'s no-op guard and reload the model on
-    // the first dictation. See #766. GPU flags are re-resolved so a backend
-    // that failed since is not re-attempted.
-    const options = { ...sm.lastStartOptions, ...this.resolveGpuStartOptions() };
-    this._rewarmInFlight = true;
-    try {
-      debugLogger.info("Re-warming whisper-server after wake from sleep", { model: modelName });
-      await this.stopServer();
-      const result = await this.startServer(modelName, options);
-      if (!result?.success) {
-        debugLogger.warn("whisper-server wake re-warm failed", { reason: result?.reason });
-        return false;
-      }
-      return true;
-    } finally {
-      this._rewarmInFlight = false;
-    }
-  }
-
-  getServerStatus() {
-    return this.serverManager.getStatus();
-  }
-
-  async checkWhisperInstallation() {
-    const serverPath = this.serverManager.getServerBinaryPath();
-    if (!serverPath) {
-      return { installed: false, working: false };
-    }
-
-    return {
-      installed: true,
-      working: this.serverManager.isAvailable(),
-      path: serverPath,
-    };
   }
 
   async transcribeLocalWhisper(audioBlob, options = {}) {
@@ -403,16 +206,6 @@ class WhisperManager {
   }
 
   async transcribeViaServer(audioBlob, model, language, initialPrompt = null, options = {}) {
-    // Mark the server busy so a wake re-warm doesn't kill an in-flight dictation. See #766.
-    this._transcribing = true;
-    try {
-      return await this._runServerTranscription(audioBlob, model, language, initialPrompt, options);
-    } finally {
-      this._transcribing = false;
-    }
-  }
-
-  async _runServerTranscription(audioBlob, model, language, initialPrompt = null, options = {}) {
     // An already-cancelled upload skips the server boot entirely.
     if (options.signal?.aborted) {
       throw createAbortError("whisper-server transcription cancelled");
@@ -428,12 +221,10 @@ class WhisperManager {
     }
 
     await this.serverManager.start(modelPath, {
-      ...this.resolveGpuStartOptions(),
       vadEnabled,
       vadModelPath,
       vadConfig: options.vadConfig || null,
     });
-    this.currentServerModel = model;
 
     // Convert audioBlob to Buffer if needed
     let audioBuffer;
@@ -472,51 +263,6 @@ class WhisperManager {
     const elapsed = Date.now() - startTime;
 
     debugLogger.logWhisperPipeline("transcribeViaServer - completed", {
-      elapsed,
-      resultKeys: Object.keys(result),
-    });
-
-    return this.parseWhisperResult(result);
-  }
-
-  async transcribeViaLan(audioBlob, url, options = {}) {
-    debugLogger.info("Transcription mode: LAN", { url, language: options.language || "auto" });
-
-    await this.serverManager.connectRemote(url);
-
-    let audioBuffer;
-    if (Buffer.isBuffer(audioBlob)) {
-      audioBuffer = audioBlob;
-    } else if (ArrayBuffer.isView(audioBlob)) {
-      audioBuffer = Buffer.from(audioBlob.buffer, audioBlob.byteOffset, audioBlob.byteLength);
-    } else if (audioBlob instanceof ArrayBuffer) {
-      audioBuffer = Buffer.from(audioBlob);
-    } else if (typeof audioBlob === "string") {
-      audioBuffer = Buffer.from(audioBlob, "base64");
-    } else if (audioBlob && audioBlob.buffer && typeof audioBlob.byteLength === "number") {
-      audioBuffer = Buffer.from(audioBlob.buffer, audioBlob.byteOffset || 0, audioBlob.byteLength);
-    } else {
-      throw new Error(`Unsupported audio data type: ${typeof audioBlob}`);
-    }
-
-    if (!audioBuffer || audioBuffer.length === 0) {
-      throw new Error("Audio buffer is empty - no audio data received");
-    }
-
-    debugLogger.logWhisperPipeline("transcribeViaLan - sending to server", {
-      bufferSize: audioBuffer.length,
-      url,
-      language: options.language,
-    });
-
-    const startTime = Date.now();
-    const result = await this.serverManager.transcribe(audioBuffer, {
-      language: options.language || null,
-      initialPrompt: options.initialPrompt || null,
-    });
-    const elapsed = Date.now() - startTime;
-
-    debugLogger.logWhisperPipeline("transcribeViaLan - completed", {
       elapsed,
       resultKeys: Object.keys(result),
     });
@@ -791,159 +537,9 @@ class WhisperManager {
     }
   }
 
-  // FFmpeg methods (still needed for audio format conversion)
   async getFFmpegPath() {
-    if (this.cachedFFmpegPath) {
-      return this.cachedFFmpegPath;
-    }
-
-    let ffmpegPath;
-
-    try {
-      ffmpegPath = require("ffmpeg-static");
-      ffmpegPath = path.normalize(ffmpegPath);
-
-      if (process.platform === "win32" && !ffmpegPath.endsWith(".exe")) {
-        ffmpegPath += ".exe";
-      }
-
-      debugLogger.debug("FFmpeg static path from module", { ffmpegPath });
-
-      // Try unpacked ASAR path first (production builds unpack ffmpeg-static)
-      // Handle both forward slashes and backslashes for cross-platform compatibility
-      const unpackedPath = ffmpegPath.includes("app.asar")
-        ? ffmpegPath.replace(/app\.asar([/\\])/, "app.asar.unpacked$1")
-        : null;
-
-      if (unpackedPath) {
-        debugLogger.debug("Checking unpacked ASAR path", { unpackedPath });
-        if (fs.existsSync(unpackedPath)) {
-          if (process.platform !== "win32") {
-            try {
-              fs.accessSync(unpackedPath, fs.constants.X_OK);
-            } catch {
-              debugLogger.debug("FFmpeg not executable, attempting chmod", { unpackedPath });
-              try {
-                fs.chmodSync(unpackedPath, 0o755);
-              } catch (chmodErr) {
-                debugLogger.warn("Failed to chmod FFmpeg", { error: chmodErr.message });
-              }
-            }
-          }
-          debugLogger.debug("Found FFmpeg in unpacked ASAR", { path: unpackedPath });
-          this.cachedFFmpegPath = unpackedPath;
-          return unpackedPath;
-        } else {
-          debugLogger.warn("Unpacked ASAR path does not exist", { unpackedPath });
-        }
-      }
-
-      // Try original path (development or if not in ASAR)
-      if (fs.existsSync(ffmpegPath)) {
-        if (process.platform !== "win32") {
-          fs.accessSync(ffmpegPath, fs.constants.X_OK);
-        }
-        debugLogger.debug("Found FFmpeg at bundled path", { path: ffmpegPath });
-        this.cachedFFmpegPath = ffmpegPath;
-        return ffmpegPath;
-      } else {
-        debugLogger.warn("Bundled FFmpeg path does not exist", { ffmpegPath });
-      }
-    } catch (err) {
-      debugLogger.warn("Bundled FFmpeg not available", { error: err.message });
-    }
-
-    // Try system FFmpeg paths
-    const systemCandidates =
-      process.platform === "darwin"
-        ? ["/opt/homebrew/bin/ffmpeg", "/usr/local/bin/ffmpeg"]
-        : process.platform === "win32"
-          ? ["C:\\ffmpeg\\bin\\ffmpeg.exe"]
-          : ["/usr/bin/ffmpeg", "/usr/local/bin/ffmpeg"];
-
-    debugLogger.debug("Trying system FFmpeg candidates", { candidates: systemCandidates });
-
-    for (const candidate of systemCandidates) {
-      if (fs.existsSync(candidate)) {
-        debugLogger.debug("Found system FFmpeg", { path: candidate });
-        this.cachedFFmpegPath = candidate;
-        return candidate;
-      }
-    }
-
-    debugLogger.error("FFmpeg not found anywhere");
-    return null;
-  }
-
-  async checkFFmpegAvailability() {
-    const now = Date.now();
-    if (
-      this.ffmpegAvailabilityCache.result !== null &&
-      now < this.ffmpegAvailabilityCache.expiresAt
-    ) {
-      return this.ffmpegAvailabilityCache.result;
-    }
-
-    const ffmpegPath = await this.getFFmpegPath();
-    const result = ffmpegPath
-      ? { available: true, path: ffmpegPath }
-      : { available: false, error: "FFmpeg not found" };
-
-    this.ffmpegAvailabilityCache = { result, expiresAt: now + CACHE_TTL_MS };
-    return result;
-  }
-
-  async getDiagnostics() {
-    const diagnostics = {
-      platform: process.platform,
-      arch: process.arch,
-      resourcesPath: process.resourcesPath || null,
-      isPackaged: !!process.resourcesPath && !process.resourcesPath.includes("node_modules"),
-      ffmpeg: { available: false, path: null, error: null },
-      whisperServer: { available: false, path: null },
-      modelsDir: this.getModelsDir(),
-      models: [],
-    };
-
-    // Check FFmpeg
-    try {
-      this.cachedFFmpegPath = null; // Clear cache for fresh check
-      const ffmpegPath = await this.getFFmpegPath();
-      if (ffmpegPath) {
-        diagnostics.ffmpeg = { available: true, path: ffmpegPath, error: null };
-      } else {
-        diagnostics.ffmpeg = { available: false, path: null, error: "Not found" };
-      }
-    } catch (err) {
-      diagnostics.ffmpeg = { available: false, path: null, error: err.message };
-    }
-
-    // Check whisper server
-    if (this.serverManager) {
-      const serverPath = this.serverManager.getServerBinaryPath?.();
-      diagnostics.whisperServer = {
-        available: this.serverManager.isAvailable(),
-        path: serverPath || null,
-      };
-    }
-
-    // Check downloaded models
-    try {
-      const modelsDir = this.getModelsDir();
-      if (fs.existsSync(modelsDir)) {
-        const files = fs.readdirSync(modelsDir);
-        diagnostics.models = files
-          .filter((f) => f.startsWith("ggml-") && f.endsWith(".bin"))
-          .map((f) => f.replace("ggml-", "").replace(".bin", ""));
-      }
-    } catch {
-      // Ignore errors reading models dir
-    }
-
-    return diagnostics;
+    return this.serverManager.getFFmpegPath();
   }
 }
 
 module.exports = WhisperManager;
-module.exports.shouldRewarmOnWake = shouldRewarmOnWake;
-module.exports.resolveFailedGpuBackends = resolveFailedGpuBackends;

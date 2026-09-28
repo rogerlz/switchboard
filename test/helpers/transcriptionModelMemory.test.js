@@ -5,10 +5,8 @@ const { createRendererServer, installBrowserGlobals } = require("../lib/renderer
 test("per-provider transcription model memory", async (t) => {
   installBrowserGlobals(t, {
     initialStorage: {
-      _providerSettingsMigrated: "1",
-      cloudTranscriptionProvider: "custom",
-      cloudTranscriptionModel: "parasail-whisper-v3",
-      cloudTranscriptionBaseUrl: "https://stt.parasail.example.com/v1",
+      meetingCloudTranscriptionProvider: "deepgram",
+      meetingCloudTranscriptionModel: "nova-3",
     },
   });
   const vite = await createRendererServer(t, {
@@ -17,193 +15,32 @@ test("per-provider transcription model memory", async (t) => {
   const { useSettingsStore } = await vite.ssrLoadModule("/stores/settingsStore.ts");
   const state = () => useSettingsStore.getState();
 
-  await t.test("switch-and-return restores the custom model (Parasail scenario)", () => {
-    state().switchCloudTranscriptionProvider("dictation", "tinfoil");
-    assert.equal(state().cloudTranscriptionProvider, "tinfoil");
-    assert.notEqual(state().cloudTranscriptionModel, "parasail-whisper-v3");
-    assert.equal(
-      state().cloudTranscriptionBaseUrl,
-      "https://stt.parasail.example.com/v1",
-      "the custom URL slot must never be touched by a provider switch"
-    );
+  await t.test("switch-and-return restores the previous model", () => {
+    state().switchCloudTranscriptionProvider("openai");
+    assert.equal(state().meetingCloudTranscriptionProvider, "openai");
+    assert.equal(state().meetingCloudTranscriptionModel, "gpt-4o-mini-transcribe");
 
-    state().switchCloudTranscriptionProvider("dictation", "custom");
-    assert.equal(state().cloudTranscriptionProvider, "custom");
-    assert.equal(state().cloudTranscriptionModel, "parasail-whisper-v3");
+    state().switchCloudTranscriptionProvider("deepgram");
+    assert.equal(state().meetingCloudTranscriptionProvider, "deepgram");
+    assert.equal(state().meetingCloudTranscriptionModel, "nova-3");
   });
 
   await t.test("reselecting the current provider keeps the current model", () => {
-    state().setCloudTranscriptionModel("parasail-tuned");
-    state().switchCloudTranscriptionProvider("dictation", "custom");
-    assert.equal(state().cloudTranscriptionModel, "parasail-tuned");
+    state().setMeetingCloudTranscriptionModel("nova-2");
+    state().switchCloudTranscriptionProvider("deepgram");
+    assert.equal(state().meetingCloudTranscriptionModel, "nova-2");
   });
 
-  await t.test("a remembered model that no longer matches the provider falls back", () => {
-    state().switchCloudTranscriptionProvider("dictation", "groq");
-    state().setCloudTranscriptionModel("retired-groq-model");
-    state().switchCloudTranscriptionProvider("dictation", "custom");
-    state().switchCloudTranscriptionProvider("dictation", "groq");
-    assert.notEqual(
-      state().cloudTranscriptionModel,
-      "retired-groq-model",
-      "an unknown remembered model must degrade to the provider default"
-    );
-    assert.match(state().cloudTranscriptionModel, /^whisper-large-v3/);
-  });
-
-  await t.test("scopes have independent memory and writes", () => {
-    state().switchCloudTranscriptionProvider("dictation", "custom");
-    const dictationModel = state().cloudTranscriptionModel;
-
-    state().switchCloudTranscriptionProvider("meeting", "deepgram");
-    assert.equal(state().meetingCloudTranscriptionProvider, "deepgram");
-    assert.equal(state().meetingCloudTranscriptionModel, "nova-3");
-    assert.equal(state().cloudTranscriptionProvider, "custom", "base scope untouched");
-    assert.equal(state().cloudTranscriptionModel, dictationModel, "base scope untouched");
+  await t.test("a remembered model that is not a streaming model falls back", () => {
+    state().switchCloudTranscriptionProvider("openai");
+    state().setMeetingCloudTranscriptionModel("retired-model");
+    state().switchCloudTranscriptionProvider("deepgram");
+    state().switchCloudTranscriptionProvider("openai");
+    assert.equal(state().meetingCloudTranscriptionModel, "gpt-4o-mini-transcribe");
   });
 
   await t.test("memory persists to localStorage as JSON", () => {
     const persisted = JSON.parse(localStorage.getItem("transcriptionModelByProvider"));
-    assert.equal(typeof persisted, "object");
-    assert.ok(Object.keys(persisted).some((key) => key.startsWith("dictation:")));
+    assert.ok(Object.keys(persisted).every((key) => key.startsWith("meeting:")));
   });
-
-  await t.test("meeting scope restores only streaming-capable models", () => {
-    state().switchCloudTranscriptionProvider("meeting", "openai");
-    // A remembered batch-only model must not survive into the streaming-filtered
-    // meeting scope; the streaming default wins instead.
-    const restored = state().meetingCloudTranscriptionModel;
-    assert.equal(
-      restored,
-      "gpt-4o-mini-transcribe",
-      "the batch-only gpt-transcribe default must not leak into the streaming scope"
-    );
-    state().setMeetingCloudTranscriptionModel("gpt-4o-mini-transcribe");
-    state().switchCloudTranscriptionProvider("meeting", "groq");
-    state().switchCloudTranscriptionProvider("meeting", "openai");
-    assert.notEqual(state().meetingCloudTranscriptionModel, "");
-  });
-
-  // The picker no longer writes the provider itself — switchCloudTranscriptionProvider
-  // is the single writer for both keys, so it must land the provider on its own.
-  await t.test("the switch writes the provider key for every scope", () => {
-    state().switchCloudTranscriptionProvider("dictation", "groq");
-    assert.equal(state().cloudTranscriptionProvider, "groq");
-    state().switchCloudTranscriptionProvider("meeting", "openai");
-    assert.equal(state().meetingCloudTranscriptionProvider, "openai");
-  });
-
-  await t.test("a first switch to openai lands the registry's batch default", () => {
-    state().switchCloudTranscriptionProvider("dictation", "openai");
-    assert.equal(state().cloudTranscriptionModel, "gpt-transcribe");
-  });
-
-  await t.test("an unknown context is a no-op, not a crash", () => {
-    const before = { ...state() };
-    state().switchCloudTranscriptionProvider("nonexistent", "groq");
-    assert.equal(state().cloudTranscriptionProvider, before.cloudTranscriptionProvider);
-    assert.equal(state().cloudTranscriptionModel, before.cloudTranscriptionModel);
-  });
-
-  await t.test("setCloudTranscriptionForAllScopes seeds memory in every scope", () => {
-    state().setCloudTranscriptionForAllScopes({
-      useLocalWhisper: false,
-      cloudTranscriptionMode: "byok",
-      cloudTranscriptionProvider: "corti",
-      cloudTranscriptionModel: "corti-transcribe",
-    });
-    const memory = state().transcriptionModelByProvider;
-    for (const context of ["dictation", "meeting"]) {
-      assert.equal(memory[`${context}:corti`], "corti-transcribe");
-    }
-  });
-});
-
-test("an unset meeting local provider inherits dictation, and onboarding mirrors it", async (t) => {
-  installBrowserGlobals(t, {
-    initialStorage: {
-      _providerSettingsMigrated: "1",
-      localTranscriptionProvider: "nvidia",
-      parakeetModel: "parakeet-tdt-0.6b-v3",
-    },
-  });
-  const vite = await createRendererServer(t, {
-    cachePrefix: "openwhispr-upload-provider-inherit-test-",
-  });
-  const { useSettingsStore, selectResolvedMeetingTranscription } = await vite.ssrLoadModule(
-    "/stores/settingsStore.ts"
-  );
-  const state = () => useSettingsStore.getState();
-
-  await t.test("a missing scoped key inherits the dictation local provider", () => {
-    assert.equal(state().localTranscriptionProvider, "nvidia");
-    assert.equal(state().meetingLocalTranscriptionProvider, "nvidia");
-    assert.equal(selectResolvedMeetingTranscription(state()).localTranscriptionProvider, "nvidia");
-  });
-
-  await t.test(
-    "setCloudTranscriptionForAllScopes writes the dictation local provider into meeting",
-    () => {
-      state().setLocalTranscriptionProvider("cohere");
-      state().setCloudTranscriptionForAllScopes({ useLocalWhisper: true });
-      assert.equal(state().meetingLocalTranscriptionProvider, "cohere");
-      assert.equal(localStorage.getItem("meetingLocalTranscriptionProvider"), "cohere");
-    }
-  );
-});
-
-// The picker commits a cloud selection only on an explicit model click:
-// switchCloudTranscriptionProvider(ctx, browsedProvider) followed by
-// setCloudTranscriptionModel(clickedId). Pin that sequence at store level.
-test("explicit model click commits the clicked model, not the remembered one", async (t) => {
-  installBrowserGlobals(t, {
-    initialStorage: {
-      _providerSettingsMigrated: "1",
-      cloudTranscriptionProvider: "openai",
-      cloudTranscriptionModel: "gpt-4o-transcribe",
-      cloudTranscriptionBaseUrl: "https://stt.parasail.example.com/v1",
-      transcriptionModelByProvider: JSON.stringify({
-        "dictation:groq": "whisper-large-v3",
-      }),
-    },
-  });
-  const vite = await createRendererServer(t, {
-    cachePrefix: "openwhispr-model-click-commit-test-",
-  });
-  const { useSettingsStore } = await vite.ssrLoadModule("/stores/settingsStore.ts");
-  const state = () => useSettingsStore.getState();
-
-  state().switchCloudTranscriptionProvider("dictation", "groq");
-  state().setCloudTranscriptionModel("whisper-large-v3-turbo");
-
-  assert.equal(state().cloudTranscriptionProvider, "groq");
-  assert.equal(
-    state().cloudTranscriptionModel,
-    "whisper-large-v3-turbo",
-    "the clicked model must win over the remembered/default one"
-  );
-  assert.equal(
-    state().transcriptionModelByProvider["dictation:openai"],
-    "gpt-4o-transcribe",
-    "the outgoing provider's model is remembered"
-  );
-  assert.equal(
-    state().cloudTranscriptionBaseUrl,
-    "https://stt.parasail.example.com/v1",
-    "the custom URL slot must never be touched by the commit sequence (#1459/#1463)"
-  );
-});
-
-test("corrupt persisted model memory hydrates as empty, not a crash", async (t) => {
-  installBrowserGlobals(t, {
-    initialStorage: {
-      _providerSettingsMigrated: "1",
-      transcriptionModelByProvider: "{not json",
-    },
-  });
-  const vite = await createRendererServer(t, {
-    cachePrefix: "openwhispr-model-memory-corrupt-test-",
-  });
-  const { useSettingsStore } = await vite.ssrLoadModule("/stores/settingsStore.ts");
-  assert.deepEqual(useSettingsStore.getState().transcriptionModelByProvider, {});
 });

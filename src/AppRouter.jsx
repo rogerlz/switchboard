@@ -29,11 +29,10 @@ export default function AppRouter() {
 function MainApp() {
   useControlPanelWindowDrag(true);
 
-  // There is no onboarding: release the gates main holds (window visibility,
-  // meeting prompts) once the renderer shows the app.
+  // Release the gates main holds (window visibility, meeting prompts) once
+  // the renderer has mounted.
   useEffect(() => {
-    void window.electronAPI?.setOnboardingWindowMode?.("restore");
-    void window.electronAPI?.setOnboardingActive?.(false);
+    void window.electronAPI?.controlPanelReady?.();
   }, []);
 
   return (

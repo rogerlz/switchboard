@@ -1,6 +1,6 @@
 import { useCallback } from "react";
 import { useTranslation } from "react-i18next";
-import { Key, Cpu, Network } from "../icons";
+import { Key, Cpu } from "../icons";
 import { useSettingsStore } from "../../stores/settingsStore";
 import { InferenceModeSelector, SettingsRow } from "../ui/SettingsSection";
 import type { InferenceModeOption } from "../ui/SettingsSection";
@@ -8,7 +8,7 @@ import { Toggle } from "../ui/toggle";
 import TranscriptionModelPicker from "../TranscriptionModelPicker";
 import type { InferenceMode } from "../../types/electron";
 
-export function MeetingSpeakerDetectionRow() {
+function MeetingSpeakerDetectionRow() {
   const { t } = useTranslation();
   const speakerDiarizationEnabled = useSettingsStore((s) => s.speakerDiarizationEnabled);
   const setSpeakerDiarizationEnabled = useSettingsStore((s) => s.setSpeakerDiarizationEnabled);
@@ -23,15 +23,12 @@ export function MeetingSpeakerDetectionRow() {
   );
 }
 
-const noop = () => {};
-
 export function MeetingTranscriptionPanel() {
   const { t } = useTranslation();
 
   const {
     meetingTranscriptionMode,
     setMeetingTranscriptionMode,
-    setMeetingUseLocalWhisper,
     meetingWhisperModel,
     setMeetingWhisperModel,
     meetingLocalTranscriptionProvider,
@@ -44,9 +41,6 @@ export function MeetingTranscriptionPanel() {
     setMeetingCloudTranscriptionProvider,
     meetingCloudTranscriptionModel,
     setMeetingCloudTranscriptionModel,
-    meetingCloudTranscriptionBaseUrl,
-    setMeetingCloudTranscriptionBaseUrl,
-    setMeetingCloudTranscriptionMode,
   } = useSettingsStore();
   const transcriptionModes: InferenceModeOption[] = [
     {
@@ -61,22 +55,9 @@ export function MeetingTranscriptionPanel() {
       description: t("settingsPage.transcription.modes.localDesc"),
       icon: <Cpu className="w-4 h-4" />,
     },
-    {
-      id: "self-hosted",
-      label: t("settingsPage.transcription.modes.selfHosted"),
-      description: t("settingsPage.transcription.modes.selfHostedDesc"),
-      icon: <Network className="w-4 h-4" />,
-      disabled: true,
-      badge: t("common.comingSoon"),
-    },
   ];
-  const effectiveTranscriptionMode = meetingTranscriptionMode;
   const handleTranscriptionModeSelect = (mode: InferenceMode) => {
-    if (mode === "self-hosted") return;
-    if (mode === effectiveTranscriptionMode) return;
-    setMeetingTranscriptionMode(mode);
-    setMeetingUseLocalWhisper(mode === "local");
-    setMeetingCloudTranscriptionMode("byok");
+    if (mode !== meetingTranscriptionMode) setMeetingTranscriptionMode(mode);
   };
 
   const handleLocalTranscriptionModelSelect = useCallback(
@@ -100,8 +81,6 @@ export function MeetingTranscriptionPanel() {
 
   const renderTranscriptionPicker = (mode: "cloud" | "local") => (
     <TranscriptionModelPicker
-      streamingOnly
-      transcriptionContext="meeting"
       selectedCloudProvider={meetingCloudTranscriptionProvider}
       onCloudProviderSelect={setMeetingCloudTranscriptionProvider}
       selectedCloudModel={meetingCloudTranscriptionModel}
@@ -116,12 +95,7 @@ export function MeetingTranscriptionPanel() {
       onLocalModelSelect={handleLocalTranscriptionModelSelect}
       selectedLocalProvider={meetingLocalTranscriptionProvider}
       onLocalProviderSelect={setMeetingLocalTranscriptionProvider}
-      useLocalWhisper={mode === "local"}
-      onModeChange={noop}
       mode={mode}
-      cloudTranscriptionBaseUrl={meetingCloudTranscriptionBaseUrl}
-      setCloudTranscriptionBaseUrl={setMeetingCloudTranscriptionBaseUrl}
-      variant="settings"
     />
   );
 
@@ -129,12 +103,12 @@ export function MeetingTranscriptionPanel() {
     <div className="space-y-3">
       <InferenceModeSelector
         modes={transcriptionModes}
-        activeMode={effectiveTranscriptionMode}
+        activeMode={meetingTranscriptionMode}
         onSelect={handleTranscriptionModeSelect}
       />
 
-      {effectiveTranscriptionMode === "providers" && renderTranscriptionPicker("cloud")}
-      {effectiveTranscriptionMode === "local" && renderTranscriptionPicker("local")}
+      {meetingTranscriptionMode === "providers" && renderTranscriptionPicker("cloud")}
+      {meetingTranscriptionMode === "local" && renderTranscriptionPicker("local")}
       <MeetingSpeakerDetectionRow />
     </div>
   );

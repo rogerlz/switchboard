@@ -7,7 +7,6 @@ const {
   formatJson,
   formatMd,
 } = require("../../src/helpers/transcriptFormatter");
-const { changeLanguage } = require("../../src/helpers/i18nMain");
 
 test("TXT and Markdown exports include participant display names", () => {
   const note = {

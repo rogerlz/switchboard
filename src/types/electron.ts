@@ -4,9 +4,7 @@ export type LocalTranscriptionProvider = "whisper" | "nvidia" | "cohere";
 
 export type ChineseScriptPreference = "simplified" | "traditional" | "as-transcribed";
 
-export type InferenceMode = "providers" | "local" | "self-hosted";
-
-export type SelfHostedType = "openai-compatible" | "lan";
+export type InferenceMode = "providers" | "local";
 
 export interface FailureMetadata {
   error?: string;
@@ -78,60 +76,6 @@ export interface SpaceItem {
   updated_at: string;
 }
 
-export interface GpuDevice {
-  index: number;
-  uuid: string;
-  name: string;
-  vramMb: number;
-}
-
-export interface GpuInfo {
-  hasNvidiaGpu: boolean;
-  gpuName?: string;
-  driverVersion?: string;
-  vramMb?: number;
-  computeCap?: number;
-  /** Whether the card meets the shipped CUDA build's minimum compute capability. */
-  cudaSupported?: boolean;
-}
-
-export interface CudaWhisperStatus {
-  downloaded: boolean;
-  downloading: boolean;
-  path: string | null;
-  gpuInfo: GpuInfo;
-  /** CUDA fell back to CPU on this machine and stays off until retried. */
-  gpuFailed?: boolean;
-}
-
-export interface VulkanWhisperStatus {
-  downloaded: boolean;
-  downloading: boolean;
-  vulkan: VulkanGpuResult;
-  hasNvidiaGpu: boolean;
-  /** Vulkan fell back to CPU on this machine and stays off until retried. */
-  gpuFailed?: boolean;
-}
-
-export interface WhisperServerStatus {
-  available: boolean;
-  running: boolean;
-  port: number | null;
-  hostname: string;
-  isRemote: boolean;
-  modelPath: string | null;
-  modelName: string | null;
-  gpuBackend: "cuda" | "vulkan" | null;
-  /** True only when the running server is actually using a local GPU backend. */
-  gpuAccelerated: boolean;
-}
-
-export interface WhisperCheckResult {
-  installed: boolean;
-  working: boolean;
-  error?: string;
-}
-
 export interface WhisperModelResult {
   success: boolean;
   model: string;
@@ -160,27 +104,8 @@ export interface WhisperModelsListResult {
   cache_dir: string;
 }
 
-export interface FFmpegAvailabilityResult {
-  available: boolean;
-  path?: string;
-  error?: string;
-}
-
-export interface AudioDiagnosticsResult {
-  platform: string;
-  arch: string;
-  resourcesPath: string | null;
-  isPackaged: boolean;
-  ffmpeg: { available: boolean; path: string | null; error: string | null };
-  whisperBinary: { available: boolean; path: string | null; error: string | null };
-  whisperServer: { available: boolean; path: string | null };
-  modelsDir: string;
-  models: string[];
-}
-
-export type SystemAudioMode = "native" | "loopback" | "portal" | "unsupported";
-export type SystemAudioStrategy =
-  "native" | "loopback" | "pipewire-loopback" | "wasapi-loopback" | "unsupported";
+export type SystemAudioMode = "native" | "unsupported";
+export type SystemAudioStrategy = "native" | "unsupported";
 
 export interface MeetingSystemAudioInterruption {
   systemAudioStrategy: SystemAudioStrategy;
@@ -192,51 +117,8 @@ export interface SystemAudioAccessResult {
   granted: boolean;
   status: "granted" | "denied" | "not-determined" | "restricted" | "unknown" | "unsupported";
   mode: SystemAudioMode;
-  supportsPersistentGrant?: boolean;
-  supportsPersistentPortalGrant?: boolean;
-  supportsNativeCapture?: boolean;
-  supportsOnboardingGrant?: boolean;
-  requiresRuntimeSharePrompt?: boolean;
   strategy?: SystemAudioStrategy;
-  restoreTokenAvailable?: boolean;
-  portalVersion?: number | null;
   error?: string;
-}
-
-export interface ScreenRecordingAccessResult {
-  granted: boolean;
-  status: "granted" | "denied" | "not-determined" | "restricted" | "unknown" | "unsupported";
-  supported: boolean;
-  /** macOS only: granted mid-session, so capture stays broken until the app relaunches. */
-  needsRelaunch?: boolean;
-}
-
-export interface UpdateCheckResult {
-  updateAvailable: boolean;
-  version?: string;
-  releaseDate?: string;
-  files?: any[];
-  releaseNotes?: string;
-  message?: string;
-}
-
-export interface UpdateStatusResult {
-  updateAvailable: boolean;
-  updateDownloaded: boolean;
-  isDevelopment: boolean;
-  isSupported: boolean;
-}
-
-export interface UpdateInfoResult {
-  version?: string;
-  releaseDate?: string;
-  releaseNotes?: string | null;
-  files?: any[];
-}
-
-export interface UpdateResult {
-  success: boolean;
-  message: string;
 }
 
 export interface AppVersionResult {
@@ -317,29 +199,11 @@ export interface ParakeetDownloadProgressData {
   sequence?: number;
 }
 
-export interface ParakeetDiagnosticsResult {
-  platform: string;
-  arch: string;
-  resourcesPath: string | null;
-  isPackaged: boolean;
-  sherpaOnnx: { available: boolean; path: string | null };
-  modelsDir: string;
-  models: string[];
-}
-
-export interface VulkanGpuResult {
-  available: boolean;
-  deviceName?: string;
-  reason?: string;
-  error?: string;
-}
-
 declare global {
   interface Window {
     electronAPI: {
       // Basic window operations
-      setOnboardingWindowMode?: (mode: "compact" | "expanded" | "restore") => Promise<boolean>;
-      setOnboardingActive?: (active: boolean) => Promise<boolean>;
+      controlPanelReady?: () => Promise<void>;
 
       // Note operations
       saveNote: (
@@ -448,27 +312,14 @@ declare global {
       // API key management
       getOpenAIKey: () => Promise<string>;
       saveOpenAIKey: (key: string) => Promise<{ success: boolean }>;
-      getUiLanguage: () => Promise<string>;
-      saveUiLanguage: (language: string) => Promise<{ success: boolean; language: string }>;
-      setUiLanguage: (language: string) => Promise<{ success: boolean; language: string }>;
       saveAllKeysToEnv: () => Promise<{ success: boolean; path: string }>;
-      syncStartupPreferences: (prefs: {
-        useLocalWhisper: boolean;
-        localTranscriptionProvider: LocalTranscriptionProvider;
-        model?: string;
-        language?: string;
-      }) => Promise<void>;
 
-      readClipboard: () => Promise<string>;
       writeClipboard: (text: string) => Promise<{ success: boolean }>;
 
-      // Whisper operations (whisper.cpp)
-      checkWhisperInstallation: () => Promise<WhisperCheckResult>;
       downloadWhisperModel: (modelName: string) => Promise<WhisperModelResult>;
       onWhisperDownloadProgress: (
         callback: (event: any, data: WhisperDownloadProgressData) => void
       ) => () => void;
-      checkModelStatus: (modelName: string) => Promise<WhisperModelResult>;
       listWhisperModels: () => Promise<WhisperModelsListResult>;
       deleteWhisperModel: (modelName: string) => Promise<WhisperModelDeleteResult>;
       deleteAllWhisperModels: () => Promise<{
@@ -484,61 +335,12 @@ declare global {
         error?: string;
       }>;
 
-      // Whisper server lifecycle
-      whisperServerStatus: () => Promise<WhisperServerStatus>;
-      whisperGpuRetry: () => Promise<{ success: boolean; willRestart: boolean }>;
-
-      // CUDA GPU acceleration
-      listGpus?: () => Promise<GpuDevice[]>;
-      setGpuDeviceIndex?: (purpose: "transcription", uuid: string) => Promise<{ success: boolean }>;
-      getGpuDeviceIndex?: (purpose: "transcription") => Promise<string>;
-      detectGpu: () => Promise<GpuInfo>;
-      getCudaWhisperStatus: () => Promise<CudaWhisperStatus>;
-      downloadCudaWhisperBinary: () => Promise<{
-        success: boolean;
-        willRestart?: boolean;
-        error?: string;
-      }>;
-      cancelCudaWhisperDownload: () => Promise<{ success: boolean }>;
-      deleteCudaWhisperBinary: () => Promise<{ success: boolean }>;
-      onCudaDownloadProgress: (
-        callback: (data: {
-          downloadedBytes: number;
-          totalBytes: number;
-          percentage: number;
-        }) => void
-      ) => () => void;
-      onCudaFallbackNotification: (callback: () => void) => () => void;
-
-      // Vulkan GPU acceleration (whisper on AMD/Intel GPUs)
-      getVulkanWhisperStatus: () => Promise<VulkanWhisperStatus>;
-      downloadVulkanWhisperBinary: () => Promise<{
-        success: boolean;
-        willRestart?: boolean;
-        error?: string;
-      }>;
-      cancelVulkanWhisperDownload: () => Promise<{ success: boolean }>;
-      deleteVulkanWhisperBinary: () => Promise<{ success: boolean; deletedCount?: number }>;
-      onVulkanWhisperDownloadProgress: (
-        callback: (data: {
-          downloadedBytes: number;
-          totalBytes: number;
-          percentage: number;
-        }) => void
-      ) => () => void;
-      onGpuFallbackNotification: (callback: () => void) => () => void;
-
-      // One-time "GPU pack needs re-downloading" notice from the legacy-layout migration
-      getGpuPackMigrationNotice: () => Promise<{ packs: string[] } | null>;
-      dismissGpuPackMigrationNotice: () => Promise<{ success: boolean }>;
-
       // Parakeet operations (NVIDIA via sherpa-onnx)
       checkParakeetInstallation: () => Promise<ParakeetCheckResult>;
       downloadParakeetModel: (modelName: string) => Promise<ParakeetModelResult>;
       onParakeetDownloadProgress: (
         callback: (event: any, data: ParakeetDownloadProgressData) => void
       ) => () => void;
-      checkParakeetModelStatus: (modelName: string) => Promise<ParakeetModelResult>;
       listParakeetModels: () => Promise<ParakeetModelsListResult>;
       deleteParakeetModel: (modelName: string) => Promise<ParakeetModelDeleteResult>;
       deleteAllParakeetModels: () => Promise<{
@@ -554,19 +356,12 @@ declare global {
           message?: string;
         } & FailureMetadata
       >;
-      getParakeetDiagnostics: () => Promise<ParakeetDiagnosticsResult>;
 
       // Local transcription model download status
       modelGetActiveDownloads: () => Promise<LocalModelDownloadStatus[]>;
 
-      // Window control operations
-      windowMinimize: () => Promise<void>;
-      windowMaximize: () => Promise<void>;
-      windowClose: () => Promise<void>;
-      windowIsMaximized: () => Promise<boolean>;
       snapToMeetingMode: () => Promise<void>;
       restoreFromMeetingMode: () => Promise<void>;
-      getPlatform: () => string;
       startControlPanelDrag: () => Promise<void>;
       stopControlPanelDrag: () => Promise<void>;
       setNotificationInteractivity: (interactive: boolean) => Promise<void>;
@@ -575,60 +370,24 @@ declare global {
       cleanupApp: () => Promise<{ success: boolean; message: string; errors?: string[] }>;
       relaunchApp: () => Promise<void>;
 
-      // Update operations
-      checkForUpdates: () => Promise<UpdateCheckResult>;
-      downloadUpdate: () => Promise<UpdateResult>;
-      installUpdate: () => Promise<UpdateResult>;
       getAppVersion: () => Promise<AppVersionResult>;
-      getUpdateStatus: () => Promise<UpdateStatusResult>;
-      getUpdateInfo: () => Promise<UpdateInfoResult | null>;
-      setAutoUpdatesEnabled: (enabled: boolean) => Promise<{ success: boolean }>;
-
-      // Update event listeners
-      onUpdateAvailable: (callback: (event: any, info: any) => void) => () => void;
-      onUpdateNotAvailable: (callback: (event: any, info: any) => void) => () => void;
-      onUpdateDownloaded: (callback: (event: any, info: any) => void) => () => void;
-      onUpdateDownloadProgress: (callback: (event: any, progressObj: any) => void) => () => void;
-      onUpdateError: (callback: (event: any, error: any) => void) => () => void;
 
       openExternal: (url: string) => Promise<{ success: boolean; error?: string }>;
 
       // Settings shortcut (Cmd+, / Ctrl+,)
       onShowSettings?: (callback: () => void) => () => void;
 
-      // Gemini API key management
-      getGeminiKey: () => Promise<string | null>;
-      saveGeminiKey: (key: string) => Promise<void>;
-
-      // Groq API key management
-      getGroqKey: () => Promise<string | null>;
-      saveGroqKey: (key: string) => Promise<void>;
-
-      // xAI API key management
-      getXaiKey?: () => Promise<string | null>;
-      saveXaiKey?: (key: string) => Promise<void>;
-
-      // Mistral API key management
-      getMistralKey: () => Promise<string | null>;
-      saveMistralKey: (key: string) => Promise<void>;
-
       // Corti credential management
       getCortiClientId?: () => Promise<string | null>;
       saveCortiClientId?: (key: string) => Promise<void>;
       getCortiClientSecret?: () => Promise<string | null>;
       saveCortiClientSecret?: (key: string) => Promise<void>;
-      getCortiKey?: () => Promise<string | null>;
-      saveCortiKey?: (key: string) => Promise<void>;
       getTinfoilKey?: () => Promise<string | null>;
       saveTinfoilKey?: (key: string) => Promise<void>;
       getDeepgramKey?: () => Promise<string | null>;
       saveDeepgramKey?: (key: string) => Promise<void>;
       getAssemblyAIKey?: () => Promise<string | null>;
       saveAssemblyAIKey?: (key: string) => Promise<void>;
-
-      // Custom endpoint API keys
-      getCustomTranscriptionKey?: () => Promise<string | null>;
-      saveCustomTranscriptionKey?: (key: string) => Promise<void>;
 
       // Debug logging
       getLogLevel?: () => Promise<string>;
@@ -651,10 +410,6 @@ declare global {
         error?: string;
       }>;
       openLogsFolder: () => Promise<{ success: boolean; error?: string }>;
-
-      // FFmpeg availability
-      checkFFmpegAvailability: () => Promise<FFmpegAvailabilityResult>;
-      getAudioDiagnostics: () => Promise<AudioDiagnosticsResult>;
 
       // System settings helpers
       requestMicrophoneAccess?: () => Promise<{ granted: boolean }>;
@@ -685,18 +440,7 @@ declare global {
       // Google Calendar
       gcalStartOAuth?: () => Promise<{ success: boolean; email?: string; error?: string }>;
       gcalDisconnect?: (email?: string) => Promise<{ success: boolean; error?: string }>;
-      gcalGetConnectionStatus?: () => Promise<{
-        connected: boolean;
-        accounts: Array<{ email: string }>;
-        email: string | null;
-      }>;
-      gcalGetCalendars?: () => Promise<{ success: boolean; calendars: any[] }>;
-      gcalSetCalendarSelection?: (
-        calendarId: string,
-        isSelected: boolean
-      ) => Promise<{ success: boolean; error?: string }>;
       gcalSetPrimaryOnly?: (value: boolean) => Promise<{ success: boolean; error?: string }>;
-      gcalSyncEvents?: () => Promise<{ success: boolean; error?: string }>;
       gcalGetUpcomingEvents?: (
         windowMinutes?: number
       ) => Promise<{ success: boolean; events: any[] }>;
@@ -796,25 +540,11 @@ declare global {
       onMeetingSystemAudioSilent?: (
         callback: (data: { systemAudioStrategy: SystemAudioStrategy }) => void
       ) => () => void;
-      onMeetingSystemAudioDegraded?: (callback: () => void) => () => void;
       onMeetingSystemAudioInterrupted?: (
         callback: (data: MeetingSystemAudioInterruption) => void
       ) => () => void;
       onMeetingSystemAudioResumed?: (callback: () => void) => () => void;
 
-      // Speaker diarization
-      downloadDiarizationModels?: () => Promise<{ success: boolean; error?: string }>;
-      getDiarizationModelStatus?: () => Promise<{
-        available: boolean;
-        modelsDownloaded: boolean;
-      }>;
-      deleteDiarizationModels?: () => Promise<{ success: boolean }>;
-      cancelDiarizationDownload?: () => Promise<{
-        success: boolean;
-        message?: string;
-        error?: string;
-      }>;
-      onDiarizationDownloadProgress?: (callback: (data: any) => void) => () => void;
       onMeetingDiarizationComplete?: (
         callback: (data: {
           sessionId?: string;
@@ -853,7 +583,6 @@ declare global {
         email?: string | null,
         profileId?: number | null
       ) => Promise<{ success: boolean; profileId: number | null }>;
-      removeSpeakerMapping?: (noteId: number, speakerId: string) => Promise<{ success: boolean }>;
       getSpeakerProfiles?: () => Promise<
         Array<{
           id: number;
@@ -889,10 +618,6 @@ declare global {
       // Microsoft Calendar
       mcalStartOAuth?: () => Promise<{ success: boolean; email?: string; error?: string }>;
       mcalDisconnect?: (email?: string) => Promise<{ success: boolean; error?: string }>;
-      mcalGetConnectionStatus?: () => Promise<{
-        connected: boolean;
-        accounts: Array<{ email: string }>;
-      }>;
       mcalSetPrimaryOnly?: (value: boolean) => Promise<{ success: boolean; error?: string }>;
       onMcalConnectionChanged?: (callback: (data: any) => void) => () => void;
       onMcalEventsSynced?: (callback: (data: any) => void) => () => void;
@@ -921,24 +646,7 @@ declare global {
         expectedCount: number;
         countIsExplicit?: boolean;
       }) => Promise<{ success: boolean; error?: string }>;
-      getWhisperVadConfig?: () => Promise<{
-        success: boolean;
-        config?: {
-          dictationSileroEnabled: boolean;
-          noteRecordingSileroEnabled: boolean;
-          meetingSileroEnabled: boolean;
-          threshold: number;
-          minSpeechDurationMs: number;
-          minSilenceDurationMs: number;
-          maxSpeechDurationS: number;
-          speechPadMs: number;
-          samplesOverlap: number;
-        };
-        error?: string;
-      }>;
       setWhisperVadConfig?: (config: {
-        dictationSileroEnabled?: boolean;
-        noteRecordingSileroEnabled?: boolean;
         meetingSileroEnabled?: boolean;
         threshold?: number;
         minSpeechDurationMs?: number;
@@ -958,7 +666,6 @@ declare global {
         action: string
       ) => Promise<{ success: boolean }>;
       joinCalendarMeeting?: (eventId: string) => Promise<{ success: boolean }>;
-      startManualMeeting?: () => Promise<void>;
       getPendingMeetingNoteNavigation?: () => Promise<{
         noteId: number;
         folderId: number;
@@ -973,8 +680,6 @@ declare global {
       onNoteNavigationPending?: (callback: () => void) => () => void;
     };
 
-    api?: {
-      sendDebugLog: (message: string) => void;
-    };
+    api?: {};
   }
 }

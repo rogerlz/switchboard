@@ -1,11 +1,5 @@
-import React, { Suspense, useState, useEffect, useRef, useCallback } from "react";
+import React, { Suspense, useState, useEffect, useCallback } from "react";
 import { useTranslation } from "react-i18next";
-import { Button } from "./ui/button";
-import { Download, RefreshCw, Loader2 } from "./icons";
-import { ConfirmDialog, AlertDialog } from "./ui/dialog";
-import { useDialogs } from "../hooks/useDialogs";
-import { useToast } from "./ui/useToast";
-import { useUpdater } from "../hooks/useUpdater";
 import { useCollapsibleSidebar } from "../hooks/useCollapsibleSidebar";
 import { useSettingsStore } from "../stores/settingsStore";
 import {
@@ -20,7 +14,6 @@ import MeetingRecordingMount from "./MeetingRecordingMount";
 import MeetingRecordingPill from "./notes/MeetingRecordingPill";
 import NewNoteMenu from "./notes/NewNoteMenu";
 
-import { getCachedPlatform } from "../utils/platform";
 import { useCreateNote } from "../hooks/useCreateNote";
 import {
   setActiveNoteId,
@@ -29,8 +22,6 @@ import {
   useActiveNoteId,
   initializeNotes,
 } from "../stores/noteStore";
-
-const platform = getCachedPlatform();
 
 const SIDEBAR_WIDTH_PX = 192;
 
@@ -73,16 +64,6 @@ export default function ControlPanel({ initialSettingsSection }: ControlPanelPro
     folderId: number;
     event: any;
   } | null>(null);
-  const updateReadyToastShown = useRef(false);
-  const { toast } = useToast();
-  const {
-    status: updateStatus,
-    downloadProgress,
-    isDownloading,
-    isInstalling,
-    downloadUpdate,
-    installUpdate,
-  } = useUpdater();
 
   const { createNote } = useCreateNote();
   // The note is created before the view switches so Notes mounts with it already open.
@@ -90,9 +71,6 @@ export default function ControlPanel({ initialSettingsSection }: ControlPanelPro
     await createNote();
     setActiveView("personal-notes");
   }, [createNote]);
-
-  const { confirmDialog, alertDialog, showConfirmDialog, hideConfirmDialog, hideAlertDialog } =
-    useDialogs();
 
   useEffect(() => {
     const { noteFilesEnabled, noteFilesPath } = useSettingsStore.getState();
@@ -104,7 +82,7 @@ export default function ControlPanel({ initialSettingsSection }: ControlPanelPro
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      const mod = platform === "darwin" ? e.metaKey : e.ctrlKey;
+      const mod = e.metaKey;
       if (mod && e.key === "k") {
         e.preventDefault();
         setShowSearch(true);
@@ -116,21 +94,6 @@ export default function ControlPanel({ initialSettingsSection }: ControlPanelPro
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, []);
-
-  useEffect(() => {
-    if (updateStatus.updateDownloaded && !isDownloading) {
-      if (!updateReadyToastShown.current) {
-        updateReadyToastShown.current = true;
-        toast({
-          title: t("controlPanel.update.readyTitle"),
-          description: t("controlPanel.update.readyDescription"),
-          variant: "success",
-        });
-      }
-    } else {
-      updateReadyToastShown.current = false;
-    }
-  }, [updateStatus.updateDownloaded, isDownloading, toast, t]);
 
   useEffect(() => {
     const drain = async () => {
@@ -192,72 +155,6 @@ export default function ControlPanel({ initialSettingsSection }: ControlPanelPro
     else setActiveNoteId(null);
   }, [isMeetingMode]);
 
-  const handleUpdateClick = async () => {
-    if (updateStatus.updateDownloaded) {
-      showConfirmDialog({
-        title: t("controlPanel.update.installTitle"),
-        description: t("controlPanel.update.installDescription"),
-        onConfirm: async () => {
-          try {
-            await installUpdate();
-          } catch (error) {
-            toast({
-              title: t("controlPanel.update.couldNotInstallTitle"),
-              description: t("controlPanel.update.couldNotInstallDescription"),
-              variant: "destructive",
-            });
-          }
-        },
-      });
-    } else if (updateStatus.updateAvailable && !isDownloading) {
-      try {
-        await downloadUpdate();
-      } catch (error) {
-        toast({
-          title: t("controlPanel.update.couldNotDownloadTitle"),
-          description: t("controlPanel.update.couldNotDownloadDescription"),
-          variant: "destructive",
-        });
-      }
-    }
-  };
-
-  const getUpdateButtonContent = () => {
-    if (isInstalling) {
-      return (
-        <>
-          <Loader2 size={14} className="animate-spin" />
-          <span>{t("controlPanel.update.installing")}</span>
-        </>
-      );
-    }
-    if (isDownloading) {
-      return (
-        <>
-          <Loader2 size={14} className="animate-spin" />
-          <span>{Math.round(downloadProgress)}%</span>
-        </>
-      );
-    }
-    if (updateStatus.updateDownloaded) {
-      return (
-        <>
-          <RefreshCw size={14} />
-          <span>{t("controlPanel.update.installButton")}</span>
-        </>
-      );
-    }
-    if (updateStatus.updateAvailable) {
-      return (
-        <>
-          <Download size={14} />
-          <span>{t("controlPanel.update.availableButton")}</span>
-        </>
-      );
-    }
-    return null;
-  };
-
   return (
     <div className="h-screen bg-surface-window flex flex-col">
       <MeetingRecordingMount />
@@ -270,23 +167,6 @@ export default function ControlPanel({ initialSettingsSection }: ControlPanelPro
           setActiveNoteId(recordingNoteId);
         }}
       />
-      <ConfirmDialog
-        open={confirmDialog.open}
-        onOpenChange={hideConfirmDialog}
-        title={confirmDialog.title}
-        description={confirmDialog.description}
-        onConfirm={confirmDialog.onConfirm}
-        variant={confirmDialog.variant}
-      />
-
-      <AlertDialog
-        open={alertDialog.open}
-        onOpenChange={hideAlertDialog}
-        title={alertDialog.title}
-        description={alertDialog.description}
-        onOk={() => {}}
-      />
-
       {showSettings && (
         <Suspense fallback={null}>
           <SettingsModal
@@ -343,23 +223,6 @@ export default function ControlPanel({ initialSettingsSection }: ControlPanelPro
               setSettingsSection(undefined);
               setShowSettings(true);
             }}
-            updateAction={
-              !updateStatus.isDevelopment &&
-              (updateStatus.updateAvailable ||
-                updateStatus.updateDownloaded ||
-                isDownloading ||
-                isInstalling) ? (
-                <Button
-                  variant={updateStatus.updateDownloaded ? "default" : "outline"}
-                  size="sm"
-                  onClick={handleUpdateClick}
-                  disabled={isInstalling || isDownloading}
-                  className="gap-1.5 text-xs w-full h-7"
-                >
-                  {getUpdateButtonContent()}
-                </Button>
-              ) : undefined
-            }
           />
         </div>
         <main className="flex-1 flex flex-col overflow-hidden p-2">

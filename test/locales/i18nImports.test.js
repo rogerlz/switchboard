@@ -10,6 +10,5 @@ test("i18n still loads under a window stub that lacks localStorage", async (t) =
 
   const mod = await vite.ssrLoadModule("/i18n.ts");
 
-  assert.equal(typeof mod.normalizeUiLanguage, "function");
-  assert.ok(mod.SUPPORTED_UI_LANGUAGES.includes(mod.default.language));
+  assert.equal(mod.default.language, "en");
 });

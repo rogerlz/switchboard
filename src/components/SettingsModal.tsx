@@ -6,7 +6,6 @@ import SettingsPage, { SettingsSectionType } from "./SettingsPage";
 
 export type { SettingsSectionType };
 
-// Legacy deep-links land on the matching sub-tab via LEGACY_SUB_TAB.
 const SECTION_ALIASES: Record<string, SettingsSectionType> = {
   meetings: "speechToText",
   transcription: "speechToText",
@@ -14,11 +13,6 @@ const SECTION_ALIASES: Record<string, SettingsSectionType> = {
   privacy: "privacyData",
   permissions: "privacyData",
   developer: "system",
-};
-
-const LEGACY_SUB_TAB: Record<string, string> = {
-  transcription: "dictation",
-  meetings: "noteRecording",
 };
 
 interface SettingsModalProps {
@@ -70,24 +64,14 @@ export default function SettingsModal({ open, onOpenChange, initialSection }: Se
   const [activeSection, setActiveSection] = React.useState<SettingsSectionType>(() =>
     resolveSection(initialSection)
   );
-  const [initialSubTab, setInitialSubTab] = useState<string | undefined>(() =>
-    initialSection ? LEGACY_SUB_TAB[initialSection] : undefined
-  );
   const [prevOpen, setPrevOpen] = useState(open);
 
   if (open && !prevOpen && initialSection) {
     setPrevOpen(open);
     setActiveSection(resolveSection(initialSection));
-    setInitialSubTab(LEGACY_SUB_TAB[initialSection]);
   } else if (open !== prevOpen) {
     setPrevOpen(open);
-    if (!open) setInitialSubTab(undefined);
   }
-
-  const handleSectionChange = (section: SettingsSectionType) => {
-    setActiveSection(section);
-    setInitialSubTab(undefined);
-  };
 
   return (
     <SidebarModal<SettingsSectionType>
@@ -96,13 +80,9 @@ export default function SettingsModal({ open, onOpenChange, initialSection }: Se
       title={t("settingsModal.title")}
       sidebarItems={sidebarItems}
       activeSection={activeSection}
-      onSectionChange={handleSectionChange}
+      onSectionChange={setActiveSection}
     >
-      <SettingsPage
-        activeSection={activeSection}
-        onNavigateToSection={handleSectionChange}
-        initialSubTab={initialSubTab}
-      />
+      <SettingsPage activeSection={activeSection} />
     </SidebarModal>
   );
 }

@@ -146,30 +146,6 @@ test("Parakeet refuses transcription before touching the sidecar on unsupported 
   assert.equal(transcribeCalls, 0);
 });
 
-test("Parakeet skips startup prewarming on unsupported macOS", async (t) => {
-  stubMacosVersion(t, "12.7.6");
-  const modelsDir = await fs.mkdtemp(path.join(os.tmpdir(), "openwhispr-parakeet-capability-"));
-  t.after(() => fs.rm(modelsDir, { recursive: true, force: true }));
-  const manager = new ParakeetManager();
-  const model = Object.keys(modelRegistryData.parakeetModels)[0];
-  let startCalls = 0;
-  manager.getModelsDir = () => modelsDir;
-  manager.logDependencyStatus = async () => {};
-  manager.serverManager.isAvailable = () => true;
-  manager.serverManager.isModelDownloaded = () => true;
-  manager.serverManager.startServer = async () => {
-    startCalls += 1;
-    return { success: true };
-  };
-
-  await manager.initializeAtStartup({
-    localTranscriptionProvider: "nvidia",
-    parakeetModel: model,
-  });
-
-  assert.equal(startCalls, 0);
-});
-
 test("listParakeetModels surfaces active installation state", async () => {
   const manager = new ParakeetManager();
   const model = Object.keys(modelRegistryData.parakeetModels)[0];

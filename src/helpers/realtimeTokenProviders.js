@@ -36,11 +36,6 @@ const REALTIME_TOKEN_PROVIDERS = {
   "deepgram-realtime": async ({ environmentManager }, _options, streams) =>
     duplicate(streams, requireKey(environmentManager.getDeepgramKey(), "Deepgram")),
 
-  // The raw key opens the Live socket directly (BidiGenerateContent?key=) and is
-  // not consumed by a handshake, so both streams can share it.
-  "gemini-realtime": async ({ environmentManager }, _options, streams) =>
-    duplicate(streams, requireKey(environmentManager.getGeminiKey(), "Gemini")),
-
   "corti-realtime": async ({ mintCortiToken }, options, streams) => {
     // One token covers both meeting streams; it's only used at the WSS handshake.
     const { token } = await mintCortiToken(options);

@@ -13,7 +13,7 @@ const source = fs.readFileSync(ipcPath, "utf8");
 function section(from, to) {
   return source.slice(source.indexOf(from), source.indexOf(to));
 }
-function harness({ native = true, local = false } = {}) {
+function harness({ local = false } = {}) {
   let now = 0;
   let onChunk;
   const pcm = [];
@@ -49,7 +49,7 @@ function harness({ native = true, local = false } = {}) {
     BrowserWindow: { fromWebContents: () => null },
     debugLogger: { warn() {}, debug() {}, error() {}, info() {} },
     meetingDetectionEngine: { recordMeetingAudioChunk: (_, buffer) => observed.push(buffer) },
-    audioTapManager: native ? capture : {},
+    audioTapManager: capture,
     meetingAecManager: {
       processSystemBuffer: (buffer) => {
         aec.push(buffer);
@@ -85,7 +85,7 @@ function harness({ native = true, local = false } = {}) {
     `
     ${section("const resetMeetingReconnectAudio =", "// Labels the socket for field logs")}
     ${section("const dispatchMeetingAudioBuffer =", "const stopMeetingAec =")}
-    ${section("const sendMeetingAudio =", "// The Windows helper reports capture_silent")}
+    ${section("const sendMeetingAudio =", "const startManagedMeetingSystemAudio =")}
     ${section("const startManagedMeetingSystemAudio =", "const fallBackToMicOnly =")}
     globalThis.startCapture = () => startManagedMeetingSystemAudio({ sender: {} }, capture, "warning");
     globalThis.replaySystemAudio = (streaming) => replayMeetingReconnectAudio("system", streaming);
@@ -296,17 +296,6 @@ test("a restart before the first packet does not move the first-packet anchor", 
   run.chunk();
   assert.equal(bytes(run.pcm), 4800);
   assert.equal(run.context.meetingDiarizationStartedAt, 3000);
-});
-
-test("other native platform helpers keep their existing idle-gap behavior", async () => {
-  const run = harness({ native: false });
-  await run.start();
-  run.watchdog.start({ systemAudioStrategy: "wasapi-loopback" });
-  run.chunk();
-  run.at(10000);
-  await run.restart();
-  run.chunk();
-  assert.equal(bytes(run.pcm), 9600);
 });
 
 test("local transcription excludes synthetic silence while diarization retains the gap", async () => {

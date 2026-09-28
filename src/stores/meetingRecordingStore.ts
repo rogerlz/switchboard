@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import { getSettings, selectResolvedMeetingTranscription } from "./settingsStore";
+import { getSettings } from "./settingsStore";
 import { getMeetingStreamingTranscriptionProviders } from "../models/ModelRegistry";
 import { resolveMeetingTranscriptionOptions } from "../helpers/meetingTranscriptionRouting";
 import { followsSystemDefaultMic } from "../helpers/micSelectionRecovery";
@@ -10,19 +10,9 @@ import {
   resolveInitialSpeakerCountOverride,
   resolveParticipantSpeakerCountSync,
 } from "../utils/participants";
-import type {
-  MeetingSystemAudioInterruption,
-  NoteItem,
-  SystemAudioAccessResult,
-  SystemAudioStrategy,
-} from "../types/electron";
+import type { MeetingSystemAudioInterruption, NoteItem } from "../types/electron";
 import type { CalendarAttendee } from "../types/calendar";
-import {
-  DEFAULT_SYSTEM_AUDIO_ACCESS,
-  getDisplayCaptureModeForStrategy,
-  getFallbackSystemAudioAccess,
-  isRendererSystemAudioStrategy,
-} from "../utils/systemAudioAccess";
+import { DEFAULT_SYSTEM_AUDIO_ACCESS } from "../utils/systemAudioAccess";
 import {
   DEFAULT_EXPECTED_SPEAKER_COUNT,
   MAX_SPEAKER_COUNT,
@@ -152,18 +142,17 @@ const isSegmentWithinIdentificationWindow = (
 
 const getMeetingTranscriptionOptions = () => {
   const state = getSettings();
-  const resolved = selectResolvedMeetingTranscription(state);
   const language = getBaseLanguageCode(state.preferredLanguage);
 
   return resolveMeetingTranscriptionOptions({
-    transcriptionMode: resolved.transcriptionMode,
+    transcriptionMode: state.meetingTranscriptionMode,
     language,
-    localProvider: resolved.localTranscriptionProvider,
-    whisperModel: resolved.whisperModel,
-    parakeetModel: resolved.parakeetModel,
-    cohereModel: resolved.cohereModel,
-    selectedProvider: resolved.cloudTranscriptionProvider,
-    selectedModel: resolved.cloudTranscriptionModel,
+    localProvider: state.meetingLocalTranscriptionProvider,
+    whisperModel: state.meetingWhisperModel,
+    parakeetModel: state.meetingParakeetModel,
+    cohereModel: state.meetingCohereModel,
+    selectedProvider: state.meetingCloudTranscriptionProvider,
+    selectedModel: state.meetingCloudTranscriptionModel,
     byokProviders: getMeetingStreamingTranscriptionProviders(),
     cortiEnvironment: state.cortiEnvironment,
     cortiTenant: state.cortiTenant,
@@ -174,80 +163,6 @@ const stopMediaStream = (stream: MediaStream | null) => {
   try {
     stream?.getTracks().forEach((track) => track.stop());
   } catch {}
-};
-
-const getDisplayCaptureOptions = (mode: "loopback" | "portal") => {
-  if (mode === "loopback") {
-    return { video: true, audio: true };
-  }
-
-  return {
-    video: true,
-    audio: true,
-    systemAudio: "include",
-    windowAudio: "system",
-    selfBrowserSurface: "exclude",
-  } as DisplayMediaStreamOptions & {
-    systemAudio?: "include";
-    windowAudio?: "system";
-    selfBrowserSurface?: "exclude";
-  };
-};
-
-const requestSystemAudioDisplayStream = async (mode: "loopback" | "portal") => {
-  try {
-    const stream = await navigator.mediaDevices.getDisplayMedia(getDisplayCaptureOptions(mode));
-    const audioTrack = stream.getAudioTracks()[0];
-
-    if (!audioTrack) {
-      stopMediaStream(stream);
-      return { stream: null, error: new Error("No system-audio track was returned.") };
-    }
-
-    stream.getVideoTracks().forEach((track) => track.stop());
-    return { stream, error: null };
-  } catch (error) {
-    return { stream: null, error: error as Error };
-  }
-};
-
-const prepareMeetingSystemAudioCapture = (initialSystemAudioAccess: SystemAudioAccessResult) => {
-  const initialSystemAudioStrategy = initialSystemAudioAccess.strategy ?? "unsupported";
-  const initialDisplayCaptureStrategy = isRendererSystemAudioStrategy(initialSystemAudioStrategy)
-    ? initialSystemAudioStrategy
-    : null;
-  const systemCapturePromise = initialDisplayCaptureStrategy
-    ? requestSystemAudioDisplayStream(
-        getDisplayCaptureModeForStrategy(initialDisplayCaptureStrategy)
-      )
-    : Promise.resolve({ stream: null, error: null });
-
-  return {
-    initialSystemAudioStrategy,
-    initialDisplayCaptureStrategy,
-    systemCapturePromise,
-  };
-};
-
-const ensureRendererSystemAudioCapture = async ({
-  initialDisplayCaptureStrategy,
-  systemAudioStrategy,
-  systemCaptureResult,
-}: {
-  initialDisplayCaptureStrategy: "loopback" | null;
-  systemAudioStrategy: SystemAudioStrategy;
-  systemCaptureResult: { stream: MediaStream | null; error: Error | null };
-}) => {
-  if (
-    systemCaptureResult.stream ||
-    systemCaptureResult.error ||
-    !isRendererSystemAudioStrategy(systemAudioStrategy) ||
-    initialDisplayCaptureStrategy
-  ) {
-    return systemCaptureResult;
-  }
-
-  return requestSystemAudioDisplayStream(getDisplayCaptureModeForStrategy(systemAudioStrategy));
 };
 
 const getMeetingWorkletBlobUrl = (() => {
@@ -405,10 +320,6 @@ let micProcessor: AudioWorkletNode | null = null;
 let micStream: MediaStream | null = null;
 let micAnalyser: AnalyserNode | null = null;
 let micRecovery: ActiveMicRecoveryController | null = null;
-let systemContext: AudioContext | null = null;
-let systemSource: MediaStreamAudioSourceNode | null = null;
-let systemProcessor: AudioWorkletNode | null = null;
-let systemStream: MediaStream | null = null;
 let isRecordingFlag = false;
 let isStartingFlag = false;
 let activeRecordingSessionId: string | null = null;
@@ -684,20 +595,6 @@ async function cleanup(): Promise<void> {
   } catch {}
   micContext = null;
 
-  await flushAndDisconnectProcessor(systemProcessor);
-  systemProcessor = null;
-
-  systemSource?.disconnect();
-  systemSource = null;
-
-  stopMediaStream(systemStream);
-  systemStream = null;
-
-  try {
-    await systemContext?.close();
-  } catch {}
-  systemContext = null;
-
   ipcCleanups.forEach((fn) => fn());
   ipcCleanups = [];
   // A debounced config push firing after stop would repopulate the session
@@ -847,10 +744,6 @@ export async function startRecording(args: StartRecordingArgs): Promise<boolean>
       }));
     };
     let setupMicResult: MediaStream | null = null;
-    let setupSystemCaptureResult: { stream: MediaStream | null; error: Error | null } = {
-      stream: null,
-      error: null,
-    };
     const releaseSession = () => {
       if (activeRecordingSessionId === sessionId) activeRecordingSessionId = null;
     };
@@ -860,9 +753,7 @@ export async function startRecording(args: StartRecordingArgs): Promise<boolean>
       });
     const teardownStart = async () => {
       stopMediaStream(setupMicResult);
-      stopMediaStream(setupSystemCaptureResult.stream);
       setupMicResult = null;
-      setupSystemCaptureResult = { stream: null, error: null };
       isRecordingFlag = false;
       isStartingFlag = false;
       await teardownFailedMeetingRecordingSetup({
@@ -911,14 +802,11 @@ export async function startRecording(args: StartRecordingArgs): Promise<boolean>
 
       const startTime = performance.now();
       const initialSystemAudioAccess =
-        (await (window.electronAPI?.checkSystemAudioAccess?.() ??
-          Promise.resolve(DEFAULT_SYSTEM_AUDIO_ACCESS))) ?? getFallbackSystemAudioAccess();
+        (await window.electronAPI?.checkSystemAudioAccess?.()) ?? DEFAULT_SYSTEM_AUDIO_ACCESS;
       if (!isCurrentStart()) {
         await teardownStart();
         return;
       }
-      const { initialSystemAudioStrategy, initialDisplayCaptureStrategy, systemCapturePromise } =
-        prepareMeetingSystemAudioCapture(initialSystemAudioAccess);
 
       startOperation.markMainStartAttempted();
       const mainStartPromise = window.electronAPI?.meetingTranscriptionStart?.({
@@ -964,24 +852,17 @@ export async function startRecording(args: StartRecordingArgs): Promise<boolean>
           return null;
         }
       });
-      const [startOutcome, micOutcome, systemCaptureOutcome] = await Promise.allSettled([
+      const [startOutcome, micOutcome] = await Promise.allSettled([
         mainStartPromise,
         micCapturePromise,
-        systemCapturePromise,
       ] as const);
 
       if (micOutcome.status === "fulfilled") setupMicResult = micOutcome.value;
-      if (systemCaptureOutcome.status === "fulfilled") {
-        setupSystemCaptureResult = systemCaptureOutcome.value;
-      }
       if (startOutcome.status === "rejected") throw startOutcome.reason;
       if (micOutcome.status === "rejected") throw micOutcome.reason;
-      if (systemCaptureOutcome.status === "rejected") throw systemCaptureOutcome.reason;
 
       const startResult = startOutcome.value;
       const micResult = setupMicResult;
-      const initialSystemCaptureResult = setupSystemCaptureResult;
-      let systemCaptureResult = initialSystemCaptureResult;
 
       const streamsMs = performance.now() - startTime;
       if (!isCurrentStart()) {
@@ -1001,9 +882,7 @@ export async function startRecording(args: StartRecordingArgs): Promise<boolean>
           isTranscribing: false,
         });
         stopMediaStream(micResult);
-        stopMediaStream(systemCaptureResult.stream);
         setupMicResult = null;
-        setupSystemCaptureResult = { stream: null, error: null };
         isRecordingFlag = false;
         isStartingFlag = false;
         await cleanup();
@@ -1011,37 +890,18 @@ export async function startRecording(args: StartRecordingArgs): Promise<boolean>
         return;
       }
       const systemAudioMode = startResult.systemAudioMode || initialSystemAudioAccess.mode;
-      const systemAudioStrategy = startResult.systemAudioStrategy || initialSystemAudioStrategy;
-      systemCaptureResult = await ensureRendererSystemAudioCapture({
-        initialDisplayCaptureStrategy,
-        systemAudioStrategy,
-        systemCaptureResult,
-      });
-      setupSystemCaptureResult = systemCaptureResult;
-      if (!isCurrentStart()) {
-        await teardownStart();
-        return;
-      }
-      const systemAudioHandledInMain =
-        systemAudioMode !== "unsupported" && !isRendererSystemAudioStrategy(systemAudioStrategy);
-      if (systemAudioHandledInMain && systemCaptureResult.stream) {
-        stopMediaStream(systemCaptureResult.stream);
-        systemCaptureResult = { stream: null, error: null };
-        setupSystemCaptureResult = systemCaptureResult;
-      }
-      const systemCaptureError = systemAudioHandledInMain ? null : systemCaptureResult.error;
+      const systemAudioStrategy =
+        startResult.systemAudioStrategy || initialSystemAudioAccess.strategy || "unsupported";
+      const systemAudioAvailable = systemAudioMode !== "unsupported";
 
-      if (!micResult && (systemAudioHandledInMain || systemCaptureResult.stream)) {
+      if (!micResult && systemAudioAvailable) {
         reportMeetingError("Microphone capture failed. Continuing with system audio only.");
       }
 
-      if (!micResult && !systemCaptureResult.stream && !systemAudioHandledInMain) {
+      if (!micResult && !systemAudioAvailable) {
         logger.error("Meeting transcription has no available audio source", {}, "meeting");
         reportMeetingError(
-          systemAudioMode === "unsupported"
-            ? "No microphone is available and system audio capture is unsupported on this device."
-            : systemCaptureError?.message ||
-                "No microphone is available and system audio capture could not be started.",
+          "No microphone is available and system audio capture is unsupported on this device.",
           { isRecording: false, isTranscribing: false }
         );
         await teardownStart();
@@ -1258,7 +1118,6 @@ export async function startRecording(args: StartRecordingArgs): Promise<boolean>
       }
 
       const pendingMicChunks: ArrayBuffer[] = [];
-      const pendingSystemChunks: ArrayBuffer[] = [];
       let socketReady = false;
 
       let micPipelinePromise: Promise<void> | null = null;
@@ -1373,79 +1232,6 @@ export async function startRecording(args: StartRecordingArgs): Promise<boolean>
         }
       }
 
-      // Builds the renderer-side capture graph for the system channel. Shared
-      // by the initial start and by the mid-session takeover registered below.
-      const attachRendererSystemAudio = async (stream: MediaStream) => {
-        systemStream = stream;
-        const ctx = new AudioContext({ sampleRate: 24000 });
-        systemContext = ctx;
-        await detachFromOutputDevice(ctx);
-        const { source, processor } = await createAudioPipeline({
-          stream,
-          context: ctx,
-          onChunk: (chunk) => {
-            if (!isRecordingFlag || activeRecordingSessionId !== sessionId) return;
-            if (socketReady) {
-              window.electronAPI?.meetingTranscriptionSend?.(chunk, "system");
-              return;
-            }
-            pendingSystemChunks.push(chunk.slice(0));
-          },
-        });
-        systemSource = source;
-        systemProcessor = processor;
-      };
-
-      if (systemCaptureResult.stream) {
-        setupSystemCaptureResult = { stream: null, error: null };
-        await attachRendererSystemAudio(systemCaptureResult.stream);
-        if (!isCurrentStart()) {
-          await teardownStart();
-          return;
-        }
-      } else if (systemCaptureError) {
-        if (systemAudioStrategy === "loopback") {
-          logger.warn(
-            "System audio loopback failed, continuing with mic only",
-            { error: systemCaptureError.message },
-            "meeting"
-          );
-          if (micResult) {
-            reportMeetingError("System audio capture failed. Continuing with microphone only.");
-          }
-        }
-      }
-
-      // Main sends this when a native helper reports it is capturing silence
-      // while audio is really playing, which activation success cannot detect.
-      // Take the channel over with Chromium loopback for the rest of the call.
-      if (systemAudioHandledInMain) {
-        const degradedCleanup = window.electronAPI?.onMeetingSystemAudioDegraded?.(() => {
-          if (activeRecordingSessionId !== sessionId || !isRecordingFlag) return;
-          if (systemStream) return;
-          void (async () => {
-            const takeover = await requestSystemAudioDisplayStream(
-              getDisplayCaptureModeForStrategy("loopback")
-            );
-            if (!takeover.stream) {
-              logger.warn(
-                "Renderer loopback takeover failed after native system audio went silent",
-                { error: takeover.error?.message },
-                "meeting"
-              );
-              return;
-            }
-            if (activeRecordingSessionId !== sessionId || !isRecordingFlag || systemStream) {
-              stopMediaStream(takeover.stream);
-              return;
-            }
-            await attachRendererSystemAudio(takeover.stream);
-            logger.info("Renderer loopback took over system audio capture", {}, "meeting");
-          })();
-        });
-        if (degradedCleanup) ipcCleanups.push(degradedCleanup);
-      }
-
       if (!isCurrentStart()) {
         logger.info(
           "Meeting transcription aborted during pipeline setup (stop called)",
@@ -1456,7 +1242,6 @@ export async function startRecording(args: StartRecordingArgs): Promise<boolean>
         return;
       }
 
-      const systemAudioAvailable = systemAudioHandledInMain || systemStream !== null;
       sessionSystemAudioActive = systemAudioAvailable;
       systemAudioAvailabilityResolved = true;
       if (systemAudioAvailable && pendingSystemAudioInterruption) {
@@ -1497,9 +1282,6 @@ export async function startRecording(args: StartRecordingArgs): Promise<boolean>
       for (const chunk of pendingMicChunks) {
         window.electronAPI?.meetingTranscriptionSend?.(chunk, "mic");
       }
-      for (const chunk of pendingSystemChunks) {
-        window.electronAPI?.meetingTranscriptionSend?.(chunk, "system");
-      }
 
       const totalMs = performance.now() - startTime;
       logger.info(
@@ -1508,7 +1290,6 @@ export async function startRecording(args: StartRecordingArgs): Promise<boolean>
           systemAudioMode,
           systemAudioStrategy,
           bufferedChunks: pendingMicChunks.length,
-          bufferedSystemChunks: pendingSystemChunks.length,
           streamsMs: Math.round(streamsMs),
           totalMs: Math.round(totalMs),
           wasPrepared: isPrepared,

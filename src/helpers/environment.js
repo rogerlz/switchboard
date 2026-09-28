@@ -3,34 +3,14 @@ const fs = require("fs");
 const fsPromises = require("fs/promises");
 const { app } = require("electron");
 const debugLogger = require("./debugLogger");
-const { normalizeUiLanguage } = require("./i18nMain");
 const secretCrypto = require("./secretCrypto");
 const { BYOK_API_KEYS } = require("../config/secretKeys");
 
-const SECRET_KEYS = [
-  ...BYOK_API_KEYS.map((k) => k.env),
-  "CORTI_CLIENT_ID",
-  "CORTI_CLIENT_SECRET",
-  "CUSTOM_TRANSCRIPTION_API_KEY",
-];
+const SECRET_KEYS = [...BYOK_API_KEYS.map((k) => k.env), "CORTI_CLIENT_ID", "CORTI_CLIENT_SECRET"];
 
 const SECRET_KEY_SET = new Set(SECRET_KEYS);
 
-const PERSISTED_KEYS = [
-  ...SECRET_KEYS,
-  "LOCAL_TRANSCRIPTION_PROVIDER",
-  "PARAKEET_MODEL",
-  "DICTATION_LANGUAGE",
-  "LOCAL_WHISPER_MODEL",
-  "START_MINIMIZED",
-  "UI_LANGUAGE",
-  "WHISPER_CUDA_ENABLED",
-  "WHISPER_VULKAN_ENABLED",
-  "WHISPER_VULKAN_DEVICE",
-  "WHISPER_GPU_FAILED",
-  "WHISPER_THREADS",
-  "TRANSCRIPTION_GPU_UUID",
-];
+const PERSISTED_KEYS = [...SECRET_KEYS, "START_MINIMIZED", "WHISPER_THREADS"];
 
 // Module-level so writes are serialized across all EnvironmentManager
 // instances.
@@ -196,7 +176,7 @@ class EnvironmentManager {
     // otherwise a partial-migration recovery can lose unencrypted secrets.
     const stripSecrets =
       this._encryptionAvailable() && fs.existsSync(this._getMigrationSentinelPath());
-    let envContent = "# OpenWhispr Environment Variables\n";
+    let envContent = "# Switchboard Environment Variables\n";
     for (const key of PERSISTED_KEYS) {
       if (stripSecrets && SECRET_KEY_SET.has(key)) continue;
       if (process.env[key]) {
@@ -245,14 +225,6 @@ class EnvironmentManager {
     return this._saveKey("CORTI_CLIENT_SECRET", key);
   }
 
-  getCustomTranscriptionKey() {
-    return this._getKey("CUSTOM_TRANSCRIPTION_API_KEY");
-  }
-
-  saveCustomTranscriptionKey(key) {
-    return this._saveKey("CUSTOM_TRANSCRIPTION_API_KEY", key);
-  }
-
   getStartMinimized() {
     return this._getKey("START_MINIMIZED") === "true";
   }
@@ -261,18 +233,6 @@ class EnvironmentManager {
     const result = this._saveKey("START_MINIMIZED", String(enabled));
     this.saveAllKeysToEnvFile().catch(() => {});
     return result;
-  }
-
-  getUiLanguage(fallbackLanguage = "") {
-    const language = this._getKey("UI_LANGUAGE") || fallbackLanguage;
-    return language ? normalizeUiLanguage(language) : "";
-  }
-
-  saveUiLanguage(language) {
-    const normalized = normalizeUiLanguage(language);
-    const result = this._saveKey("UI_LANGUAGE", normalized);
-    this.saveAllKeysToEnvFile().catch(() => {});
-    return { ...result, language: normalized };
   }
 
   async saveAllKeysToEnvFile() {

@@ -26,14 +26,6 @@ function isProcessAlive(pid) {
 
 function processCommand(pid) {
   try {
-    if (process.platform === "win32") {
-      const out = execFileSync("tasklist", ["/FI", `PID eq ${pid}`, "/FO", "CSV", "/NH"], {
-        stdio: ["ignore", "pipe", "ignore"],
-        windowsHide: true,
-      }).toString();
-      const match = out.match(/^"([^"]+)"/);
-      return match ? match[1] : "";
-    }
     return execFileSync("ps", ["-p", String(pid), "-o", "command="], {
       stdio: ["ignore", "pipe", "ignore"],
     })

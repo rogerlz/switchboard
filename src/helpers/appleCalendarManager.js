@@ -39,16 +39,13 @@ class AppleCalendarManager {
   }
 
   start() {
-    if (process.platform !== "darwin" || !this.isConnected()) return;
+    if (!this.isConnected()) return;
     this._spawnHelper(false);
   }
 
   // User-initiated: spawns the helper with --request so the TCC prompt shows.
   // Resolves after the first snapshot lands (success) or access is denied.
   connect() {
-    if (process.platform !== "darwin") {
-      return Promise.resolve({ success: false, reason: "unsupported" });
-    }
     this._restartAttempts = 0;
     return new Promise((resolve) => {
       this._pendingConnect = { resolve, awaitingSnapshot: false };
@@ -206,7 +203,7 @@ class AppleCalendarManager {
   }
 
   _scheduleHelperRestart() {
-    if (process.platform !== "darwin" || this._restartTimer || this._helperProcess) return;
+    if (this._restartTimer || this._helperProcess) return;
 
     try {
       if (!this.isConnected()) return;

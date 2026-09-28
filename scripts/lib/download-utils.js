@@ -240,16 +240,7 @@ function downloadFile(url, dest, retryCount = 0) {
 }
 
 async function extractZip(zipPath, destDir) {
-  if (process.platform === "win32") {
-    // Use unzipper package on Windows for better path handling
-    const unzipper = require("unzipper");
-    await fs
-      .createReadStream(zipPath)
-      .pipe(unzipper.Extract({ path: destDir }))
-      .promise();
-  } else {
-    execSync(`unzip -o "${zipPath}" -d "${destDir}"`, { stdio: "inherit" });
-  }
+  execSync(`unzip -o "${zipPath}" -d "${destDir}"`, { stdio: "inherit" });
 }
 
 function extractTarGz(tarPath, destDir) {
@@ -314,20 +305,11 @@ function parseArgs() {
 }
 
 function setExecutable(filePath) {
-  if (process.platform !== "win32") {
-    fs.chmodSync(filePath, 0o755);
-  }
+  fs.chmodSync(filePath, 0o755);
 }
 
 function matchesPattern(filename, pattern) {
-  if (pattern === "*.dylib") {
-    return filename.endsWith(".dylib");
-  } else if (pattern === "*.dll") {
-    return filename.endsWith(".dll");
-  } else if (pattern === "*.so*") {
-    return /\.so(\.\d+)*$/.test(filename) || filename.endsWith(".so");
-  }
-  return false;
+  return pattern === "*.dylib" && filename.endsWith(".dylib");
 }
 
 function findLibrariesInDir(dir, pattern, options = {}, currentDepth = 0) {
@@ -356,23 +338,10 @@ function findLibrariesInDir(dir, pattern, options = {}, currentDepth = 0) {
   return results;
 }
 
-function copyLibraries(extractDir, destDir, pattern) {
-  const copied = [];
-  for (const libPath of findLibrariesInDir(extractDir, pattern)) {
-    const libName = path.basename(libPath);
-    const destPath = path.join(destDir, libName);
-    fs.copyFileSync(libPath, destPath);
-    setExecutable(destPath);
-    copied.push(libName);
-  }
-  return copied;
-}
-
 function cleanupFiles(binDir, prefix, keepPrefix) {
   const keepPrefixes = Array.isArray(keepPrefix) ? keepPrefix : [keepPrefix];
-  // Never delete shared libraries; only platform binaries. The b9763 split ships
-  // llama-server-impl.dll, which shares the "llama-server" prefix and must survive.
-  const isLibrary = (f) => /\.(dll|dylib)$/i.test(f) || /\.so(\.\d+)*$/.test(f);
+  // Never delete shared libraries; only platform binaries.
+  const isLibrary = (f) => /\.dylib$/i.test(f);
   const files = fs.readdirSync(binDir).filter((f) => f.startsWith(prefix));
   files.forEach((file) => {
     if (!keepPrefixes.some((keep) => file.startsWith(keep)) && !isLibrary(file)) {
@@ -384,14 +353,12 @@ function cleanupFiles(binDir, prefix, keepPrefix) {
 }
 
 module.exports = {
-  copyLibraries,
   downloadFile,
   extractArchive,
   extractZip,
   fetchLatestRelease,
   findBinaryInDir,
   findLibrariesInDir,
-  matchesPattern,
   parseArgs,
   setExecutable,
   cleanupFiles,

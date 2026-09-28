@@ -25,12 +25,9 @@ const BIN_DIR = path.join(__dirname, "..", "resources", "bin");
 const TARGETS = [
   { platform: "darwin", arch: "arm64", ext: "tar.gz" },
   { platform: "darwin", arch: "x64", ext: "tar.gz" },
-  { platform: "linux", arch: "x64", ext: "tar.gz" },
-  { platform: "win32", arch: "x64", ext: "zip" },
 ];
 
-const binaryName = ({ platform, arch }) =>
-  `meeting-aec-helper-${platform}-${arch}${platform === "win32" ? ".exe" : ""}`;
+const binaryName = ({ platform, arch }) => `meeting-aec-helper-${platform}-${arch}`;
 
 const archiveName = ({ platform, arch, ext }) => `meeting-aec-helper-${platform}-${arch}.${ext}`;
 

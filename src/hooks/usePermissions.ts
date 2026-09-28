@@ -27,41 +27,6 @@ const stopTracks = (stream?: MediaStream) => {
   }
 };
 
-const getPlatformSettingsPath = (t: TFunction): string => {
-  if (typeof navigator !== "undefined") {
-    const ua = navigator.userAgent.toLowerCase();
-    if (ua.includes("win")) return t("hooks.permissions.paths.windowsMicrophone");
-    if (ua.includes("linux")) return t("hooks.permissions.paths.linuxSound");
-  }
-  return t("hooks.permissions.paths.defaultSound");
-};
-
-const getPlatformPrivacyPath = (t: TFunction): string => {
-  if (typeof navigator !== "undefined") {
-    const ua = navigator.userAgent.toLowerCase();
-    if (ua.includes("win")) return t("hooks.permissions.paths.windowsMicrophone");
-    if (ua.includes("linux")) return t("hooks.permissions.paths.linuxPrivacy");
-  }
-  return t("hooks.permissions.paths.defaultPrivacy");
-};
-
-const getPlatform = (): "darwin" | "win32" | "linux" => {
-  if (typeof window !== "undefined" && window.electronAPI?.getPlatform) {
-    const platform = window.electronAPI.getPlatform();
-    if (platform === "darwin" || platform === "win32" || platform === "linux") {
-      return platform;
-    }
-  }
-  // Fallback to user agent detection
-  if (typeof navigator !== "undefined") {
-    const ua = navigator.userAgent.toLowerCase();
-    if (ua.includes("mac")) return "darwin";
-    if (ua.includes("win")) return "win32";
-    if (ua.includes("linux")) return "linux";
-  }
-  return "darwin"; // Default fallback
-};
-
 const describeMicError = (error: unknown, t: TFunction): string => {
   if (!error || typeof error !== "object") {
     return t("hooks.permissions.micErrors.accessFailed");
@@ -70,8 +35,8 @@ const describeMicError = (error: unknown, t: TFunction): string => {
   const err = error as { name?: string; message?: string };
   const name = err.name || "";
   const message = (err.message || "").toLowerCase();
-  const settingsPath = getPlatformSettingsPath(t);
-  const privacyPath = getPlatformPrivacyPath(t);
+  const settingsPath = t("hooks.permissions.paths.defaultSound");
+  const privacyPath = t("hooks.permissions.paths.defaultPrivacy");
 
   if (name === "NotFoundError") {
     return t("hooks.permissions.micErrors.noMicrophones", { settingsPath });
@@ -189,10 +154,9 @@ export const usePermissions = (
     }
   }, [showAlertDialog, t, setMicPermissionGranted]);
 
-  // On macOS, re-validate microphone permission on mount to override stale
+  // Re-validate microphone permission on mount to override stale
   // localStorage values (e.g. after TCC reset or app update).
   useEffect(() => {
-    if (getPlatform() !== "darwin") return;
     window.electronAPI?.checkMicrophoneAccess?.().then((result) => {
       if (result) setMicPermissionGranted(result.granted);
     });

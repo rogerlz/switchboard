@@ -15,40 +15,11 @@ const BYOK_API_KEYS = [
     storeKey: "openaiApiKey",
   },
   {
-    base: "gemini",
-    env: "GEMINI_API_KEY",
-    get: "getGeminiKey",
-    save: "saveGeminiKey",
-    storeKey: "geminiApiKey",
-  },
-  {
-    base: "groq",
-    env: "GROQ_API_KEY",
-    get: "getGroqKey",
-    save: "saveGroqKey",
-    storeKey: "groqApiKey",
-  },
-  { base: "xai", env: "XAI_API_KEY", get: "getXaiKey", save: "saveXaiKey", storeKey: "xaiApiKey" },
-  {
-    base: "mistral",
-    env: "MISTRAL_API_KEY",
-    get: "getMistralKey",
-    save: "saveMistralKey",
-    storeKey: "mistralApiKey",
-  },
-  {
     base: "tinfoil",
     env: "TINFOIL_API_KEY",
     get: "getTinfoilKey",
     save: "saveTinfoilKey",
     storeKey: "tinfoilApiKey",
-  },
-  {
-    base: "corti",
-    env: "CORTI_API_KEY",
-    get: "getCortiKey",
-    save: "saveCortiKey",
-    storeKey: "cortiApiKey",
   },
   // `get`/`save` are taken verbatim, never derived from `base`, so these keep
   // the capitalisation realtimeTokenProviders.js already calls them by.

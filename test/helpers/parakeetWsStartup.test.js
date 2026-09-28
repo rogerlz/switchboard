@@ -47,7 +47,6 @@ async function startupArgs(modelName, runtime = "offline", language = null, regi
     "./parakeetModelInfo": modelInfo,
     "./debugLogger": { debug() {}, info() {} },
     "./sidecarPidFile": { write() {} },
-    "./safeTempDir": { getSafeTempDir: () => os.tmpdir() },
     "../utils/serverUtils": {
       findAvailablePort: async () => 6006,
       getAvailableParallelism: () => 8,
